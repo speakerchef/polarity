@@ -15,7 +15,10 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
+    let inter: Handle<Font> = asset_server.load("fonts/inter/InterVariable.ttf");
+    let icon_font: Handle<Font> =
+        asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf");
     commands.spawn(Camera2d);
     // root box
     commands
@@ -59,7 +62,7 @@ fn setup(mut commands: Commands) {
                                 height: percent(100.),
                                 width: percent(25.),
                                 padding: UiRect {
-                                    left: px(palette::Spacing::S1),
+                                    left: px(palette::spacing::S1),
                                     ..Default::default()
                                 },
                                 border: UiRect {
@@ -110,13 +113,27 @@ fn setup(mut commands: Commands) {
                                             BackgroundColor(palette::BG_MED),
                                             BorderColor::all(palette::BORDER),
                                         ))
-                                        .with_child((
-                                            Text("IMPORT".to_string()),
-                                            TextColor(palette::TEXT),
-                                            TextFont {
-                                                ..Default::default()
-                                            },
-                                        ));
+                                        .with_children(|parent| {
+                                            parent.spawn((
+                                                Text::new("\u{e5db}"),
+                                                TextColor(palette::TEXT),
+                                                TextFont {
+                                                    font: icon_font.clone(),
+                                                    font_size: palette::font_size::ICON,
+                                                    ..Default::default()
+                                                },
+                                            ));
+                                            parent.spawn((
+                                                Text::new("IMPORT"),
+                                                TextColor(palette::TEXT),
+                                                TextFont {
+                                                    font: inter.clone(),
+                                                    font_size: palette::font_size::BRAND,
+                                                    weight: FontWeight(palette::font_weight::HEAVY),
+                                                    ..Default::default()
+                                                },
+                                            ));
+                                        });
                                     // Export button
                                     parent
                                         .spawn((
@@ -131,13 +148,27 @@ fn setup(mut commands: Commands) {
                                             },
                                             BackgroundColor(palette::BG_MED),
                                         ))
-                                        .with_child((
-                                            Text("EXPORT".to_string()),
-                                            TextColor(palette::TEXT),
-                                            TextFont {
-                                                ..Default::default()
-                                            },
-                                        ));
+                                        .with_children(|parent| {
+                                            parent.spawn((
+                                                Text::new("\u{e5d8}"),
+                                                TextColor(palette::TEXT),
+                                                TextFont {
+                                                    font: icon_font.clone(),
+                                                    font_size: palette::font_size::ICON,
+                                                    ..Default::default()
+                                                },
+                                            ));
+                                            parent.spawn((
+                                                Text::new("EXPORT"),
+                                                TextColor(palette::TEXT),
+                                                TextFont {
+                                                    font: inter.clone(),
+                                                    font_size: palette::font_size::BRAND,
+                                                    weight: FontWeight(palette::font_weight::HEAVY),
+                                                    ..Default::default()
+                                                },
+                                            ));
+                                        });
                                 });
                             // Inner div for control panel
                             parent.spawn((
