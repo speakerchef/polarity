@@ -1,17 +1,37 @@
-use bevy::{picking::hover::Hovered, prelude::*};
+use bevy::asset::UnapprovedPathMode;
+use bevy::prelude::*;
+use bevy_file_dialog::prelude::*;
 mod palette;
+
+struct AudioFileContents;
+
+#[derive(Component)]
+struct PlayingAudio;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Polarity".into(),
-                // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Polarity".into(),
+                        // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+                .set(AssetPlugin {
+                    unapproved_path_mode: UnapprovedPathMode::Allow,
+                    ..Default::default()
+                }),
+        )
+        .add_plugins(
+            FileDialogPlugin::new()
+                .with_save_file::<AudioFileContents>()
+                .with_load_file::<AudioFileContents>(),
+        )
         .add_systems(Startup, setup)
+        .add_systems(Update, (file_loaded, toggle_audio_playback))
         .run();
 }
 
@@ -58,7 +78,7 @@ fn spawn_file_handle_button(
     text_font: Handle<Font>,
     button_text: &str,
     arrow_glyph: &str,
-    // on_click: fn(parent: &mut ChildSpawnerCommands),
+    on_click: fn(On<Pointer<Click>>, Commands),
     add_border: bool,
 ) {
     parent
@@ -105,7 +125,46 @@ fn spawn_file_handle_button(
             ));
         })
         .observe(button_on_hover)
-        .observe(button_on_leave);
+        .observe(button_on_leave)
+        .observe(on_click);
+}
+
+fn load_file_dialog(mut commands: Commands) {
+    commands
+        .dialog()
+        .set_directory("~")
+        .add_filter("Audio", &["wav", "mp3", "m4a", "ogg", "flac"])
+        .load_file::<AudioFileContents>();
+}
+
+fn file_loaded(
+    mut event: MessageReader<DialogFileLoaded<AudioFileContents>>,
+    mut commands: Commands,
+    asset_server: ResMut<AssetServer>,
+) {
+    for f in event.read() {
+        commands.spawn((
+            PlayingAudio,
+            AudioPlayer::new(asset_server.load(f.path.clone())),
+            PlaybackSettings {
+                paused: true,
+                mode: bevy::audio::PlaybackMode::Loop,
+                ..Default::default()
+            },
+        ));
+        info!("Opened file `{}`", f.file_name);
+    }
+}
+
+fn toggle_audio_playback(
+    press: Res<ButtonInput<KeyCode>>,
+    q_audio: Query<&AudioSink, With<PlayingAudio>>,
+) {
+    if press.just_pressed(KeyCode::Space)
+        && let Ok(sink) = q_audio.single()
+    {
+        sink.toggle_playback();
+    }
 }
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
@@ -194,6 +253,9 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                                         inter.clone(),
                                         "IMPORT",
                                         "\u{e5db}",
+                                        |event: On<Pointer<Click>>, commands| {
+                                            load_file_dialog(commands)
+                                        },
                                         true,
                                     );
                                     spawn_file_handle_button(
@@ -202,6 +264,9 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                                         inter.clone(),
                                         "EXPORT",
                                         "\u{e5d8}",
+                                        |event: On<Pointer<Click>>, commands| {
+                                            load_file_dialog(commands)
+                                        },
                                         false,
                                     );
                                 });
