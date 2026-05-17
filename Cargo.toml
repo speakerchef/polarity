@@ -1,10 +1,10 @@
 [package]
-name = "bevy-intro"
+name = "polarity"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.18.1", features = ["wav"] }
+bevy = { version = "0.18.1", features = ["wav", "debug"] }
 bevy_file_dialog = "0.9.1"
 
 [profile.dev]
