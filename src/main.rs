@@ -1,12 +1,28 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use bevy::asset::UnapprovedPathMode;
+use bevy::audio::{AddAudioSource, Source};
 use bevy::prelude::*;
 use bevy_file_dialog::prelude::*;
 mod palette;
 
-struct AudioFileContents;
+struct FontBlock {
+    icon: Handle<Font>,
+    text: Handle<Font>,
+}
+
+#[derive(Component)]
+struct AudioFileContents(AudioSource);
 
 #[derive(Component)]
 struct PlayingAudio;
+
+#[derive(Component)]
+struct TimelineScrubber(Option<Duration>);
+
+#[derive(Component)]
+struct DurationText;
 
 fn main() {
     App::new()
@@ -31,7 +47,10 @@ fn main() {
                 .with_load_file::<AudioFileContents>(),
         )
         .add_systems(Startup, setup)
-        .add_systems(Update, (file_loaded, toggle_audio_playback))
+        .add_systems(
+            Update,
+            (file_loaded, toggle_audio_playback, update_timeline_scrubber),
+        )
         .run();
 }
 
@@ -129,7 +148,177 @@ fn spawn_file_handle_button(
         .observe(on_click);
 }
 
-fn load_file_dialog(mut commands: Commands) {
+fn spawn_timeline(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            // Timeline base div
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                bottom: px(0.),
+                height: percent(13.),
+                width: percent(100.),
+                ..Default::default()
+            },
+            BackgroundColor(palette::BORDER),
+        ))
+        .with_children(|parent| {
+            spawn_transport_info(parent);
+            spawn_waveform_view(parent);
+        });
+}
+
+fn spawn_transport_info(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((
+        // transport and file info bar
+        Node {
+            height: percent(21.),
+            width: percent(100.),
+            border: UiRect {
+                bottom: px(palette::FRAME_WIDTH),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        BackgroundColor(palette::BG),
+        BorderColor::all(palette::BORDER),
+    ));
+}
+
+fn spawn_waveform_view(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            // track waveform view section
+            Node {
+                height: percent(77.),
+                width: percent(100.),
+                ..Default::default()
+            },
+            BackgroundColor(palette::BG_DARK),
+        ))
+        .with_children(|parent| {
+            parent.spawn((Text::new("Song Duration: , "), DurationText));
+            parent.spawn((Text::new("Time Elapsed: 0.0000s"), TimelineScrubber(None)));
+        });
+}
+
+fn update_timeline_scrubber(
+    q_audio: Single<&AudioSink, With<PlayingAudio>>,
+    mut q_progress_text: Single<&mut Text, With<TimelineScrubber>>,
+) {
+    q_progress_text.0 = format!("Time Elapsed: {:.2}s", q_audio.position().as_secs_f32(),);
+}
+
+fn spawn_preview_canvas(parent: &mut ChildSpawnerCommands) {
+    // Preview Canvas
+    parent.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0.),
+            height: percent(100.),
+            width: percent(75.),
+            border: UiRect {
+                left: px(palette::FRAME_WIDTH),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        BackgroundColor(palette::VOID),
+    ));
+}
+
+fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    // control panel base
+    parent
+        .spawn((
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                right: px(0.),
+                height: percent(100.),
+                width: percent(25.),
+                padding: UiRect {
+                    left: px(palette::spacing::S1),
+                    ..Default::default()
+                },
+                border: UiRect {
+                    left: px(palette::FRAME_WIDTH),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            BackgroundColor(palette::BG),
+            BorderColor::all(palette::BORDER),
+        ))
+        .with_children(|parent| {
+            // Import/Export button holder
+            parent
+                .spawn((
+                    Node {
+                        display: Display::Flex,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        height: percent(5.),
+                        width: percent(100.),
+                        border: UiRect {
+                            left: px(palette::FRAME_WIDTH),
+                            bottom: px(palette::FRAME_WIDTH),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    BackgroundColor(palette::BG_MED),
+                    BorderColor::all(palette::BORDER),
+                ))
+                .with_children(|parent| {
+                    spawn_file_handle_button(
+                        parent,
+                        fonts.icon.clone(),
+                        fonts.text.clone(),
+                        "IMPORT",
+                        "\u{e5db}",
+                        |event: On<Pointer<Click>>, commands| import_file(commands),
+                        true,
+                    );
+                    spawn_file_handle_button(
+                        parent,
+                        fonts.icon.clone(),
+                        fonts.text.clone(),
+                        "EXPORT",
+                        "\u{e5d8}",
+                        |event: On<Pointer<Click>>, commands| export_file(commands),
+                        false,
+                    );
+                });
+            // Inner div for control panel
+            parent.spawn((
+                Node {
+                    display: Display::Flex,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    height: percent(100.),
+                    width: percent(100.),
+                    border: UiRect {
+                        left: px(palette::FRAME_WIDTH),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                BackgroundColor(palette::BG_MED),
+                BorderColor::all(palette::BORDER),
+            ));
+        });
+    spawn_preview_canvas(parent);
+    spawn_timeline(parent);
+}
+
+fn import_file(mut commands: Commands) {
     commands
         .dialog()
         .set_directory("~")
@@ -137,12 +326,23 @@ fn load_file_dialog(mut commands: Commands) {
         .load_file::<AudioFileContents>();
 }
 
+fn export_file(mut commands: Commands) {
+    // TODO: Load file byte contents
+    // commands.dialog().save_file::<AudioFileContents>();
+}
+
 fn file_loaded(
     mut event: MessageReader<DialogFileLoaded<AudioFileContents>>,
+    mut timeline_scrubber: Single<&mut TimelineScrubber>,
+    mut decoder_text: Single<&mut Text, With<DurationText>>,
     mut commands: Commands,
     asset_server: ResMut<AssetServer>,
 ) {
     for f in event.read() {
+        let bytes: Arc<[u8]> = f.contents.clone().into();
+        let duration = AudioSource { bytes }.decoder().total_duration();
+        decoder_text.0 = format!("Song Duration: {}s, ", duration.unwrap().as_secs_f32());
+        timeline_scrubber.0 = duration;
         commands.spawn((
             PlayingAudio,
             AudioPlayer::new(asset_server.load(f.path.clone())),
@@ -168,11 +368,12 @@ fn toggle_audio_playback(
 }
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
-    let inter: Handle<Font> = asset_server.load("fonts/inter/InterVariable.ttf");
-    let icon_font: Handle<Font> =
-        asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf");
+    let fonts = FontBlock {
+        icon: asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
+        text: asset_server.load("fonts/inter/InterVariable.ttf"),
+    };
     commands.spawn(Camera2d);
-    // root box
+    // root
     commands
         .spawn((
             Node {
@@ -201,149 +402,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
-                    // control panel sidebar base
-                    parent
-                        .spawn((
-                            Node {
-                                display: Display::Flex,
-                                flex_direction: FlexDirection::Column,
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                position_type: PositionType::Absolute,
-                                right: px(0.),
-                                height: percent(100.),
-                                width: percent(25.),
-                                padding: UiRect {
-                                    left: px(palette::spacing::S1),
-                                    ..Default::default()
-                                },
-                                border: UiRect {
-                                    left: px(palette::FRAME_WIDTH),
-                                    ..Default::default()
-                                },
-                                ..Default::default()
-                            },
-                            BackgroundColor(palette::BG),
-                            BorderColor::all(palette::BORDER),
-                        ))
-                        .with_children(|parent| {
-                            // Import/Export button holder
-                            parent
-                                .spawn((
-                                    Node {
-                                        display: Display::Flex,
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        height: percent(5.),
-                                        width: percent(100.),
-                                        border: UiRect {
-                                            left: px(palette::FRAME_WIDTH),
-                                            bottom: px(palette::FRAME_WIDTH),
-                                            ..Default::default()
-                                        },
-                                        ..Default::default()
-                                    },
-                                    BackgroundColor(palette::BG_MED),
-                                    BorderColor::all(palette::BORDER),
-                                ))
-                                .with_children(|parent| {
-                                    spawn_file_handle_button(
-                                        parent,
-                                        icon_font.clone(),
-                                        inter.clone(),
-                                        "IMPORT",
-                                        "\u{e5db}",
-                                        |event: On<Pointer<Click>>, commands| {
-                                            load_file_dialog(commands)
-                                        },
-                                        true,
-                                    );
-                                    spawn_file_handle_button(
-                                        parent,
-                                        icon_font.clone(),
-                                        inter.clone(),
-                                        "EXPORT",
-                                        "\u{e5d8}",
-                                        |event: On<Pointer<Click>>, commands| {
-                                            load_file_dialog(commands)
-                                        },
-                                        false,
-                                    );
-                                });
-                            // Inner div for control panel
-                            parent.spawn((
-                                Node {
-                                    display: Display::Flex,
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    height: percent(100.),
-                                    width: percent(100.),
-                                    border: UiRect {
-                                        left: px(palette::FRAME_WIDTH),
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                },
-                                BackgroundColor(palette::BG_MED),
-                                BorderColor::all(palette::BORDER),
-                            ));
-                        });
-                    // Preview Canvas
-                    parent.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0.),
-                            height: percent(100.),
-                            width: percent(75.),
-                            border: UiRect {
-                                left: px(palette::FRAME_WIDTH),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-                        BackgroundColor(palette::VOID),
-                    ));
-                    parent
-                        .spawn((
-                            // Timeline base div
-                            Node {
-                                display: Display::Flex,
-                                flex_direction: FlexDirection::Column,
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                position_type: PositionType::Absolute,
-                                bottom: px(0.),
-                                height: percent(13.),
-                                width: percent(100.),
-                                ..Default::default()
-                            },
-                            BackgroundColor(palette::BORDER),
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                // transport and file info bar
-                                Node {
-                                    height: percent(21.),
-                                    width: percent(100.),
-                                    border: UiRect {
-                                        bottom: px(palette::FRAME_WIDTH),
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                },
-                                BackgroundColor(palette::BG),
-                                BorderColor::all(palette::BORDER),
-                            ));
-                            parent.spawn((
-                                // track waveform view section
-                                Node {
-                                    height: percent(77.),
-                                    width: percent(100.),
-                                    ..Default::default()
-                                },
-                                BackgroundColor(palette::BG_DARK),
-                            ));
-                        });
+                    spawn_control_panel(parent, &fonts);
                 });
         });
 }
