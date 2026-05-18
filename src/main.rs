@@ -1,46 +1,33 @@
+use polarity::goniometer::{self, Goniometer};
+use polarity::palette;
+use polarity::{
+    AudioFileContents, DrawableCursor, PlayingAudio, PointArray, PreviewCanvas, TimelineScrubber,
+    WINDOW_SIZE,
+};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Duration;
 
 use bevy::asset::UnapprovedPathMode;
 use bevy::audio::Source;
 use bevy::prelude::*;
 use bevy_file_dialog::prelude::*;
-mod palette;
 
 struct FontBlock {
     icon: Handle<Font>,
     text: Handle<Font>,
 }
 
-#[derive(Component, Debug)]
-struct AudioFileContents {
-    duration: f32,
-    sample_rate: u32,
-    num_channels: usize,
-    samples: Vec<f32>,
+#[derive(States, Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
+enum GeneratorChoice {
+    #[default]
+    Goniometer,
+    Oscilloscope,
 }
-
-#[derive(Component, Debug, Clone)]
-struct Goniometer(VecDeque<f32>);
-
-#[derive(Component, Debug, Clone)]
-struct PointArray(Vec<Entity>);
-
-#[derive(Component)]
-struct PlayingAudio;
-
-#[derive(Component)]
-struct TimelineScrubber(Option<Duration>);
-
-#[derive(Component)]
-struct DrawableCursor;
-
-#[derive(Component)]
-struct PreviewCanvas;
 
 #[derive(Component)]
 struct DurationText;
+
+const POINT_SIZE: f32 = 0.75;
 
 fn main() {
     App::new()
@@ -65,16 +52,19 @@ fn main() {
                 .with_save_file::<AudioFileContents>()
                 .with_load_file::<AudioFileContents>(),
         )
+        .init_state::<GeneratorChoice>()
+        .add_systems(OnEnter(GeneratorChoice::Goniometer), spawn_goniometer)
+        .add_systems(OnExit(GeneratorChoice::Goniometer), despawn_goniometer)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (
-                file_loaded,
-                toggle_audio_playback,
-                update_timeline_scrubber,
-                update_goniometer_data,
-                draw_goniometer_points,
-            ),
+            (file_loaded, toggle_audio_playback, update_timeline_scrubber),
+        )
+        .add_systems(
+            Update,
+            (goniometer::update, goniometer::draw)
+                .chain()
+                .run_if(in_state(GeneratorChoice::Goniometer)),
         )
         .run();
 }
@@ -182,12 +172,10 @@ fn spawn_timeline(parent: &mut ChildSpawnerCommands) {
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                position_type: PositionType::Absolute,
                 height: percent(100.),
                 width: percent(100.),
                 ..Default::default()
             },
-            BackgroundColor(palette::BORDER),
         ))
         .with_children(|parent| {
             spawn_transport_info(parent);
@@ -199,9 +187,10 @@ fn spawn_transport_info(parent: &mut ChildSpawnerCommands) {
     parent.spawn((
         // transport and file info bar
         Node {
-            height: percent(21.),
+            height: percent(25.),
             width: percent(100.),
             border: UiRect {
+                top: px(palette::FRAME_WIDTH),
                 bottom: px(palette::FRAME_WIDTH),
                 ..Default::default()
             },
@@ -217,7 +206,7 @@ fn spawn_waveform_view(parent: &mut ChildSpawnerCommands) {
         .spawn((
             // track waveform view section
             Node {
-                height: percent(77.),
+                height: percent(100.),
                 width: percent(100.),
                 ..Default::default()
             },
@@ -236,13 +225,8 @@ fn spawn_preview_canvas(parent: &mut ChildSpawnerCommands) {
         Node {
             height: percent(100.),
             width: percent(75.),
-            border: UiRect {
-                left: px(palette::FRAME_WIDTH),
-                ..Default::default()
-            },
             ..Default::default()
         },
-        // BackgroundColor(palette::VOID),
     ));
 }
 
@@ -258,7 +242,7 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                 position_type: PositionType::Absolute,
                 right: px(0.),
                 height: percent(100.),
-                width: px(360.),
+                width: percent(25.),
                 padding: UiRect {
                     left: px(palette::spacing::S1),
                     ..Default::default()
@@ -404,91 +388,76 @@ fn update_timeline_scrubber(
     q_progress_text.0 = format!("Time Elapsed: {:.2}s", pos,);
 }
 
-fn update_goniometer_data(
-    q_playing_audio: Single<&AudioSink, With<PlayingAudio>>,
-    q_audio_data: Single<&AudioFileContents>,
-    mut q_goni: Single<&mut Goniometer, With<DrawableCursor>>,
-    q_canvas: Single<&UiGlobalTransform, With<PreviewCanvas>>,
-    q_camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
-) {
-    let canvas_2d = q_canvas.translation;
-    let (camera, camera_xform) = *q_camera;
-
-    let pos = q_playing_audio.position().as_secs_f64();
-    let sample_idx = std::cmp::min(
-        (q_audio_data.sample_rate as f64 * pos) as usize,
-        q_audio_data.samples.len() - q_audio_data.sample_rate as usize,
-    );
-
-    if let Ok(world_pos) = camera.viewport_to_world_2d(camera_xform, canvas_2d) {
-        q_goni.0.push_back(
-            world_pos.x + q_audio_data.samples[sample_idx * q_audio_data.num_channels] * 100.,
-        );
-        q_goni.0.push_back(
-            world_pos.y + q_audio_data.samples[sample_idx * q_audio_data.num_channels + 1] * 100.,
-        );
-    }
-    while q_goni.0.len() > 512 {
-        q_goni.0.pop_front();
-        q_goni.0.pop_front();
-    }
-}
-
-fn draw_goniometer_points(
-    q_cursor: Single<(&Goniometer, &mut PointArray), With<DrawableCursor>>,
-    mut q_points: Query<&mut Transform>,
-) {
-    let goniometer = q_cursor.0;
-
-    for (i, entity) in q_cursor.1.0.iter().enumerate() {
-        if let Ok(mut transform) = q_points.get_mut(*entity) {
-            transform.translation.x = goniometer.0[i * 2];
-            transform.translation.y = goniometer.0[i * 2 + 1];
-        }
-    }
-}
-
-fn setup(
+fn spawn_goniometer(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: ResMut<AssetServer>,
 ) {
-    let fonts = FontBlock {
-        icon: asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
-        text: asset_server.load("fonts/inter/InterVariable.ttf"),
-    };
     let mut point_ids = Vec::new();
-    point_ids.reserve_exact(256);
-    for _ in 0..256 {
+    point_ids.reserve_exact(WINDOW_SIZE);
+    for i in 0..WINDOW_SIZE {
         let point = commands
             .spawn((
-                Mesh2d(meshes.add(Circle::new(2.0))),
-                MeshMaterial2d(materials.add(Color::srgb(1.0, 1.0, 1.0))),
+                Mesh2d(meshes.add(Circle::new(POINT_SIZE))),
+                if i % 3 == 0 {
+                    MeshMaterial2d(materials.add(Color::srgb(0.0, 1.0, 0.0)))
+                } else if i % 3 == 1 {
+                    if i % 2 == 0 {
+                        MeshMaterial2d(materials.add(Color::srgb(0.0, 1.0, 0.0)))
+                    } else {
+                        MeshMaterial2d(materials.add(Color::srgb(0.0, 0.0, 1.0)))
+                    }
+                } else {
+                    if i % 2 == 0 {
+                        MeshMaterial2d(materials.add(Color::srgb(0.0, 0.0, 1.0)))
+                    } else {
+                        MeshMaterial2d(materials.add(Color::srgb(1.0, 0.0, 1.0)))
+                    }
+                },
                 Transform::from_xyz(0., 0., 1.),
             ))
             .id();
         point_ids.push(point);
     }
-    commands.spawn(Camera2d);
-    commands.spawn((
-        Goniometer(VecDeque::from(vec![0.; 512])),
+    let goni_id = commands.spawn_empty().id();
+    commands.entity(goni_id).insert((
+        Goniometer {
+            window_buffer: VecDeque::from([Vec2 { x: 0., y: 0. }; WINDOW_SIZE]),
+            id: goni_id,
+        },
         DrawableCursor,
         PointArray(point_ids),
     ));
+    info!("Spawned Goniometer");
+}
+
+fn despawn_goniometer(
+    mut commands: Commands,
+    q_goniometer: Single<(&Goniometer, &PointArray), With<DrawableCursor>>,
+) {
+    let (goniometer, point_array) = *q_goniometer;
+    for e in &point_array.0 {
+        commands.entity(*e).despawn();
+    }
+    commands.entity(goniometer.id).despawn();
+}
+
+fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
+    let fonts = FontBlock {
+        icon: asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
+        text: asset_server.load("fonts/inter/InterVariable.ttf"),
+    };
+    commands.spawn(Camera2d);
     commands
-        .spawn((
-            Node {
-                display: Display::Flex,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                height: percent(100.),
-                width: percent(100.),
-                padding: UiRect::all(px(palette::APP_PADDING)),
-                ..Default::default()
-            },
-            // BackgroundColor(palette::VOID),
-        ))
+        .spawn((Node {
+            display: Display::Flex,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            height: percent(100.),
+            width: percent(100.),
+            padding: UiRect::all(px(palette::APP_PADDING)),
+            ..Default::default()
+        },))
         .with_children(|parent| {
             // main app base
             parent
@@ -501,41 +470,30 @@ fn setup(
                         border: UiRect::all(px(palette::FRAME_WIDTH)),
                         ..Default::default()
                     },
-                    // BackgroundColor(palette::BG),
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
                     // Top section holder for canvas + control panel
                     parent
-                        .spawn((
-                            Node {
-                                display: Display::Flex,
-                                flex_direction: FlexDirection::Row,
-                                height: percent(100.),
-                                width: percent(100.),
-                                border: UiRect::all(px(palette::FRAME_WIDTH)),
-                                ..Default::default()
-                            },
-                            // BackgroundColor(palette::BG),
-                            BorderColor::all(palette::BORDER),
-                        ))
+                        .spawn((Node {
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Row,
+                            height: percent(100.),
+                            width: percent(100.),
+                            ..Default::default()
+                        },))
                         .with_children(|parent| {
                             spawn_control_panel(parent, &fonts);
                             spawn_preview_canvas(parent);
                         });
                     // Bottom section holder for timeline
                     parent
-                        .spawn((
-                            Node {
-                                display: Display::Flex,
-                                height: percent(15.),
-                                width: percent(100.),
-                                border: UiRect::all(px(palette::FRAME_WIDTH)),
-                                ..Default::default()
-                            },
-                            // BackgroundColor(palette::BG),
-                            BorderColor::all(palette::BORDER),
-                        ))
+                        .spawn((Node {
+                            display: Display::Flex,
+                            height: percent(15.),
+                            width: percent(100.),
+                            ..Default::default()
+                        },))
                         .with_children(spawn_timeline);
                 });
         });
