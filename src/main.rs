@@ -1,3 +1,6 @@
+use bevy::dev_tools::fps_overlay::{self, FpsOverlayConfig, FpsOverlayPlugin};
+use bevy::mesh::{Indices, MeshVertexAttribute};
+use bevy::post_process::bloom::Bloom;
 use polarity::goniometer::{self, Goniometer};
 use polarity::palette;
 use polarity::{
@@ -6,8 +9,9 @@ use polarity::{
 };
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::time::Duration;
 
-use bevy::asset::UnapprovedPathMode;
+use bevy::asset::{RenderAssetUsages, UnapprovedPathMode};
 use bevy::audio::Source;
 use bevy::prelude::*;
 use bevy_file_dialog::prelude::*;
@@ -28,6 +32,7 @@ enum GeneratorChoice {
 struct DurationText;
 
 const POINT_SIZE: f32 = 0.75;
+// const POINT_SIZE: f32 = 0.5;
 
 fn main() {
     App::new()
@@ -37,7 +42,6 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "Polarity".into(),
-                        // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
                         ..Default::default()
                     }),
                     ..Default::default()
@@ -52,6 +56,13 @@ fn main() {
                 .with_save_file::<AudioFileContents>()
                 .with_load_file::<AudioFileContents>(),
         )
+        .add_plugins(FpsOverlayPlugin {
+            config: FpsOverlayConfig {
+                enabled: true,
+                refresh_interval: Duration::from_secs_f32(0.5),
+                ..Default::default()
+            },
+        })
         .init_state::<GeneratorChoice>()
         .add_systems(OnEnter(GeneratorChoice::Goniometer), spawn_goniometer)
         .add_systems(OnExit(GeneratorChoice::Goniometer), despawn_goniometer)
@@ -393,32 +404,29 @@ fn spawn_goniometer(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    let mut mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::PointList,
+        RenderAssetUsages::default(),
+    );
+    let zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; WINDOW_SIZE];
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, zeros);
+
     let mut point_ids = Vec::new();
     point_ids.reserve_exact(WINDOW_SIZE);
-    for i in 0..WINDOW_SIZE {
-        let point = commands
-            .spawn((
-                Mesh2d(meshes.add(Circle::new(POINT_SIZE))),
-                if i % 3 == 0 {
-                    MeshMaterial2d(materials.add(Color::srgb(0.0, 1.0, 0.0)))
-                } else if i % 3 == 1 {
-                    if i % 2 == 0 {
-                        MeshMaterial2d(materials.add(Color::srgb(0.0, 1.0, 0.0)))
-                    } else {
-                        MeshMaterial2d(materials.add(Color::srgb(0.0, 0.0, 1.0)))
-                    }
-                } else {
-                    if i % 2 == 0 {
-                        MeshMaterial2d(materials.add(Color::srgb(0.0, 0.0, 1.0)))
-                    } else {
-                        MeshMaterial2d(materials.add(Color::srgb(1.0, 0.0, 1.0)))
-                    }
-                },
-                Transform::from_xyz(0., 0., 1.),
-            ))
-            .id();
-        point_ids.push(point);
-    }
+    commands.spawn(());
+
+    // for i in 0..WINDOW_SIZE {
+    //     let alpha = 1. * (i as f32 / WINDOW_SIZE as f32) + 0.25;
+    //     let point = commands
+    //         .spawn((
+    //             Mesh2d(meshes.add(Circle::new(POINT_SIZE))),
+    //             MeshMaterial2d(materials.add(Color::srgba(2.0, 0.3, 1.4, alpha))),
+    //             Transform::from_xyz(0., 0., 1.),
+    //         ))
+    //         .id();
+    //     point_ids.push(point);
+    // }
+
     let goni_id = commands.spawn_empty().id();
     commands.entity(goni_id).insert((
         Goniometer {
@@ -426,6 +434,8 @@ fn spawn_goniometer(
             id: goni_id,
         },
         DrawableCursor,
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(materials.add(Color::srgba(2.0, 0.3, 1.4, 1.0))),
         PointArray(point_ids),
     ));
     info!("Spawned Goniometer");
@@ -447,7 +457,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
         icon: asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
         text: asset_server.load("fonts/inter/InterVariable.ttf"),
     };
-    commands.spawn(Camera2d);
+    commands.spawn((Camera2d, Bloom::default()));
     commands
         .spawn((Node {
             display: Display::Flex,

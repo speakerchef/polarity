@@ -3,10 +3,9 @@ pub mod palette;
 use bevy::prelude::*;
 
 pub const ANIM_SCALE_FACTOR: f32 = 250.;
-// pub const WINDOW_SIZE: usize = 5632;
-// pub const WINDOW_SIZE: usize = 6144;
-// pub const WINDOW_SIZE: usize = 5632;
-pub const WINDOW_SIZE: usize = 5120;
+// pub const WINDOW_SIZE: usize = 8192;
+pub const WINDOW_SIZE: usize = 5632;
+// pub const WINDOW_SIZE: usize = 5120;
 
 #[derive(Component, Debug, Clone)]
 pub struct PointArray(pub Vec<Entity>);
