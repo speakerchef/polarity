@@ -1,11 +1,12 @@
-use bevy::dev_tools::fps_overlay::{self, FpsOverlayConfig, FpsOverlayPlugin};
-use bevy::mesh::{Indices, MeshVertexAttribute};
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::post_process::bloom::Bloom;
+use bevy::render::render_resource::AsBindGroup;
+use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 use polarity::goniometer::{self, Goniometer};
-use polarity::palette;
 use polarity::{
-    AudioFileContents, DrawableCursor, PlayingAudio, PointArray, PreviewCanvas, TimelineScrubber,
-    WINDOW_SIZE,
+    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HISTORY_WINDOW_SIZE,
+    HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, PlayingAudio, PreviewCanvas,
+    TimelineScrubber, palette,
 };
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -14,6 +15,7 @@ use std::time::Duration;
 use bevy::asset::{RenderAssetUsages, UnapprovedPathMode};
 use bevy::audio::Source;
 use bevy::prelude::*;
+use bevy::shader::ShaderRef;
 use bevy_file_dialog::prelude::*;
 
 struct FontBlock {
@@ -28,11 +30,31 @@ enum GeneratorChoice {
     Oscilloscope,
 }
 
+const SHADER_ASSET_PATH: &str = "shaders/custom_material.wgsl";
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+struct CustomMaterial {
+    #[uniform(0)]
+    color: LinearRgba,
+    alpha_mode: AlphaMode2d,
+}
+
+impl Material2d for CustomMaterial {
+    fn vertex_shader() -> ShaderRef {
+        ShaderRef::Default
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        self.alpha_mode
+    }
+}
+
 #[derive(Component)]
 struct DurationText;
-
-const POINT_SIZE: f32 = 0.75;
-// const POINT_SIZE: f32 = 0.5;
 
 fn main() {
     App::new()
@@ -51,6 +73,7 @@ fn main() {
                     ..Default::default()
                 }),
         )
+        .add_plugins(Material2dPlugin::<CustomMaterial>::default())
         .add_plugins(
             FileDialogPlugin::new()
                 .with_save_file::<AudioFileContents>()
@@ -402,54 +425,67 @@ fn update_timeline_scrubber(
 fn spawn_goniometer(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<CustomMaterial>>,
 ) {
-    let mut mesh = Mesh::new(
+    let mut live_mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::PointList,
         RenderAssetUsages::default(),
     );
-    let zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; WINDOW_SIZE];
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, zeros);
-
-    let mut point_ids = Vec::new();
-    point_ids.reserve_exact(WINDOW_SIZE);
+    let mut history_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::PointList,
+        RenderAssetUsages::default(),
+    );
+    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; LIVE_WINDOW_SIZE];
+    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; HISTORY_WINDOW_SIZE];
+    let hist_colors: Vec<[f32; 4]> = (0..HISTORY_WINDOW_SIZE)
+        .map(|i| {
+            let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
+            CRT_P7.with_alpha(alpha).to_f32_array()
+        })
+        .collect();
+    live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
+    live_mesh.insert_attribute(
+        Mesh::ATTRIBUTE_COLOR,
+        vec![CRT_P1.to_f32_array(); LIVE_WINDOW_SIZE],
+    );
+    history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
+    history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
     commands.spawn(());
-
-    // for i in 0..WINDOW_SIZE {
-    //     let alpha = 1. * (i as f32 / WINDOW_SIZE as f32) + 0.25;
-    //     let point = commands
-    //         .spawn((
-    //             Mesh2d(meshes.add(Circle::new(POINT_SIZE))),
-    //             MeshMaterial2d(materials.add(Color::srgba(2.0, 0.3, 1.4, alpha))),
-    //             Transform::from_xyz(0., 0., 1.),
-    //         ))
-    //         .id();
-    //     point_ids.push(point);
-    // }
 
     let goni_id = commands.spawn_empty().id();
     commands.entity(goni_id).insert((
         Goniometer {
-            window_buffer: VecDeque::from([Vec2 { x: 0., y: 0. }; WINDOW_SIZE]),
+            live_buffer: VecDeque::from([Vec2::ZERO; LIVE_WINDOW_SIZE]),
+            history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
+            last_sample_idx: 0,
             id: goni_id,
         },
         DrawableCursor,
-        Mesh2d(meshes.add(mesh)),
-        MeshMaterial2d(materials.add(Color::srgba(2.0, 0.3, 1.4, 1.0))),
-        PointArray(point_ids),
+    ));
+    commands.spawn((
+        LiveMesh,
+        Mesh2d(meshes.add(live_mesh)),
+        MeshMaterial2d(materials.add(CustomMaterial {
+            color: LinearRgba::default(),
+            alpha_mode: AlphaMode2d::Blend,
+        })),
+    ));
+    commands.spawn((
+        HistoryMesh,
+        Mesh2d(meshes.add(history_mesh)),
+        MeshMaterial2d(materials.add(CustomMaterial {
+            color: LinearRgba::default(),
+            alpha_mode: AlphaMode2d::Blend,
+        })),
     ));
     info!("Spawned Goniometer");
 }
 
 fn despawn_goniometer(
     mut commands: Commands,
-    q_goniometer: Single<(&Goniometer, &PointArray), With<DrawableCursor>>,
+    q_goniometer: Single<&Goniometer, With<DrawableCursor>>,
 ) {
-    let (goniometer, point_array) = *q_goniometer;
-    for e in &point_array.0 {
-        commands.entity(*e).despawn();
-    }
-    commands.entity(goniometer.id).despawn();
+    commands.entity(q_goniometer.id).despawn();
 }
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
