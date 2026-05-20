@@ -22,7 +22,6 @@ codegen-units = 1
 # Do a second optimization pass over the entire program, including dependencies.
 # Slows compile times, marginal improvements.
 lto = "thin"
-debug = true
 
 # Optimize for size in the wasm-release profile to reduce load times and bandwidth usage on web.
 [profile.wasm-release]
@@ -30,6 +29,8 @@ debug = true
 inherits = "release"
 # Optimize with size in mind (also try "z", sometimes it is better).
 # Slightly slows compile times, great improvements to file size and runtime performance.
-opt-level = "s"
+opt-level = "z"
 # Strip all debugging information from the binary to slightly reduce file size.
-strip = "debuginfo"
+# strip = "debuginfo"
+strip = true
+panic = "abort"

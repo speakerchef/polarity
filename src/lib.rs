@@ -1,14 +1,17 @@
 pub mod goniometer;
+pub mod low_pass_filter;
 pub mod palette;
 use bevy::prelude::*;
 
-pub const ANIM_SCALE_FACTOR: f32 = 250.;
-pub const LIVE_WINDOW_SIZE: usize = 4096;
-pub const HISTORY_WINDOW_SIZE: usize = 65536;
+pub const NUM_VERTICES: usize = 6;
+pub const DOT_HALF_SIZE: f32 = 0.5;
+pub const ANIM_SCALE_FACTOR: f32 = 250.0;
+pub const LIVE_WINDOW_SIZE: usize = 4450;
+pub const HISTORY_WINDOW_SIZE: usize = 42696;
 pub const LIVE_MAGENTA: LinearRgba = LinearRgba {
-    red: 2.0,
-    green: 0.2,
-    blue: 1.4,
+    red: 3.0,
+    green: 0.5,
+    blue: 2.1,
     alpha: 4.0,
 };
 pub const HISTORY_MAGENTA: LinearRgba = LinearRgba {
@@ -21,7 +24,7 @@ pub const CRT_P1: LinearRgba = LinearRgba {
     red: 0.40,
     green: 2.00,
     blue: 0.40,
-    alpha: 4.0,
+    alpha: 3.0,
 };
 pub const CRT_P7: LinearRgba = LinearRgba {
     red: 0.15,

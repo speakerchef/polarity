@@ -1,6 +1,6 @@
 use crate::{
-    ANIM_SCALE_FACTOR, AudioFileContents, DrawableCursor, HISTORY_WINDOW_SIZE, HistoryMesh,
-    LIVE_WINDOW_SIZE, LiveMesh, PlayingAudio, PreviewCanvas,
+    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HISTORY_WINDOW_SIZE,
+    HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, PlayingAudio, PreviewCanvas,
 };
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -73,19 +73,17 @@ pub fn update(
     }
 }
 
-pub fn recolor(
-    _q_cursor: Single<&Goniometer, With<DrawableCursor>>,
-    live_mesh: Query<&MeshMaterial2d<ColorMaterial>, With<LiveMesh>>,
-    history_mesh: Query<&MeshMaterial2d<ColorMaterial>, With<HistoryMesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    for (i, entity) in live_mesh.iter().enumerate() {
-        if let Some(mat) = materials.get_mut(&entity.0) {
-            let alpha = (i as f32 / LIVE_WINDOW_SIZE as f32) + 0.25;
-            mat.color = Color::srgba(2.0, 0.3, 1.4, alpha);
-            mat.alpha_mode = bevy::sprite_render::AlphaMode2d::Blend
-        }
-    }
+/// Converts 2D vertex into coords for 2 triangles resulting in a rectangle
+fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; 6] {
+    let s = DOT_HALF_SIZE;
+    [
+        [v.x - s, v.y - s, 0.0],
+        [v.x + s, v.y - s, 0.0],
+        [v.x + s, v.y + s, 0.0],
+        [v.x - s, v.y - s, 0.0],
+        [v.x + s, v.y + s, 0.0],
+        [v.x - s, v.y + s, 0.0],
+    ]
 }
 
 pub fn draw(
@@ -94,20 +92,20 @@ pub fn draw(
     history_mesh: Single<&Mesh2d, With<HistoryMesh>>,
     mut mesh: ResMut<Assets<Mesh>>,
 ) {
-    if let Some(live_mesh) = mesh.get_mut(live_mesh.id()) {
-        let pos: Vec<_> = goniometer
-            .live_buffer
-            .iter()
-            .map(|v| [v.x, v.y, 0.0])
-            .collect();
-        live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
-    }
     if let Some(history_mesh) = mesh.get_mut(history_mesh.id()) {
         let pos: Vec<_> = goniometer
             .history_buffer
             .iter()
-            .map(|v| [v.x, v.y, 0.0])
+            .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
         history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+    }
+    if let Some(live_mesh) = mesh.get_mut(live_mesh.id()) {
+        let pos: Vec<_> = goniometer
+            .live_buffer
+            .iter()
+            .flat_map(|&v| point_to_quad_vertices(v))
+            .collect();
+        live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
 }

@@ -4,9 +4,9 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 use polarity::goniometer::{self, Goniometer};
 use polarity::{
-    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HISTORY_WINDOW_SIZE,
-    HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, PlayingAudio, PreviewCanvas,
-    TimelineScrubber, palette,
+    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_WINDOW_SIZE, HistoryMesh,
+    LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas, TimelineScrubber,
+    palette,
 };
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -428,25 +428,26 @@ fn spawn_goniometer(
     mut materials: ResMut<Assets<CustomMaterial>>,
 ) {
     let mut live_mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::PointList,
+        bevy::mesh::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
     let mut history_mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::PointList,
+        bevy::mesh::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
-    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; LIVE_WINDOW_SIZE];
-    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; HISTORY_WINDOW_SIZE];
+    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; LIVE_WINDOW_SIZE * NUM_VERTICES];
+    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; HISTORY_WINDOW_SIZE * NUM_VERTICES];
     let hist_colors: Vec<[f32; 4]> = (0..HISTORY_WINDOW_SIZE)
-        .map(|i| {
+        .flat_map(|i| {
             let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
-            CRT_P7.with_alpha(alpha).to_f32_array()
+            let c = CRT_P7.with_alpha(alpha).to_f32_array();
+            std::iter::repeat_n(c, 6)
         })
         .collect();
     live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
     live_mesh.insert_attribute(
         Mesh::ATTRIBUTE_COLOR,
-        vec![CRT_P1.to_f32_array(); LIVE_WINDOW_SIZE],
+        vec![CRT_P1.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
