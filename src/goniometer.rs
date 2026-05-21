@@ -7,14 +7,33 @@ use bevy::{
     math::ops::{sin, sqrt},
     prelude::*,
 };
+use biquad::{Biquad, Coefficients, DirectForm1};
 use std::{collections::VecDeque, f32::consts::PI, ops::Neg};
 #[derive(Debug, Clone, Default)]
 pub enum StereometerKind {
-    LinearBipolar,
     #[default]
+    LinearBipolar,
     ScaledBipolar,
     LinearLissajous,
     ScaledLissajous,
+}
+
+#[derive(Debug, Clone)]
+pub struct StereoFilter {
+    l: DirectForm1<f32>,
+    r: DirectForm1<f32>,
+}
+impl StereoFilter {
+    pub fn new(coeffs: Coefficients<f32>) -> Self {
+        StereoFilter {
+            l: DirectForm1::<f32>::new(coeffs),
+            r: DirectForm1::<f32>::new(coeffs),
+        }
+    }
+
+    pub fn run(&mut self, l: f32, r: f32) -> (f32, f32) {
+        (self.l.run(l), self.r.run(r))
+    }
 }
 
 #[derive(Component, Debug, Clone)]
@@ -24,6 +43,12 @@ pub struct Stereometer {
     pub history_buffer: VecDeque<Vec2>,
     pub id: Entity,
     pub last_sample_idx: usize,
+
+    pub filterbank: (
+        StereoFilter, /* lpf */
+        StereoFilter, /* bpf */
+        StereoFilter, /* hpf */
+    ),
 }
 
 #[derive(Component, Debug, Clone)]
@@ -101,10 +126,11 @@ pub fn update(
             &[0.]
         });
     goniometer.live_buffer = live_window
-        .windows(audio.num_channels)
+        .chunks_exact(audio.num_channels)
         .map(|frame| {
             let left = frame[0];
-            let right = *frame.last().unwrap_or(&left);
+            let right = *frame.last().unwrap_or(&frame[0]);
+            let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
             let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,

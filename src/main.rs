@@ -1,23 +1,22 @@
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
-use bevy::post_process::bloom::Bloom;
-use bevy::render::render_resource::AsBindGroup;
-use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
-use bevy::text::FontFeatures;
-use polarity::goniometer::{self, Stereometer, StereometerKind};
-use polarity::{
-    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_WINDOW_SIZE, HistoryMesh,
-    LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas, TimelineScrubber,
-    palette,
-};
-use std::collections::VecDeque;
-use std::rc::Rc;
-use std::sync::Arc;
-
 use bevy::asset::{RenderAssetUsages, UnapprovedPathMode};
 use bevy::audio::Source;
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
+use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
+use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
+use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
+use bevy::text::{FontFeatureTag, FontFeatures};
 use bevy_file_dialog::prelude::*;
+use biquad::*;
+use polarity::goniometer::{self, StereoFilter, Stereometer, StereometerKind};
+use polarity::{
+    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HISTORY_WINDOW_SIZE,
+    HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio,
+    PreviewCanvas, TimelineScrubber, palette,
+};
+use std::collections::VecDeque;
+use std::sync::Arc;
 
 struct FontBlock {
     icon: Handle<Font>,
@@ -27,7 +26,7 @@ struct FontBlock {
 #[derive(States, Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
 enum GeneratorChoice {
     #[default]
-    Goniometer,
+    Stereometer,
     Oscilloscope,
 }
 
@@ -88,8 +87,8 @@ fn main() {
         //     },
         // })
         .init_state::<GeneratorChoice>()
-        .add_systems(OnEnter(GeneratorChoice::Goniometer), spawn_goniometer)
-        .add_systems(OnExit(GeneratorChoice::Goniometer), despawn_goniometer)
+        .add_systems(OnEnter(GeneratorChoice::Stereometer), spawn_stereometer)
+        .add_systems(OnExit(GeneratorChoice::Stereometer), despawn_stereometer)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -99,7 +98,7 @@ fn main() {
             Update,
             (goniometer::update, goniometer::draw)
                 .chain()
-                .run_if(in_state(GeneratorChoice::Goniometer)),
+                .run_if(in_state(GeneratorChoice::Stereometer)),
         )
         .run();
 }
@@ -270,28 +269,74 @@ fn spawn_primary_dropdown_headers(
     names: &[&str],
     fonts: &FontBlock,
 ) {
-    names.iter().for_each(|name| {
+    names.iter().enumerate().for_each(|(i, &name)| {
         parent
             .spawn((
                 Node {
                     display: Display::Flex,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::FlexStart,
-                    height: px(46.),
+                    flex_direction: FlexDirection::Row,
+                    height: px(46),
                     width: percent(100.),
+                    border: if i != 0 {
+                        UiRect::top(px(1))
+                    } else {
+                        default()
+                    },
                     ..Default::default()
                 },
-                BackgroundColor(palette::SURFACE),
+                BorderColor::all(palette::BORDER),
             ))
             .with_children(|parent| {
-                parent.spawn((
-                    Text::new(name.to_string()),
-                    TextFont {
-                        font: fonts.text.clone(),
-                        font_size: palette::font_size::BRAND,
-                        ..Default::default()
-                    },
-                ));
+                parent
+                    .spawn((
+                        Node {
+                            display: Display::Flex,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            height: percent(100.),
+                            width: px(46),
+                            border: UiRect::right(px(1)),
+                            ..Default::default()
+                        },
+                        BackgroundColor(palette::SURFACE),
+                        BorderColor::all(palette::BORDER),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            Text::new(format!("0{}", i)),
+                            TextFont {
+                                font: fonts.text.clone(),
+                                font_size: palette::font_size::ICON,
+                                weight: FontWeight(palette::font_weight::MED),
+                                ..Default::default()
+                            },
+                        ));
+                    });
+
+                parent
+                    .spawn((
+                        Node {
+                            display: Display::Flex,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::FlexStart,
+                            height: px(46.),
+                            width: percent(100.),
+                            padding: UiRect::left(px(12)).with_right(px(12)),
+                            ..Default::default()
+                        },
+                        BackgroundColor(palette::SURFACE),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((
+                            Text::new(name.to_string()),
+                            TextFont {
+                                font: fonts.text.clone(),
+                                font_size: palette::font_size::ICON,
+                                weight: FontWeight(palette::font_weight::MED),
+                                ..Default::default()
+                            },
+                        ));
+                    });
             });
     });
 }
@@ -381,7 +426,7 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
-                    spawn_primary_dropdown_headers(parent, &["Generator", "Modifier"], fonts)
+                    spawn_primary_dropdown_headers(parent, &["GENERATOR", "MODIFIER"], fonts)
                 });
         });
 }
@@ -456,7 +501,7 @@ fn update_timeline_scrubber(
     q_progress_text.0 = format!("Time Elapsed: {:.2}s", pos,);
 }
 
-fn spawn_goniometer(
+fn spawn_stereometer(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<CustomMaterial>>,
@@ -474,20 +519,28 @@ fn spawn_goniometer(
     let hist_colors: Vec<[f32; 4]> = (0..HISTORY_WINDOW_SIZE)
         .flat_map(|i| {
             let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
-            let c = CRT_P7.with_alpha(alpha).to_f32_array();
+            let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
             std::iter::repeat_n(c, 6)
         })
         .collect();
     live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
     live_mesh.insert_attribute(
         Mesh::ATTRIBUTE_COLOR,
-        vec![CRT_P1.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
+        vec![LIVE_MAGENTA.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
     commands.spawn(());
 
     let goni_id = commands.spawn_empty().id();
+
+    let fs = 48000.hz();
+    let lpf_coeffs =
+        Coefficients::<f32>::from_params(Type::LowPass, fs, 300.hz(), Q_BUTTERWORTH_F32).unwrap();
+    let bpf_coeffs =
+        Coefficients::<f32>::from_params(Type::BandPass, fs, 1.khz(), Q_BUTTERWORTH_F32).unwrap();
+    let hpf_coeffs =
+        Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32).unwrap();
     commands.entity(goni_id).insert((
         Stereometer {
             kind: StereometerKind::default(),
@@ -495,6 +548,11 @@ fn spawn_goniometer(
             history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
             last_sample_idx: 0,
             id: goni_id,
+            filterbank: (
+                StereoFilter::new(lpf_coeffs),
+                StereoFilter::new(bpf_coeffs),
+                StereoFilter::new(hpf_coeffs),
+            ),
         },
         DrawableCursor,
     ));
@@ -517,7 +575,7 @@ fn spawn_goniometer(
     info!("Spawned Goniometer");
 }
 
-fn despawn_goniometer(
+fn despawn_stereometer(
     mut commands: Commands,
     q_goniometer: Single<&Stereometer, With<DrawableCursor>>,
 ) {
