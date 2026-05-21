@@ -1,12 +1,25 @@
 use crate::{
     ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HISTORY_WINDOW_SIZE,
-    HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, PlayingAudio, PreviewCanvas,
+    HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
+    RADIAL_SCALE_FACTOR, goniometer,
 };
-use bevy::prelude::*;
-use std::collections::VecDeque;
+use bevy::{
+    math::ops::{sin, sqrt},
+    prelude::*,
+};
+use std::{collections::VecDeque, f32::consts::PI, ops::Neg};
+#[derive(Debug, Clone, Default)]
+pub enum StereometerKind {
+    LinearBipolar,
+    #[default]
+    ScaledBipolar,
+    LinearLissajous,
+    ScaledLissajous,
+}
 
 #[derive(Component, Debug, Clone)]
-pub struct Goniometer {
+pub struct Stereometer {
+    pub kind: StereometerKind,
     pub live_buffer: VecDeque<Vec2>,
     pub history_buffer: VecDeque<Vec2>,
     pub id: Entity,
@@ -16,10 +29,35 @@ pub struct Goniometer {
 #[derive(Component, Debug, Clone)]
 pub struct Oscilloscope(pub VecDeque<Vec2>, pub Entity);
 
+fn get_xy_from_meterkind(
+    kind: &StereometerKind,
+    left: f32,
+    right: f32,
+) -> (f32 /* x */, f32 /* y */) {
+    match kind {
+        StereometerKind::LinearBipolar => ((left - right) / sqrt(2.), (left + right) / sqrt(2.)),
+        StereometerKind::ScaledBipolar => {
+            let sf = radial_scale(left, right) / sqrt(2.);
+            ((left - right) * sf, (left + right) * sf)
+        }
+        StereometerKind::LinearLissajous => (left, right),
+        StereometerKind::ScaledLissajous => {
+            let sf = radial_scale(left, right);
+            (left * sf, right * sf)
+        }
+    }
+}
+
+fn radial_scale(left: f32, right: f32) -> f32 {
+    let r = (left.powi(2) + right.powi(2)).sqrt();
+    let r_new = r.powf(RADIAL_SCALE_FACTOR);
+    if r > 1e-6 { r_new / r } else { 0.0 }
+}
+
 pub fn update(
     playing_audio: Single<&AudioSink, With<PlayingAudio>>,
     audio: Single<&AudioFileContents>,
-    mut goniometer: Single<&mut Goniometer, With<DrawableCursor>>,
+    mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
     canvas: Single<&UiGlobalTransform, With<PreviewCanvas>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
 ) {
@@ -31,36 +69,46 @@ pub fn update(
 
     let pos = playing_audio.position().as_secs_f64();
     let mut last_idx = goniometer.last_sample_idx;
-    let cur_idx = std::cmp::min(
-        (audio.sample_rate as f64 * pos) as usize,
-        audio.samples.len() - 1,
-    );
+    let cur_idx = (audio.sample_rate as f64 * pos) as usize;
 
     if cur_idx > last_idx {
         let frame_size = (cur_idx - last_idx) * audio.num_channels;
         last_idx *= audio.num_channels;
-        let history_window = &audio.samples[last_idx..last_idx + frame_size];
+        let history_window = &audio
+            .samples
+            .get(last_idx..last_idx + frame_size)
+            .unwrap_or_else(|| {
+                goniometer.last_sample_idx = 0;
+                &[0.]
+            });
         goniometer.last_sample_idx = cur_idx;
         for frame in history_window.chunks_exact(audio.num_channels) {
-            let first = frame[0];
-            let last = *frame.last().unwrap_or(&first);
+            let left = frame[0];
+            let right = *frame.last().unwrap_or(&left);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
             goniometer.history_buffer.push_back(Vec2 {
-                x: world_pos.x + first * ANIM_SCALE_FACTOR,
-                y: world_pos.y + last * ANIM_SCALE_FACTOR,
+                x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
+                y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
             });
         }
     }
 
-    let live_window = &audio.samples
-        [cur_idx * audio.num_channels..(cur_idx + LIVE_WINDOW_SIZE) * audio.num_channels];
+    let live_window = &audio
+        .samples
+        .get(cur_idx * audio.num_channels..(cur_idx + LIVE_WINDOW_SIZE) * audio.num_channels)
+        .unwrap_or_else(|| {
+            goniometer.last_sample_idx = 0;
+            &[0.]
+        });
     goniometer.live_buffer = live_window
         .windows(audio.num_channels)
         .map(|frame| {
-            let first = frame[0];
-            let last = *frame.last().unwrap_or(&first);
+            let left = frame[0];
+            let right = *frame.last().unwrap_or(&left);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
             Vec2 {
-                x: world_pos.x + first * ANIM_SCALE_FACTOR,
-                y: world_pos.y + last * ANIM_SCALE_FACTOR,
+                x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
+                y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
             }
         })
         .collect();
@@ -73,8 +121,8 @@ pub fn update(
     }
 }
 
-/// Converts 2D vertex into coords for 2 triangles resulting in a rectangle
-fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; 6] {
+/// Converts 2D vertex into 2 triangles forming a rectangle
+fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; NUM_VERTICES] {
     let s = DOT_HALF_SIZE;
     [
         [v.x - s, v.y - s, 0.0],
@@ -86,14 +134,16 @@ fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; 6] {
     ]
 }
 
+// fn upsample(factor: usize) -> [[]; factor]
+
 pub fn draw(
-    goniometer: Single<&Goniometer, With<DrawableCursor>>,
+    goniometer: Single<&Stereometer, With<DrawableCursor>>,
     live_mesh: Single<&Mesh2d, With<LiveMesh>>,
     history_mesh: Single<&Mesh2d, With<HistoryMesh>>,
     mut mesh: ResMut<Assets<Mesh>>,
 ) {
     if let Some(history_mesh) = mesh.get_mut(history_mesh.id()) {
-        let pos: Vec<_> = goniometer
+        let pos: Vec<[f32; 3]> = goniometer
             .history_buffer
             .iter()
             .flat_map(|&v| point_to_quad_vertices(v))

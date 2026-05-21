@@ -2,15 +2,16 @@ use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::post_process::bloom::Bloom;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
-use polarity::goniometer::{self, Goniometer};
+use bevy::text::FontFeatures;
+use polarity::goniometer::{self, Stereometer, StereometerKind};
 use polarity::{
     AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_WINDOW_SIZE, HistoryMesh,
     LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas, TimelineScrubber,
     palette,
 };
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
 use bevy::asset::{RenderAssetUsages, UnapprovedPathMode};
 use bevy::audio::Source;
@@ -79,13 +80,13 @@ fn main() {
                 .with_save_file::<AudioFileContents>()
                 .with_load_file::<AudioFileContents>(),
         )
-        .add_plugins(FpsOverlayPlugin {
-            config: FpsOverlayConfig {
-                enabled: true,
-                refresh_interval: Duration::from_secs_f32(0.5),
-                ..Default::default()
-            },
-        })
+        // .add_plugins(FpsOverlayPlugin {
+        //     config: FpsOverlayConfig {
+        //         enabled: true,
+        //         refresh_interval: Duration::from_secs_f32(0.5),
+        //         ..Default::default()
+        //     },
+        // })
         .init_state::<GeneratorChoice>()
         .add_systems(OnEnter(GeneratorChoice::Goniometer), spawn_goniometer)
         .add_systems(OnExit(GeneratorChoice::Goniometer), despawn_goniometer)
@@ -133,7 +134,7 @@ fn button_on_leave(
         if let Ok(children) = q_children.get(target) {
             for child in children {
                 if let Ok(mut c) = q_textcol.get_mut(*child) {
-                    c.0 = palette::TEXT;
+                    c.0 = palette::DIM;
                 }
             }
         }
@@ -142,8 +143,7 @@ fn button_on_leave(
 
 fn spawn_file_handle_button(
     parent: &mut ChildSpawnerCommands,
-    icon_font: Handle<Font>,
-    text_font: Handle<Font>,
+    fonts: &FontBlock,
     button_text: &str,
     arrow_glyph: &str,
     on_click: fn(On<Pointer<Click>>, Commands),
@@ -156,7 +156,7 @@ fn spawn_file_handle_button(
                 display: Display::Flex,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                height: percent(100.),
+                height: px(38),
                 width: percent(50.),
                 border: if add_border {
                     UiRect {
@@ -174,18 +174,18 @@ fn spawn_file_handle_button(
         .with_children(|parent| {
             parent.spawn((
                 Text::new(arrow_glyph),
-                TextColor(palette::TEXT),
+                TextColor(palette::DIM),
                 TextFont {
-                    font: icon_font.clone(),
+                    font: fonts.icon.clone(),
                     font_size: palette::font_size::ICON,
                     ..Default::default()
                 },
             ));
             parent.spawn((
                 Text::new(button_text),
-                TextColor(palette::TEXT),
+                TextColor(palette::DIM),
                 TextFont {
-                    font: text_font.clone(),
+                    font: fonts.text.clone(),
                     font_size: palette::font_size::BRAND,
                     weight: FontWeight(palette::font_weight::HEAVY),
                     ..Default::default()
@@ -221,7 +221,7 @@ fn spawn_transport_info(parent: &mut ChildSpawnerCommands) {
     parent.spawn((
         // transport and file info bar
         Node {
-            height: percent(25.),
+            height: percent(37.),
             width: percent(100.),
             border: UiRect {
                 top: px(palette::FRAME_WIDTH),
@@ -230,7 +230,7 @@ fn spawn_transport_info(parent: &mut ChildSpawnerCommands) {
             },
             ..Default::default()
         },
-        BackgroundColor(palette::BG),
+        BackgroundColor(palette::BG_MED),
         BorderColor::all(palette::BORDER),
     ));
 }
@@ -242,9 +242,10 @@ fn spawn_waveform_view(parent: &mut ChildSpawnerCommands) {
             Node {
                 height: percent(100.),
                 width: percent(100.),
+                padding: UiRect::all(px(4.)),
                 ..Default::default()
             },
-            BackgroundColor(palette::BG_DARK),
+            BackgroundColor(palette::BG_MED),
         ))
         .with_children(|parent| {
             parent.spawn((Text::new("Song Duration: , "), DurationText));
@@ -262,6 +263,37 @@ fn spawn_preview_canvas(parent: &mut ChildSpawnerCommands) {
             ..Default::default()
         },
     ));
+}
+
+fn spawn_primary_dropdown_headers(
+    parent: &mut ChildSpawnerCommands,
+    names: &[&str],
+    fonts: &FontBlock,
+) {
+    names.iter().for_each(|name| {
+        parent
+            .spawn((
+                Node {
+                    display: Display::Flex,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
+                    height: px(46.),
+                    width: percent(100.),
+                    ..Default::default()
+                },
+                BackgroundColor(palette::SURFACE),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Text::new(name.to_string()),
+                    TextFont {
+                        font: fonts.text.clone(),
+                        font_size: palette::font_size::BRAND,
+                        ..Default::default()
+                    },
+                ));
+            });
+    });
 }
 
 fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
@@ -298,55 +330,59 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                         display: Display::Flex,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
-                        height: percent(5.),
+                        height: px(38.),
                         width: percent(100.),
                         border: UiRect {
-                            left: px(palette::FRAME_WIDTH),
+                            left: px(palette::FRAME_WIDTH * 2.),
                             bottom: px(palette::FRAME_WIDTH),
                             ..Default::default()
                         },
                         ..Default::default()
                     },
-                    BackgroundColor(palette::BG_MED),
+                    BackgroundColor(palette::BG),
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
                     spawn_file_handle_button(
                         parent,
-                        fonts.icon.clone(),
-                        fonts.text.clone(),
+                        fonts,
                         "IMPORT",
                         "\u{e5db}",
-                        |event: On<Pointer<Click>>, commands| import_file(commands),
+                        |_: On<Pointer<Click>>, commands| import_file(commands),
                         true,
                     );
                     spawn_file_handle_button(
                         parent,
-                        fonts.icon.clone(),
-                        fonts.text.clone(),
+                        fonts,
                         "EXPORT",
                         "\u{e5d8}",
-                        |event: On<Pointer<Click>>, commands| export_file(commands),
+                        |_: On<Pointer<Click>>, commands| export_file(commands),
                         false,
                     );
                 });
             // Inner div for control panel
-            parent.spawn((
-                Node {
-                    display: Display::Flex,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    height: percent(100.),
-                    width: percent(100.),
-                    border: UiRect {
-                        left: px(palette::FRAME_WIDTH),
+            parent
+                .spawn((
+                    Node {
+                        display: Display::Flex,
+                        align_items: AlignItems::Start,
+                        flex_direction: FlexDirection::Column,
+                        // justify_content: JustifyContent::Center,
+                        height: percent(100.),
+                        width: percent(100.),
+                        border: UiRect {
+                            left: px(palette::FRAME_WIDTH * 2.),
+                            ..Default::default()
+                        },
+                        padding: UiRect::all(px(12.)),
                         ..Default::default()
                     },
-                    ..Default::default()
-                },
-                BackgroundColor(palette::BG_MED),
-                BorderColor::all(palette::BORDER),
-            ));
+                    BackgroundColor(palette::BG),
+                    BorderColor::all(palette::BORDER),
+                ))
+                .with_children(|parent| {
+                    spawn_primary_dropdown_headers(parent, &["Generator", "Modifier"], fonts)
+                });
         });
 }
 
@@ -386,8 +422,6 @@ fn file_loaded(
                 .map(|sample| sample as f32 / i16::MAX as f32)
                 .collect(),
         };
-
-        // info!("File contents: {:#?}", file_contents);
 
         commands.spawn((
             PlayingAudio,
@@ -455,7 +489,8 @@ fn spawn_goniometer(
 
     let goni_id = commands.spawn_empty().id();
     commands.entity(goni_id).insert((
-        Goniometer {
+        Stereometer {
+            kind: StereometerKind::default(),
             live_buffer: VecDeque::from([Vec2::ZERO; LIVE_WINDOW_SIZE]),
             history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
             last_sample_idx: 0,
@@ -484,7 +519,7 @@ fn spawn_goniometer(
 
 fn despawn_goniometer(
     mut commands: Commands,
-    q_goniometer: Single<&Goniometer, With<DrawableCursor>>,
+    q_goniometer: Single<&Stereometer, With<DrawableCursor>>,
 ) {
     commands.entity(q_goniometer.id).despawn();
 }

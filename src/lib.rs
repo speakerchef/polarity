@@ -4,10 +4,13 @@ pub mod palette;
 use bevy::prelude::*;
 
 pub const NUM_VERTICES: usize = 6;
-pub const DOT_HALF_SIZE: f32 = 0.5;
+pub const DOT_HALF_SIZE: f32 = 0.75;
 pub const ANIM_SCALE_FACTOR: f32 = 250.0;
-pub const LIVE_WINDOW_SIZE: usize = 4450;
-pub const HISTORY_WINDOW_SIZE: usize = 42696;
+pub const RADIAL_SCALE_FACTOR: f32 = 0.55;
+pub const LIVE_WINDOW_SIZE: usize = 2048;
+pub const HISTORY_WINDOW_SIZE: usize = 16328;
+// pub const HISTORY_WINDOW_SIZE: usize = 42696;
+// pub const HISTORY_WINDOW_SIZE: usize = 0;
 pub const LIVE_MAGENTA: LinearRgba = LinearRgba {
     red: 3.0,
     green: 0.5,
