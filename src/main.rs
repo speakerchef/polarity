@@ -9,7 +9,7 @@ use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 use bevy::text::{FontFeatureTag, FontFeatures};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
-use polarity::goniometer::{self, StereoFilter, Stereometer, StereometerKind};
+use polarity::stereometer::{self, StereoFilter, Stereometer, StereometerKind};
 use polarity::{
     AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HISTORY_WINDOW_SIZE,
     HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio,
@@ -79,13 +79,6 @@ fn main() {
                 .with_save_file::<AudioFileContents>()
                 .with_load_file::<AudioFileContents>(),
         )
-        // .add_plugins(FpsOverlayPlugin {
-        //     config: FpsOverlayConfig {
-        //         enabled: true,
-        //         refresh_interval: Duration::from_secs_f32(0.5),
-        //         ..Default::default()
-        //     },
-        // })
         .init_state::<GeneratorChoice>()
         .add_systems(OnEnter(GeneratorChoice::Stereometer), spawn_stereometer)
         .add_systems(OnExit(GeneratorChoice::Stereometer), despawn_stereometer)
@@ -96,7 +89,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            (goniometer::update, goniometer::draw)
+            (stereometer::update, stereometer::draw)
                 .chain()
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
@@ -455,11 +448,11 @@ fn file_loaded(
         let bytes: Arc<[u8]> = f.contents.clone().into();
         let audio_src = AudioSource { bytes };
         let duration = audio_src.decoder().total_duration();
-        decoder_text.0 = format!("Song Duration: {}s, ", duration.unwrap().as_secs_f32());
+        decoder_text.0 = format!("Song Duration: {:.2}s, ", duration.unwrap().as_secs_f64());
         timeline_scrubber.0 = duration;
 
         let file_contents = AudioFileContents {
-            duration: audio_src.decoder().total_duration().unwrap().as_secs_f32(),
+            duration: audio_src.decoder().total_duration().unwrap().as_secs_f64(),
             sample_rate: audio_src.decoder().sample_rate(),
             num_channels: audio_src.decoder().channels() as usize,
             samples: audio_src
@@ -495,9 +488,10 @@ fn toggle_audio_playback(
 
 fn update_timeline_scrubber(
     q_playing_audio: Single<&AudioSink, With<PlayingAudio>>,
+    audio: Single<&AudioFileContents>,
     mut q_progress_text: Single<&mut Text, With<TimelineScrubber>>,
 ) {
-    let pos = q_playing_audio.position().as_secs_f32();
+    let pos = q_playing_audio.position().as_secs_f64() % audio.duration;
     q_progress_text.0 = format!("Time Elapsed: {:.2}s", pos,);
 }
 

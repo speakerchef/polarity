@@ -1,6 +1,5 @@
-pub mod goniometer;
-pub mod low_pass_filter;
 pub mod palette;
+pub mod stereometer;
 use bevy::prelude::*;
 
 pub const NUM_VERTICES: usize = 6;
@@ -56,7 +55,7 @@ pub struct HistoryMesh;
 
 #[derive(Component, Debug)]
 pub struct AudioFileContents {
-    pub duration: f32,
+    pub duration: f64,
     pub sample_rate: u32,
     pub num_channels: usize,
     pub samples: Vec<f32>,

@@ -1,18 +1,15 @@
 use crate::{
     ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HISTORY_WINDOW_SIZE,
     HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
-    RADIAL_SCALE_FACTOR, goniometer,
+    RADIAL_SCALE_FACTOR, stereometer,
 };
-use bevy::{
-    math::ops::{sin, sqrt},
-    prelude::*,
-};
+use bevy::{math::ops::sqrt, prelude::*};
 use biquad::{Biquad, Coefficients, DirectForm1};
-use std::{collections::VecDeque, f32::consts::PI, ops::Neg};
+use std::collections::VecDeque;
 #[derive(Debug, Clone, Default)]
 pub enum StereometerKind {
-    #[default]
     LinearBipolar,
+    #[default]
     ScaledBipolar,
     LinearLissajous,
     ScaledLissajous,
@@ -92,7 +89,7 @@ pub fn update(
         return;
     };
 
-    let pos = playing_audio.position().as_secs_f64();
+    let pos = playing_audio.position().as_secs_f64() % audio.duration;
     let mut last_idx = goniometer.last_sample_idx;
     let cur_idx = (audio.sample_rate as f64 * pos) as usize;
 
