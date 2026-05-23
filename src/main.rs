@@ -1,12 +1,10 @@
 use bevy::asset::{RenderAssetUsages, UnapprovedPathMode};
 use bevy::audio::Source;
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
-use bevy::text::{FontFeatureTag, FontFeatures};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
 use polarity::stereometer::{self, StereoFilter, Stereometer, StereometerKind};
@@ -15,7 +13,7 @@ use polarity::{
     HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio,
     PreviewCanvas, TimelineScrubber, palette,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 struct FontBlock {
@@ -29,6 +27,32 @@ enum GeneratorChoice {
     Stereometer,
     Oscilloscope,
 }
+
+#[derive(Component, Clone)]
+enum DropdownItem {
+    Mode,
+    Motion,
+    Visual,
+}
+
+#[derive(Component, Clone)]
+struct ModeSubmenu;
+#[derive(Component, Clone)]
+struct MotionSubmenu;
+#[derive(Component, Clone)]
+struct VisualSubmenu;
+
+#[derive(Component, Clone)]
+struct HeaderDropdown;
+
+#[derive(Component, Clone)]
+struct GeneratorRootHeader;
+
+#[derive(Component, Clone)]
+struct GeneratorSubmenu;
+
+#[derive(Component, Clone)]
+struct ModifierRootHeader;
 
 const SHADER_ASSET_PATH: &str = "shaders/custom_material.wgsl";
 
@@ -59,6 +83,7 @@ struct DurationText;
 fn main() {
     App::new()
         .insert_resource(ClearColor(palette::VOID))
+        .insert_resource(StereometerKind::default())
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
@@ -148,7 +173,7 @@ fn spawn_file_handle_button(
                 display: Display::Flex,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                height: px(38),
+                height: px(palette::height::SECLINE),
                 width: percent(50.),
                 border: if add_border {
                     UiRect {
@@ -198,7 +223,7 @@ fn spawn_timeline(parent: &mut ChildSpawnerCommands) {
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                height: percent(100.),
+                height: px(104.),
                 width: percent(100.),
                 ..Default::default()
             },
@@ -251,87 +276,283 @@ fn spawn_preview_canvas(parent: &mut ChildSpawnerCommands) {
         PreviewCanvas,
         Node {
             height: percent(100.),
-            width: percent(75.),
+            min_height: vw(30.),
+            flex_grow: 1.,
+            min_width: px(0),
+            aspect_ratio: Some(16. / 9.),
             ..Default::default()
         },
     ));
 }
 
-fn spawn_primary_dropdown_headers(
-    parent: &mut ChildSpawnerCommands,
-    names: &[&str],
-    fonts: &FontBlock,
+fn generator_submenu_onclick(
+    e: On<Pointer<Click>>,
+    mut dropdown_items: Query<&DropdownItem>,
+    mut mode_submenu: Single<&mut Node, With<ModeSubmenu>>,
+    // mut motion_submenu: Single<&mut Visibility, With<MotionSubmenu>>,
+    // mut visual_submenu: Single<&mut Visibility, With<VisualSubmenu>>,
 ) {
-    names.iter().enumerate().for_each(|(i, &name)| {
-        parent
-            .spawn((
-                Node {
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    height: px(46),
-                    width: percent(100.),
-                    border: if i != 0 {
-                        UiRect::top(px(1))
-                    } else {
-                        default()
-                    },
-                    ..Default::default()
-                },
-                BorderColor::all(palette::BORDER),
-            ))
-            .with_children(|parent| {
-                parent
-                    .spawn((
-                        Node {
-                            display: Display::Flex,
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            height: percent(100.),
-                            width: px(46),
-                            border: UiRect::right(px(1)),
-                            ..Default::default()
+    if let Ok(item) = dropdown_items.get_mut(e.entity) {
+        match item {
+            DropdownItem::Mode => {
+                info!("Clicked");
+                if mode_submenu.display == Display::Flex {
+                    mode_submenu.display = Display::None;
+                } else {
+                    mode_submenu.display = Display::Flex;
+                }
+            }
+            _ => info!("Not implemented this submenu item"),
+        }
+    }
+}
+
+fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component + Clone>(
+    parent: &mut ChildSpawnerCommands,
+    name: &str,
+    fonts: &FontBlock,
+    submenu_items: Option<&[(&str, DropdownItem)]>,
+    item_index: usize,
+    components: (TRoot, TSubmenu),
+    on_click: fn(
+        On<Pointer<Click>>,
+        Single<&mut Visibility, With<TSubmenu>>,
+        Single<(&mut BackgroundColor, Entity), With<TRoot>>,
+        Query<&mut TextColor>,
+        Query<&Children>,
+    ),
+) {
+    parent
+        .spawn(Node {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Start,
+            width: percent(100.),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    HeaderDropdown,
+                    components.0.clone(),
+                    Node {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Row,
+                        height: px(palette::height::ROWHEAD),
+                        width: percent(100.),
+                        border: if item_index != 0 {
+                            UiRect::top(px(1))
+                        } else {
+                            default()
                         },
-                        BackgroundColor(palette::SURFACE),
-                        BorderColor::all(palette::BORDER),
-                    ))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new(format!("0{}", i)),
-                            TextFont {
-                                font: fonts.text.clone(),
-                                font_size: palette::font_size::ICON,
-                                weight: FontWeight(palette::font_weight::MED),
+                        ..Default::default()
+                    },
+                    BackgroundColor(palette::SURFACE),
+                    BorderColor::all(palette::BORDER),
+                ))
+                .with_children(|parent| {
+                    parent
+                        .spawn((
+                            Node {
+                                display: Display::Flex,
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                height: percent(100.),
+                                width: px(46),
+                                border: UiRect::right(px(1)),
                                 ..Default::default()
                             },
-                        ));
-                    });
+                            BorderColor::all(palette::BORDER),
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                Text::new(format!("0{}", item_index + 1)),
+                                TextFont {
+                                    font: fonts.text.clone(),
+                                    font_size: palette::font_size::ICON,
+                                    weight: FontWeight(palette::font_weight::MED),
+                                    ..Default::default()
+                                },
+                                TextColor(palette::TEXT),
+                            ));
+                        });
 
-                parent
-                    .spawn((
-                        Node {
+                    parent
+                        .spawn((Node {
                             display: Display::Flex,
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::FlexStart,
-                            height: px(46.),
+                            height: px(palette::height::ROWHEAD),
                             width: percent(100.),
                             padding: UiRect::left(px(12)).with_right(px(12)),
                             ..Default::default()
-                        },
-                        BackgroundColor(palette::SURFACE),
-                    ))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new(name.to_string()),
-                            TextFont {
-                                font: fonts.text.clone(),
-                                font_size: palette::font_size::ICON,
-                                weight: FontWeight(palette::font_weight::MED),
+                        },))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                Text::new(name.to_string()),
+                                TextFont {
+                                    font: fonts.text.clone(),
+                                    font_size: palette::font_size::ICON,
+                                    weight: FontWeight(palette::font_weight::MED),
+                                    ..Default::default()
+                                },
+                                TextColor(palette::TEXT),
+                            ));
+                        });
+                })
+                .observe(
+                    |_: On<Pointer<Over>>,
+                     mut q_bg: Single<&mut BackgroundColor, With<TRoot>>,
+                     q_vis: Single<&Visibility, With<TSubmenu>>| {
+                        if matches!(*q_vis, Visibility::Inherited | Visibility::Visible) {
+                            return;
+                        }
+                        q_bg.0 = palette::SURFACE_HOVER;
+                    },
+                )
+                .observe(
+                    |_: On<Pointer<Out>>,
+                     mut q_bg: Single<&mut BackgroundColor, With<TRoot>>,
+                     q_vis: Single<&Visibility, With<TSubmenu>>| {
+                        if matches!(*q_vis, Visibility::Inherited | Visibility::Visible) {
+                            return;
+                        }
+                        q_bg.0 = palette::SURFACE;
+                    },
+                )
+                .observe(on_click);
+
+            if let Some(items) = submenu_items {
+                parent
+                    .spawn(
+                        // submenu container
+                        (
+                            components.1.clone(),
+                            Node {
+                                display: Display::Flex,
+                                flex_direction: FlexDirection::Column,
+                                width: percent(100.),
                                 ..Default::default()
                             },
-                        ));
+                            Visibility::Hidden,
+                        ),
+                    )
+                    .with_children(|parent| {
+                        items
+                            .iter()
+                            .enumerate()
+                            .for_each(|(i, (name, dropdownitem))| {
+                                parent
+                                    .spawn((
+                                        dropdownitem.clone(),
+                                        Node {
+                                            display: Display::Flex,
+                                            align_items: AlignItems::Center,
+                                            justify_content: JustifyContent::FlexStart,
+                                            height: px(palette::height::MOD_ROW),
+                                            width: percent(100.),
+                                            padding: UiRect::left(px(12)).with_right(px(12)),
+                                            border: if i != 0 {
+                                                UiRect::top(px(palette::FRAME_WIDTH))
+                                            } else {
+                                                Default::default()
+                                            },
+                                            ..Default::default()
+                                        },
+                                        BorderColor::all(palette::BORDER),
+                                        BackgroundColor(palette::BG),
+                                    ))
+                                    .with_children(|parent| {
+                                        parent.spawn((
+                                            Text::new(name.to_string()),
+                                            TextFont {
+                                                font: fonts.text.clone(),
+                                                font_size: palette::font_size::ICON,
+                                                weight: FontWeight(palette::font_weight::MED),
+                                                ..Default::default()
+                                            },
+                                        ));
+                                    })
+                                    .observe(generator_submenu_onclick);
+
+                                match dropdownitem {
+                                    DropdownItem::Mode => {
+                                        parent
+                                            .spawn((
+                                                ModeSubmenu,
+                                                Node {
+                                                    display: Display::None,
+                                                    flex_direction: FlexDirection::Row,
+                                                    justify_content: JustifyContent::SpaceBetween,
+                                                    align_items: AlignItems::Center,
+                                                    width: percent(100.),
+                                                    border: UiRect {
+                                                        top: px(palette::FRAME_WIDTH),
+                                                        right: px(palette::FRAME_WIDTH),
+                                                        left: px(palette::FRAME_WIDTH),
+                                                        ..Default::default()
+                                                    },
+                                                    padding: UiRect::all(px(
+                                                        palette::APP_PADDING / 2.
+                                                    )),
+                                                    ..Default::default()
+                                                },
+                                                BackgroundColor(palette::SURFACE),
+                                                BorderColor::all(palette::BORDER),
+                                            ))
+                                            .with_children(|parent| {
+                                                (0..4).for_each(|_| {
+                                                    parent.spawn((
+                                                        Node {
+                                                            display: Display::Flex,
+                                                            flex_direction: FlexDirection::Row,
+                                                            justify_content: JustifyContent::Center,
+                                                            align_items: AlignItems::Center,
+                                                            height: px(60.),
+                                                            width: px(60.),
+                                                            border: UiRect::all(px(
+                                                                palette::FRAME_WIDTH,
+                                                            )),
+                                                            ..Default::default()
+                                                        },
+                                                        BackgroundColor(palette::BG),
+                                                        BorderColor::all(palette::BORDER),
+                                                    ));
+                                                });
+                                            });
+                                    }
+                                    _ => info!("No children for this yet"),
+                                }
+                            });
                     });
-            });
-    });
+            };
+        });
+}
+
+fn generator_mainmenu_onclick(
+    _: On<Pointer<Click>>,
+    mut q_submenu: Single<&mut Visibility, With<GeneratorSubmenu>>,
+    mut q_entity: Single<(&mut BackgroundColor, Entity), With<GeneratorRootHeader>>,
+    mut textcol: Query<&mut TextColor>,
+    children: Query<&Children>,
+) {
+    q_submenu.toggle_inherited_hidden();
+    let bgcol = &mut *q_entity.0;
+    if bgcol.0 == palette::BRIGHT {
+        bgcol.0 = palette::SURFACE;
+    } else {
+        bgcol.0 = palette::BRIGHT;
+    }
+    let root_entity = q_entity.1;
+    for child in children.iter_descendants(root_entity) {
+        if let Ok(mut txtcol) = textcol.get_mut(child) {
+            if txtcol.0 == palette::INK {
+                txtcol.0 = palette::TEXT;
+            } else {
+                txtcol.0 = palette::INK;
+            }
+        }
+    }
 }
 
 fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
@@ -343,18 +564,11 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                position_type: PositionType::Absolute,
-                right: px(0.),
                 height: percent(100.),
-                width: percent(25.),
-                padding: UiRect {
-                    left: px(palette::spacing::S1),
-                    ..Default::default()
-                },
-                border: UiRect {
-                    left: px(palette::FRAME_WIDTH),
-                    ..Default::default()
-                },
+                width: px(360.),
+                flex_shrink: 0.,
+                padding: UiRect::left(px(palette::spacing::S1)),
+                border: UiRect::left(px(palette::FRAME_WIDTH)),
                 ..Default::default()
             },
             BackgroundColor(palette::BG),
@@ -368,13 +582,10 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                         display: Display::Flex,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
-                        height: px(38.),
+                        height: px(palette::height::SECLINE),
                         width: percent(100.),
-                        border: UiRect {
-                            left: px(palette::FRAME_WIDTH * 2.),
-                            bottom: px(palette::FRAME_WIDTH),
-                            ..Default::default()
-                        },
+                        border: UiRect::left(px(palette::FRAME_WIDTH * 2.))
+                            .with_bottom(px(palette::FRAME_WIDTH)),
                         ..Default::default()
                     },
                     BackgroundColor(palette::BG),
@@ -408,10 +619,7 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                         // justify_content: JustifyContent::Center,
                         height: percent(100.),
                         width: percent(100.),
-                        border: UiRect {
-                            left: px(palette::FRAME_WIDTH * 2.),
-                            ..Default::default()
-                        },
+                        border: UiRect::left(px(palette::FRAME_WIDTH * 2.)),
                         padding: UiRect::all(px(12.)),
                         ..Default::default()
                     },
@@ -419,7 +627,20 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
-                    spawn_primary_dropdown_headers(parent, &["GENERATOR", "MODIFIER"], fonts)
+                    spawn_primary_dropdown_header(
+                        parent,
+                        "GENERATOR",
+                        fonts,
+                        Some(&[
+                            ("Mode", DropdownItem::Mode),
+                            ("Motion", DropdownItem::Motion),
+                            ("Visual", DropdownItem::Visual),
+                        ]),
+                        0,
+                        (GeneratorRootHeader, GeneratorSubmenu),
+                        generator_mainmenu_onclick,
+                    );
+                    // spawn_primary_dropdown_header(parent, "MODIFIER", fonts, None, 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
                 });
         });
 }
@@ -439,8 +660,10 @@ fn export_file(mut commands: Commands) {
 
 fn file_loaded(
     mut event: MessageReader<DialogFileLoaded<AudioFileContents>>,
+    existing_files: Query<&AudioFileContents>,
     mut timeline_scrubber: Single<&mut TimelineScrubber>,
     mut decoder_text: Single<&mut Text, With<DurationText>>,
+    mut stereometer: Single<&mut Stereometer>,
     mut commands: Commands,
     asset_server: ResMut<AssetServer>,
 ) {
@@ -460,6 +683,21 @@ fn file_loaded(
                 .map(|sample| sample as f32 / i16::MAX as f32)
                 .collect(),
         };
+        let fs = file_contents.sample_rate.hz();
+        let lpf_coeffs =
+            Coefficients::<f32>::from_params(Type::LowPass, fs, 300.hz(), Q_BUTTERWORTH_F32)
+                .unwrap();
+        let bpf_coeffs =
+            Coefficients::<f32>::from_params(Type::BandPass, fs, 1.khz(), Q_BUTTERWORTH_F32)
+                .unwrap();
+        let hpf_coeffs =
+            Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32)
+                .unwrap();
+        stereometer.filterbank = Some(HashMap::from([
+            ("lpf".into(), StereoFilter::new(lpf_coeffs)),
+            ("bpf".into(), StereoFilter::new(bpf_coeffs)),
+            ("hpf".into(), StereoFilter::new(hpf_coeffs)),
+        ]));
 
         commands.spawn((
             PlayingAudio,
@@ -528,13 +766,6 @@ fn spawn_stereometer(
 
     let goni_id = commands.spawn_empty().id();
 
-    let fs = 48000.hz();
-    let lpf_coeffs =
-        Coefficients::<f32>::from_params(Type::LowPass, fs, 300.hz(), Q_BUTTERWORTH_F32).unwrap();
-    let bpf_coeffs =
-        Coefficients::<f32>::from_params(Type::BandPass, fs, 1.khz(), Q_BUTTERWORTH_F32).unwrap();
-    let hpf_coeffs =
-        Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32).unwrap();
     commands.entity(goni_id).insert((
         Stereometer {
             kind: StereometerKind::default(),
@@ -542,11 +773,7 @@ fn spawn_stereometer(
             history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
             last_sample_idx: 0,
             id: goni_id,
-            filterbank: (
-                StereoFilter::new(lpf_coeffs),
-                StereoFilter::new(bpf_coeffs),
-                StereoFilter::new(hpf_coeffs),
-            ),
+            filterbank: None,
         },
         DrawableCursor,
     ));
@@ -593,7 +820,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
             ..Default::default()
         },))
         .with_children(|parent| {
-            // main app base
+            // main app container
             parent
                 .spawn((
                     Node {
@@ -617,14 +844,15 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                             ..Default::default()
                         },))
                         .with_children(|parent| {
-                            spawn_control_panel(parent, &fonts);
                             spawn_preview_canvas(parent);
+                            spawn_control_panel(parent, &fonts);
                         });
                     // Bottom section holder for timeline
                     parent
                         .spawn((Node {
                             display: Display::Flex,
-                            height: percent(15.),
+                            height: px(104.),
+                            flex_shrink: 0.,
                             width: percent(100.),
                             ..Default::default()
                         },))

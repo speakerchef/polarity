@@ -1,12 +1,15 @@
 use crate::{
     ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HISTORY_WINDOW_SIZE,
     HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
-    RADIAL_SCALE_FACTOR, stereometer,
+    RADIAL_SCALE_FACTOR,
 };
 use bevy::{math::ops::sqrt, prelude::*};
 use biquad::{Biquad, Coefficients, DirectForm1};
-use std::collections::VecDeque;
-#[derive(Debug, Clone, Default)]
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
+#[derive(Resource, Component, Debug, Clone, Default)]
 pub enum StereometerKind {
     LinearBipolar,
     #[default]
@@ -41,11 +44,7 @@ pub struct Stereometer {
     pub id: Entity,
     pub last_sample_idx: usize,
 
-    pub filterbank: (
-        StereoFilter, /* lpf */
-        StereoFilter, /* bpf */
-        StereoFilter, /* hpf */
-    ),
+    pub filterbank: Option<HashMap<Arc<str>, StereoFilter>>,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -127,7 +126,7 @@ pub fn update(
         .map(|frame| {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&frame[0]);
-            let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
+            // let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
             let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,

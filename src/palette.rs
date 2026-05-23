@@ -1,12 +1,12 @@
 use bevy::prelude::Color;
 
-/// Pure black. Visualizer canvas, timeline well — surfaces that render additive content.
 pub const VOID: Color = Color::srgb_u8(0, 0, 0);
 pub const BG: Color = Color::srgb_u8(0x0d, 0x0d, 0x0d);
 pub const BG_MED: Color = Color::srgb_u8(0x0c, 0x0c, 0x0c);
 pub const BG_DARK: Color = Color::srgb_u8(0x0a, 0x0a, 0x0a);
 pub const SURFACE: Color = Color::srgb_u8(0x17, 0x17, 0x17);
-pub const BORDER: Color = Color::srgb_u8(0x2A, 0x2A, 0x2A);
+pub const SURFACE_HOVER: Color = Color::srgb_u8(0x1c, 0x1c, 0x1c);
+pub const BORDER: Color = Color::srgb_u8(0x3a, 0x3a, 0x3a);
 pub const TRACK: Color = Color::srgb_u8(0x1A, 0x1A, 0x1A);
 
 pub const DIM: Color = Color::srgb_u8(0x8a, 0x8a, 0x8a);
