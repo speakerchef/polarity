@@ -81,6 +81,7 @@ pub fn update(
     mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
     canvas: Single<&UiGlobalTransform, With<PreviewCanvas>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    kind: Res<StereometerKind>,
 ) {
     let canvas_2d = canvas.translation;
     let (camera, camera_xform) = *camera;
@@ -106,7 +107,7 @@ pub fn update(
         for frame in history_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
-            let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&kind, left, right);
             goniometer.history_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
@@ -127,7 +128,7 @@ pub fn update(
             let left = frame[0];
             let right = *frame.last().unwrap_or(&frame[0]);
             // let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
-            let (x_sample, y_sample) = get_xy_from_meterkind(&goniometer.kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,

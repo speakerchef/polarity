@@ -214,6 +214,43 @@ fn spawn_file_handle_button(
         .observe(on_click);
 }
 
+fn spawn_import_export_button(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    // Import/Export button holder
+    parent
+        .spawn((
+            Node {
+                display: Display::Flex,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                height: px(palette::height::SECLINE),
+                width: percent(100.),
+                border: UiRect::left(px(palette::FRAME_WIDTH * 2.))
+                    .with_bottom(px(palette::FRAME_WIDTH)),
+                ..Default::default()
+            },
+            BackgroundColor(palette::BG),
+            BorderColor::all(palette::BORDER),
+        ))
+        .with_children(|parent| {
+            spawn_file_handle_button(
+                parent,
+                fonts,
+                "IMPORT",
+                "\u{e5db}",
+                |_: On<Pointer<Click>>, commands| import_file(commands),
+                true,
+            );
+            spawn_file_handle_button(
+                parent,
+                fonts,
+                "EXPORT",
+                "\u{e5d8}",
+                |_: On<Pointer<Click>>, commands| export_file(commands),
+                false,
+            );
+        });
+}
+
 fn spawn_timeline(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn((
@@ -304,6 +341,111 @@ fn generator_submenu_onclick(
             }
             _ => info!("Not implemented this submenu item"),
         }
+    }
+}
+
+fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            ModeSubmenu,
+            Node {
+                display: Display::None,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                width: percent(100.),
+                border: UiRect::horizontal(px(1)).with_top(px(1)),
+                padding: UiRect::all(px(palette::APP_PADDING)),
+                ..Default::default()
+            },
+            BackgroundColor(palette::BG),
+            BorderColor::all(palette::BORDER),
+        ))
+        .with_children(|parent| {
+            (1..=4).for_each(|i| {
+                parent
+                    .spawn((
+                        Node {
+                            display: Display::Flex,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            height: px(60.),
+                            width: px(60.),
+                            border: UiRect::all(px(palette::FRAME_WIDTH)),
+                            ..Default::default()
+                        },
+                        BackgroundColor(palette::BG),
+                        BorderColor::all(palette::BORDER),
+                    ))
+                    .with_children(|parent| {
+                        parent.spawn((Text::new(i.to_string()),));
+                    })
+                    .observe(match i {
+                        1 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
+                            info!("1");
+                            *kind = StereometerKind::LinearBipolar;
+                        },
+                        2 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
+                            info!("2");
+                            *kind = StereometerKind::ScaledBipolar;
+                        },
+                        3 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
+                            info!("3");
+                            *kind = StereometerKind::LinearLissajous;
+                        },
+                        4 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
+                            info!("4");
+                            *kind = StereometerKind::ScaledLissajous;
+                        },
+                        _ => unreachable!(),
+                    });
+            });
+        });
+}
+
+fn spawn_submenu_items(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &FontBlock,
+    name: &str,
+    dropdownitem: &DropdownItem,
+    i: usize,
+) {
+    parent
+        .spawn((
+            dropdownitem.clone(),
+            Node {
+                display: Display::Flex,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexStart,
+                height: px(palette::height::MOD_ROW),
+                width: percent(100.),
+                padding: UiRect::left(px(12)).with_right(px(12)),
+                border: if i != 0 {
+                    UiRect::top(px(palette::FRAME_WIDTH))
+                } else {
+                    Default::default()
+                },
+                ..Default::default()
+            },
+            BorderColor::all(palette::BORDER),
+            BackgroundColor(palette::BG),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(name.to_string()),
+                TextFont {
+                    font: fonts.text.clone(),
+                    font_size: palette::font_size::ICON,
+                    weight: FontWeight(palette::font_weight::MED),
+                    ..Default::default()
+                },
+            ));
+        })
+        .observe(generator_submenu_onclick);
+
+    match dropdownitem {
+        DropdownItem::Mode => spawn_mode_submenu(parent),
+        _ => info!("No children for this yet"),
     }
 }
 
@@ -422,10 +564,11 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                 )
                 .observe(on_click);
 
+            // submenu
             if let Some(items) = submenu_items {
                 parent
                     .spawn(
-                        // submenu container
+                        // main container
                         (
                             components.1.clone(),
                             Node {
@@ -442,87 +585,7 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                             .iter()
                             .enumerate()
                             .for_each(|(i, (name, dropdownitem))| {
-                                parent
-                                    .spawn((
-                                        dropdownitem.clone(),
-                                        Node {
-                                            display: Display::Flex,
-                                            align_items: AlignItems::Center,
-                                            justify_content: JustifyContent::FlexStart,
-                                            height: px(palette::height::MOD_ROW),
-                                            width: percent(100.),
-                                            padding: UiRect::left(px(12)).with_right(px(12)),
-                                            border: if i != 0 {
-                                                UiRect::top(px(palette::FRAME_WIDTH))
-                                            } else {
-                                                Default::default()
-                                            },
-                                            ..Default::default()
-                                        },
-                                        BorderColor::all(palette::BORDER),
-                                        BackgroundColor(palette::BG),
-                                    ))
-                                    .with_children(|parent| {
-                                        parent.spawn((
-                                            Text::new(name.to_string()),
-                                            TextFont {
-                                                font: fonts.text.clone(),
-                                                font_size: palette::font_size::ICON,
-                                                weight: FontWeight(palette::font_weight::MED),
-                                                ..Default::default()
-                                            },
-                                        ));
-                                    })
-                                    .observe(generator_submenu_onclick);
-
-                                match dropdownitem {
-                                    DropdownItem::Mode => {
-                                        parent
-                                            .spawn((
-                                                ModeSubmenu,
-                                                Node {
-                                                    display: Display::None,
-                                                    flex_direction: FlexDirection::Row,
-                                                    justify_content: JustifyContent::SpaceBetween,
-                                                    align_items: AlignItems::Center,
-                                                    width: percent(100.),
-                                                    border: UiRect {
-                                                        top: px(palette::FRAME_WIDTH),
-                                                        right: px(palette::FRAME_WIDTH),
-                                                        left: px(palette::FRAME_WIDTH),
-                                                        ..Default::default()
-                                                    },
-                                                    padding: UiRect::all(px(
-                                                        palette::APP_PADDING / 2.
-                                                    )),
-                                                    ..Default::default()
-                                                },
-                                                BackgroundColor(palette::SURFACE),
-                                                BorderColor::all(palette::BORDER),
-                                            ))
-                                            .with_children(|parent| {
-                                                (0..4).for_each(|_| {
-                                                    parent.spawn((
-                                                        Node {
-                                                            display: Display::Flex,
-                                                            flex_direction: FlexDirection::Row,
-                                                            justify_content: JustifyContent::Center,
-                                                            align_items: AlignItems::Center,
-                                                            height: px(60.),
-                                                            width: px(60.),
-                                                            border: UiRect::all(px(
-                                                                palette::FRAME_WIDTH,
-                                                            )),
-                                                            ..Default::default()
-                                                        },
-                                                        BackgroundColor(palette::BG),
-                                                        BorderColor::all(palette::BORDER),
-                                                    ));
-                                                });
-                                            });
-                                    }
-                                    _ => info!("No children for this yet"),
-                                }
+                                spawn_submenu_items(parent, fonts, name, dropdownitem, i);
                             });
                     });
             };
@@ -555,6 +618,40 @@ fn generator_mainmenu_onclick(
     }
 }
 
+fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    parent
+        .spawn((
+            Node {
+                display: Display::Flex,
+                align_items: AlignItems::Start,
+                flex_direction: FlexDirection::Column,
+                height: percent(100.),
+                width: percent(100.),
+                border: UiRect::left(px(palette::FRAME_WIDTH * 2.)),
+                padding: UiRect::all(px(12.)),
+                ..Default::default()
+            },
+            BackgroundColor(palette::BG),
+            BorderColor::all(palette::BORDER),
+        ))
+        .with_children(|parent| {
+            spawn_primary_dropdown_header(
+                parent,
+                "GENERATOR",
+                fonts,
+                Some(&[
+                    ("Mode", DropdownItem::Mode),
+                    ("Motion", DropdownItem::Motion),
+                    ("Visual", DropdownItem::Visual),
+                ]),
+                0,
+                (GeneratorRootHeader, GeneratorSubmenu),
+                generator_mainmenu_onclick,
+            );
+            // spawn_primary_dropdown_header(parent, "MODIFIER", fonts, None, 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
+        });
+}
+
 fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     // control panel base
     parent
@@ -575,73 +672,8 @@ fn spawn_control_panel(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
             BorderColor::all(palette::BORDER),
         ))
         .with_children(|parent| {
-            // Import/Export button holder
-            parent
-                .spawn((
-                    Node {
-                        display: Display::Flex,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        height: px(palette::height::SECLINE),
-                        width: percent(100.),
-                        border: UiRect::left(px(palette::FRAME_WIDTH * 2.))
-                            .with_bottom(px(palette::FRAME_WIDTH)),
-                        ..Default::default()
-                    },
-                    BackgroundColor(palette::BG),
-                    BorderColor::all(palette::BORDER),
-                ))
-                .with_children(|parent| {
-                    spawn_file_handle_button(
-                        parent,
-                        fonts,
-                        "IMPORT",
-                        "\u{e5db}",
-                        |_: On<Pointer<Click>>, commands| import_file(commands),
-                        true,
-                    );
-                    spawn_file_handle_button(
-                        parent,
-                        fonts,
-                        "EXPORT",
-                        "\u{e5d8}",
-                        |_: On<Pointer<Click>>, commands| export_file(commands),
-                        false,
-                    );
-                });
-            // Inner div for control panel
-            parent
-                .spawn((
-                    Node {
-                        display: Display::Flex,
-                        align_items: AlignItems::Start,
-                        flex_direction: FlexDirection::Column,
-                        // justify_content: JustifyContent::Center,
-                        height: percent(100.),
-                        width: percent(100.),
-                        border: UiRect::left(px(palette::FRAME_WIDTH * 2.)),
-                        padding: UiRect::all(px(12.)),
-                        ..Default::default()
-                    },
-                    BackgroundColor(palette::BG),
-                    BorderColor::all(palette::BORDER),
-                ))
-                .with_children(|parent| {
-                    spawn_primary_dropdown_header(
-                        parent,
-                        "GENERATOR",
-                        fonts,
-                        Some(&[
-                            ("Mode", DropdownItem::Mode),
-                            ("Motion", DropdownItem::Motion),
-                            ("Visual", DropdownItem::Visual),
-                        ]),
-                        0,
-                        (GeneratorRootHeader, GeneratorSubmenu),
-                        generator_mainmenu_onclick,
-                    );
-                    // spawn_primary_dropdown_header(parent, "MODIFIER", fonts, None, 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
-                });
+            spawn_import_export_button(parent, fonts);
+            spawn_control_panel_menus(parent, fonts);
         });
 }
 
