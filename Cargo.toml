@@ -2,10 +2,16 @@
 name = "polarity"
 version = "0.1.0"
 edition = "2024"
-
 [dependencies]
-bevy = { version = "0.18.1", features = ["wav", "bevy_dev_tools"] }
-bevy_file_dialog = "0.9.1"
+bevy = { git = "https://github.com/speakerchef/bevy", branch = "release-0.19.0", features = [
+    "wav",
+    "mp3",
+    "vorbis",
+    "flac",
+    "bevy_dev_tools",
+] }
+
+bevy_file_dialog = { git = "https://github.com/speakerchef/bevy_file_dialog" }
 biquad = "0.6.0"
 
 [profile.dev]

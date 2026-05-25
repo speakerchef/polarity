@@ -17,8 +17,8 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 struct FontBlock {
-    icon: Handle<Font>,
-    text: Handle<Font>,
+    icon: FontSource,
+    text: FontSource,
 }
 
 #[derive(States, Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
@@ -30,9 +30,11 @@ enum GeneratorChoice {
 
 #[derive(Component, Clone)]
 enum DropdownItem {
+    // GENERATOR
     Mode,
     Motion,
     Visual,
+    // POST FX
 }
 
 #[derive(Component, Clone)]
@@ -121,7 +123,7 @@ fn main() {
         .run();
 }
 
-fn button_on_hover(
+fn on_hover_bg_bright(
     event: On<Pointer<Over>>,
     mut q_bgcol: Query<&mut BackgroundColor, With<Button>>,
     mut q_textcol: Query<&mut TextColor>,
@@ -129,17 +131,17 @@ fn button_on_hover(
 ) {
     let target = event.event_target();
     if let Ok(mut bgcol) = q_bgcol.get_mut(target) {
-        bgcol.0 = palette::BRIGHT;
+        bgcol.0 = palette::TEXT;
         if let Ok(children) = q_children.get(target) {
             for child in children {
                 if let Ok(mut c) = q_textcol.get_mut(*child) {
-                    c.0 = palette::INK;
+                    c.0 = palette::VOID;
                 }
             }
         }
     }
 }
-fn button_on_leave(
+fn on_leave_bg_bright(
     event: On<Pointer<Out>>,
     mut q_bgcol: Query<&mut BackgroundColor, With<Button>>,
     mut q_textcol: Query<&mut TextColor>,
@@ -147,7 +149,7 @@ fn button_on_leave(
 ) {
     let target = event.event_target();
     if let Ok(mut bgcol) = q_bgcol.get_mut(target) {
-        bgcol.0 = palette::BG_MED;
+        bgcol.0 = palette::BG;
         if let Ok(children) = q_children.get(target) {
             for child in children {
                 if let Ok(mut c) = q_textcol.get_mut(*child) {
@@ -173,8 +175,8 @@ fn spawn_file_handle_button(
                 display: Display::Flex,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                height: px(palette::height::SECLINE),
-                width: percent(50.),
+                height: percent(100.),
+                flex_grow: 1.0,
                 border: if add_border {
                     UiRect {
                         right: px(palette::FRAME_WIDTH),
@@ -185,7 +187,7 @@ fn spawn_file_handle_button(
                 },
                 ..Default::default()
             },
-            BackgroundColor(palette::BG_MED),
+            BackgroundColor(palette::BG),
             BorderColor::all(palette::BORDER),
         ))
         .with_children(|parent| {
@@ -194,23 +196,25 @@ fn spawn_file_handle_button(
                 TextColor(palette::DIM),
                 TextFont {
                     font: fonts.icon.clone(),
-                    font_size: palette::font_size::ICON,
+                    font_size: FontSize::Px(palette::font_size::ICON),
                     ..Default::default()
                 },
+                LetterSpacing::Px(palette::letter_spacing::BASE),
             ));
             parent.spawn((
                 Text::new(button_text),
                 TextColor(palette::DIM),
                 TextFont {
                     font: fonts.text.clone(),
-                    font_size: palette::font_size::BRAND,
+                    font_size: FontSize::Px(palette::font_size::MED),
                     weight: FontWeight(palette::font_weight::HEAVY),
                     ..Default::default()
                 },
+                LetterSpacing::Px(palette::letter_spacing::BASE),
             ));
         })
-        .observe(button_on_hover)
-        .observe(button_on_leave)
+        .observe(on_hover_bg_bright)
+        .observe(on_leave_bg_bright)
         .observe(on_click);
 }
 
@@ -222,7 +226,8 @@ fn spawn_import_export_button(parent: &mut ChildSpawnerCommands, fonts: &FontBlo
                 display: Display::Flex,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                height: px(palette::height::SECLINE),
+                height: px(42),
+                flex_shrink: 0.,
                 width: percent(100.),
                 border: UiRect::left(px(palette::FRAME_WIDTH * 2.))
                     .with_bottom(px(palette::FRAME_WIDTH)),
@@ -325,18 +330,31 @@ fn spawn_preview_canvas(parent: &mut ChildSpawnerCommands) {
 fn generator_submenu_onclick(
     e: On<Pointer<Click>>,
     mut dropdown_items: Query<&DropdownItem>,
-    mut mode_submenu: Single<&mut Node, With<ModeSubmenu>>,
+    mut mode_submenu: Query<&mut Node, (With<ModeSubmenu>, Without<VisualSubmenu>)>,
     // mut motion_submenu: Single<&mut Visibility, With<MotionSubmenu>>,
-    // mut visual_submenu: Single<&mut Visibility, With<VisualSubmenu>>,
+    mut visual_submenu: Query<&mut Node, (With<VisualSubmenu>, Without<MotionSubmenu>)>,
 ) {
+    info!("clicked");
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
         match item {
             DropdownItem::Mode => {
-                info!("Clicked");
-                if mode_submenu.display == Display::Flex {
-                    mode_submenu.display = Display::None;
-                } else {
-                    mode_submenu.display = Display::Flex;
+                info!("Mode");
+                for mut m in mode_submenu {
+                    if m.display == Display::Flex {
+                        m.display = Display::None;
+                    } else {
+                        m.display = Display::Flex;
+                    }
+                }
+            }
+            DropdownItem::Visual => {
+                info!("Visual");
+                for mut m in visual_submenu {
+                    if m.display == Display::Flex {
+                        m.display = Display::None;
+                    } else {
+                        m.display = Display::Flex;
+                    }
                 }
             }
             _ => info!("Not implemented this submenu item"),
@@ -380,27 +398,139 @@ fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
                     .with_children(|parent| {
                         parent.spawn((Text::new(i.to_string()),));
                     })
+                    .observe(on_hover_bg)
+                    .observe(on_leave_bg)
                     .observe(match i {
                         1 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            info!("1");
                             *kind = StereometerKind::LinearBipolar;
                         },
                         2 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            info!("2");
                             *kind = StereometerKind::ScaledBipolar;
                         },
                         3 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            info!("3");
                             *kind = StereometerKind::LinearLissajous;
                         },
                         4 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            info!("4");
                             *kind = StereometerKind::ScaledLissajous;
                         },
                         _ => unreachable!(),
                     });
             });
         });
+}
+
+fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    (1..=2).for_each(|i| {
+        parent
+            .spawn((
+                VisualSubmenu,
+                Node {
+                    display: Display::None,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
+                    height: px(palette::height::DROPDOWN_ITEM),
+                    width: percent(100.),
+                    padding: UiRect::left(px(12)).with_right(px(12)),
+                    border: UiRect::top(px(2)),
+                    ..Default::default()
+                },
+                BorderColor::all(palette::BORDER),
+                BackgroundColor(palette::SURFACE),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Text::new(i.to_string()),
+                    TextFont {
+                        font: fonts.text.clone(),
+                        font_size: FontSize::Px(palette::font_size::BIG),
+                        weight: FontWeight(palette::font_weight::BODY),
+                        ..Default::default()
+                    },
+                    TextColor(palette::BRIGHT),
+                    LetterSpacing::Px(palette::letter_spacing::BASE),
+                ));
+            });
+    })
+}
+
+fn on_hover_surface(e: On<Pointer<Over>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::SURFACE
+    {
+        item.0 = palette::SURFACE_HOVER;
+    }
+}
+fn on_leave_surface(e: On<Pointer<Out>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::SURFACE_HOVER
+    {
+        item.0 = palette::SURFACE;
+    }
+}
+
+fn on_hover_bg(e: On<Pointer<Over>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::BG
+    {
+        item.0 = palette::SURFACE;
+    }
+}
+fn on_leave_bg(e: On<Pointer<Out>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::SURFACE
+    {
+        item.0 = palette::BG;
+    }
+}
+
+fn on_click_toggle_bright_surface(
+    e: On<Pointer<Click>>,
+    mut bgcol: Query<&mut BackgroundColor>,
+    mut textcol: Query<&mut TextColor>,
+    children: Query<&Children>,
+) {
+    if let Ok(mut item) = bgcol.get_mut(e.entity) {
+        if item.0 != palette::TEXT {
+            item.0 = palette::TEXT;
+        } else {
+            item.0 = palette::SURFACE;
+        }
+
+        for child in children.iter_descendants(e.entity) {
+            if let Ok(mut textcol) = textcol.get_mut(child) {
+                if textcol.0 != palette::VOID {
+                    textcol.0 = palette::VOID;
+                } else {
+                    textcol.0 = palette::BRIGHT;
+                }
+            }
+        }
+    }
+}
+
+fn on_click_toggle_bright_bg(
+    e: On<Pointer<Click>>,
+    mut bgcol: Query<&mut BackgroundColor>,
+    mut textcol: Query<&mut TextColor>,
+    children: Query<&Children>,
+) {
+    if let Ok(mut item) = bgcol.get_mut(e.entity) {
+        if item.0 != palette::TEXT {
+            item.0 = palette::TEXT;
+        } else {
+            item.0 = palette::BG;
+        }
+
+        for child in children.iter_descendants(e.entity) {
+            if let Ok(mut textcol) = textcol.get_mut(child) {
+                if textcol.0 != palette::VOID {
+                    textcol.0 = palette::VOID;
+                } else {
+                    textcol.0 = palette::BRIGHT;
+                }
+            }
+        }
+    }
 }
 
 fn spawn_submenu_items(
@@ -417,34 +547,36 @@ fn spawn_submenu_items(
                 display: Display::Flex,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::FlexStart,
-                height: px(palette::height::MOD_ROW),
+                height: px(palette::height::DROPDOWN_ITEM),
                 width: percent(100.),
                 padding: UiRect::left(px(12)).with_right(px(12)),
-                border: if i != 0 {
-                    UiRect::top(px(palette::FRAME_WIDTH))
-                } else {
-                    Default::default()
-                },
+                border: UiRect::top(px(2)),
                 ..Default::default()
             },
             BorderColor::all(palette::BORDER),
-            BackgroundColor(palette::BG),
+            BackgroundColor(palette::SURFACE),
         ))
         .with_children(|parent| {
             parent.spawn((
                 Text::new(name.to_string()),
                 TextFont {
                     font: fonts.text.clone(),
-                    font_size: palette::font_size::ICON,
-                    weight: FontWeight(palette::font_weight::MED),
+                    font_size: FontSize::Px(palette::font_size::BODY),
+                    weight: FontWeight(palette::font_weight::BODY),
                     ..Default::default()
                 },
+                TextColor(palette::BRIGHT),
+                LetterSpacing::Px(palette::letter_spacing::BASE),
             ));
         })
+        .observe(on_hover_surface)
+        .observe(on_leave_surface)
+        .observe(on_click_toggle_bright_surface)
         .observe(generator_submenu_onclick);
 
     match dropdownitem {
         DropdownItem::Mode => spawn_mode_submenu(parent),
+        DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
         _ => info!("No children for this yet"),
     }
 }
@@ -511,11 +643,12 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                                 Text::new(format!("0{}", item_index + 1)),
                                 TextFont {
                                     font: fonts.text.clone(),
-                                    font_size: palette::font_size::ICON,
-                                    weight: FontWeight(palette::font_weight::MED),
+                                    font_size: FontSize::Px(palette::font_size::BIG),
+                                    weight: FontWeight(palette::font_weight::HEAVY),
                                     ..Default::default()
                                 },
-                                TextColor(palette::TEXT),
+                                TextColor(palette::BRIGHT),
+                                LetterSpacing::Px(palette::letter_spacing::SPACED),
                             ));
                         });
 
@@ -534,11 +667,13 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                                 Text::new(name.to_string()),
                                 TextFont {
                                     font: fonts.text.clone(),
-                                    font_size: palette::font_size::ICON,
-                                    weight: FontWeight(palette::font_weight::MED),
+                                    font_size: FontSize::Px(palette::font_size::BIG),
+                                    weight: FontWeight(palette::font_weight::HEAVY),
+
                                     ..Default::default()
                                 },
-                                TextColor(palette::TEXT),
+                                TextColor(palette::BRIGHT),
+                                LetterSpacing::Px(palette::letter_spacing::SPACED),
                             ));
                         });
                 })
@@ -562,6 +697,7 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                         q_bg.0 = palette::SURFACE;
                     },
                 )
+                .observe(on_click_toggle_bright_surface)
                 .observe(on_click);
 
             // submenu
@@ -600,22 +736,22 @@ fn generator_mainmenu_onclick(
     children: Query<&Children>,
 ) {
     q_submenu.toggle_inherited_hidden();
-    let bgcol = &mut *q_entity.0;
-    if bgcol.0 == palette::BRIGHT {
-        bgcol.0 = palette::SURFACE;
-    } else {
-        bgcol.0 = palette::BRIGHT;
-    }
-    let root_entity = q_entity.1;
-    for child in children.iter_descendants(root_entity) {
-        if let Ok(mut txtcol) = textcol.get_mut(child) {
-            if txtcol.0 == palette::INK {
-                txtcol.0 = palette::TEXT;
-            } else {
-                txtcol.0 = palette::INK;
-            }
-        }
-    }
+    // let bgcol = &mut *q_entity.0;
+    // if bgcol.0 == palette::TEXT {
+    //     bgcol.0 = palette::SURFACE;
+    // } else {
+    //     bgcol.0 = palette::TEXT;
+    // }
+    // let root_entity = q_entity.1;
+    // for child in children.iter_descendants(root_entity) {
+    //     if let Ok(mut txtcol) = textcol.get_mut(child) {
+    //         if txtcol.0 == palette::VOID {
+    //             txtcol.0 = palette::BRIGHT;
+    //         } else {
+    //             txtcol.0 = palette::VOID;
+    //         }
+    //     }
+    // }
 }
 
 fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
@@ -640,15 +776,19 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 "GENERATOR",
                 fonts,
                 Some(&[
-                    ("Mode", DropdownItem::Mode),
-                    ("Motion", DropdownItem::Motion),
-                    ("Visual", DropdownItem::Visual),
+                    ("MODE", DropdownItem::Mode),
+                    ("MOTION", DropdownItem::Motion),
+                    ("VISUAL", DropdownItem::Visual),
                 ]),
                 0,
                 (GeneratorRootHeader, GeneratorSubmenu),
                 generator_mainmenu_onclick,
             );
-            // spawn_primary_dropdown_header(parent, "MODIFIER", fonts, None, 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
+            // spawn_primary_dropdown_header(parent, "POST FX", fonts, Some(&[
+            //         ("Mode", DropdownItem::Mode),
+            //         ("Motion", DropdownItem::Motion),
+            //         ("Visual", DropdownItem::Visual),
+            //     ]), 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
         });
 }
 
@@ -691,15 +831,22 @@ fn export_file(mut commands: Commands) {
 }
 
 fn file_loaded(
-    mut event: MessageReader<DialogFileLoaded<AudioFileContents>>,
-    existing_files: Query<&AudioFileContents>,
+    mut file_events: MessageReader<DialogFileLoaded<AudioFileContents>>,
+    existing_files: Query<Entity, With<AudioFileContents>>,
     mut timeline_scrubber: Single<&mut TimelineScrubber>,
     mut decoder_text: Single<&mut Text, With<DurationText>>,
     mut stereometer: Single<&mut Stereometer>,
     mut commands: Commands,
     asset_server: ResMut<AssetServer>,
 ) {
-    for f in event.read() {
+    for f in file_events.read() {
+        // Cleanup old file contents
+        for e in existing_files {
+            if let Ok(mut file) = commands.get_entity(e) {
+                file.despawn();
+            }
+        }
+
         let bytes: Arc<[u8]> = f.contents.clone().into();
         let audio_src = AudioSource { bytes };
         let duration = audio_src.decoder().total_duration();
@@ -708,12 +855,9 @@ fn file_loaded(
 
         let file_contents = AudioFileContents {
             duration: audio_src.decoder().total_duration().unwrap().as_secs_f64(),
-            sample_rate: audio_src.decoder().sample_rate(),
-            num_channels: audio_src.decoder().channels() as usize,
-            samples: audio_src
-                .decoder()
-                .map(|sample| sample as f32 / i16::MAX as f32)
-                .collect(),
+            sample_rate: audio_src.decoder().sample_rate().into(),
+            num_channels: Into::<u16>::into(audio_src.decoder().channels()) as usize,
+            samples: audio_src.decoder().collect(),
         };
         let fs = file_contents.sample_rate.hz();
         let lpf_coeffs =
@@ -782,7 +926,8 @@ fn spawn_stereometer(
     let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; HISTORY_WINDOW_SIZE * NUM_VERTICES];
     let hist_colors: Vec<[f32; 4]> = (0..HISTORY_WINDOW_SIZE)
         .flat_map(|i| {
-            let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
+            // let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
+            let alpha = 0.;
             let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
             std::iter::repeat_n(c, 6)
         })
@@ -794,13 +939,15 @@ fn spawn_stereometer(
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
-    commands.spawn(());
+    // history_mesh.insert_attribute(
+    //     Mesh::ATTRIBUTE_COLOR,
+    //     vec![HISTORY_MAGENTA.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
+    // );
 
     let goni_id = commands.spawn_empty().id();
 
     commands.entity(goni_id).insert((
         Stereometer {
-            kind: StereometerKind::default(),
             live_buffer: VecDeque::from([Vec2::ZERO; LIVE_WINDOW_SIZE]),
             history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
             last_sample_idx: 0,
@@ -837,8 +984,10 @@ fn despawn_stereometer(
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
     let fonts = FontBlock {
-        icon: asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
-        text: asset_server.load("fonts/inter/InterVariable.ttf"),
+        icon: FontSource::Handle(
+            asset_server.load("fonts/material-symbols/MaterialSymbolsOutlined.ttf"),
+        ),
+        text: FontSource::Handle(asset_server.load("fonts/inter/InterVariable.ttf")),
     };
     commands.spawn((Camera2d, Bloom::default()));
     commands

@@ -1,5 +1,6 @@
 pub mod palette;
 pub mod stereometer;
+
 use bevy::prelude::*;
 
 pub const NUM_VERTICES: usize = 6;
@@ -9,7 +10,7 @@ pub const RADIAL_SCALE_FACTOR: f32 = 0.4;
 pub const LIVE_WINDOW_SIZE: usize = 2048;
 // pub const HISTORY_WINDOW_SIZE: usize = 16328;
 // pub const HISTORY_WINDOW_SIZE: usize = 42696;
-pub const HISTORY_WINDOW_SIZE: usize = 0;
+pub const HISTORY_WINDOW_SIZE: usize = 2048;
 pub const LIVE_MAGENTA: LinearRgba = LinearRgba {
     red: 3.0,
     green: 0.5,

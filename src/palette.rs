@@ -24,7 +24,8 @@ pub mod font_size {
     pub const TINY: f32 = 10.0;
     pub const META: f32 = 11.0;
     pub const BODY: f32 = 12.0;
-    pub const BRAND: f32 = 13.0;
+    pub const MED: f32 = 13.0;
+    pub const BIG: f32 = 14.0;
     pub const ICON: f32 = 16.0;
 }
 
@@ -32,6 +33,12 @@ pub mod font_weight {
     pub const BODY: u16 = 400;
     pub const MED: u16 = 500;
     pub const HEAVY: u16 = 700;
+}
+
+pub mod letter_spacing {
+    pub const BASE: f32 = 1.;
+    pub const SPACED: f32 = 2.;
+    pub const ULTRAWIDE: f32 = 3.;
 }
 
 pub mod spacing {
@@ -46,9 +53,8 @@ pub mod spacing {
 
 pub mod height {
     pub const ROWHEAD: f32 = 44.0;
-    pub const MOD_ROW: f32 = 40.0;
-    pub const SECLINE: f32 = 37.0;
-    pub const SLIDER_ROW: f32 = 30.0;
+    pub const DROPDOWN_ITEM: f32 = 37.0;
+    pub const SLIDER_ROW_ITEM: f32 = 30.0;
     pub const SEG: f32 = 28.0;
     pub const INNER: f32 = 26.0;
     pub const TRANSPORT: f32 = 22.0;

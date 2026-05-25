@@ -9,7 +9,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
 };
-#[derive(Resource, Component, Debug, Clone, Default)]
+#[derive(Resource, Debug, Clone, Default)]
 pub enum StereometerKind {
     LinearBipolar,
     #[default]
@@ -38,7 +38,6 @@ impl StereoFilter {
 
 #[derive(Component, Debug, Clone)]
 pub struct Stereometer {
-    pub kind: StereometerKind,
     pub live_buffer: VecDeque<Vec2>,
     pub history_buffer: VecDeque<Vec2>,
     pub id: Entity,
@@ -56,12 +55,12 @@ fn get_xy_from_meterkind(
     right: f32,
 ) -> (f32 /* x */, f32 /* y */) {
     match kind {
-        StereometerKind::LinearBipolar => ((left - right) / sqrt(2.), (left + right) / sqrt(2.)),
+        StereometerKind::LinearBipolar => ((left - right) / 2., (left + right) / 2.),
         StereometerKind::ScaledBipolar => {
-            let sf = radial_scale(left, right) / sqrt(2.);
+            let sf = radial_scale(left, right) / sqrt(3.);
             ((left - right) * sf, (left + right) * sf)
         }
-        StereometerKind::LinearLissajous => (left, right),
+        StereometerKind::LinearLissajous => (left / 1.1, right / 1.1),
         StereometerKind::ScaledLissajous => {
             let sf = radial_scale(left, right);
             (left * sf, right * sf)
@@ -107,7 +106,7 @@ pub fn update(
         for frame in history_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
-            let (x_sample, y_sample) = get_xy_from_meterkind(&kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&*kind, left, right);
             goniometer.history_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
@@ -128,7 +127,7 @@ pub fn update(
             let left = frame[0];
             let right = *frame.last().unwrap_or(&frame[0]);
             // let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
-            let (x_sample, y_sample) = get_xy_from_meterkind(&kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&*kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
@@ -165,7 +164,7 @@ pub fn draw(
     history_mesh: Single<&Mesh2d, With<HistoryMesh>>,
     mut mesh: ResMut<Assets<Mesh>>,
 ) {
-    if let Some(history_mesh) = mesh.get_mut(history_mesh.id()) {
+    if let Some(mut history_mesh) = mesh.get_mut(history_mesh.id()) {
         let pos: Vec<[f32; 3]> = goniometer
             .history_buffer
             .iter()
@@ -173,7 +172,7 @@ pub fn draw(
             .collect();
         history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
-    if let Some(live_mesh) = mesh.get_mut(live_mesh.id()) {
+    if let Some(mut live_mesh) = mesh.get_mut(live_mesh.id()) {
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
