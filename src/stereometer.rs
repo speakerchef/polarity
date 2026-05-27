@@ -1,9 +1,9 @@
 use crate::{
-    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HistoryDensity,
-    HistoryMesh, LiveDensity, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
-    RADIAL_SCALE_FACTOR,
+    ANIM_SCALE_FACTOR, AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
+    HISTORY_MAGENTA, HistoryDensity, HistoryMesh, LIVE_MAGENTA, LiveDensity, LiveMesh,
+    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR,
 };
-use bevy::{math::ops::sqrt, prelude::*};
+use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
 use biquad::{Biquad, Coefficients, DirectForm1};
 use std::{
     collections::{HashMap, VecDeque},
@@ -187,4 +187,73 @@ pub fn draw(
             .collect();
         live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
+}
+
+pub fn spawn_stereometer(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<CustomMaterial>>,
+) {
+    let mut live_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    let mut history_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 10.]; MAX_WINDOW_SIZE * NUM_VERTICES];
+    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; MAX_WINDOW_SIZE * NUM_VERTICES];
+    let hist_colors: Vec<[f32; 4]> = (0..MAX_WINDOW_SIZE)
+        .flat_map(|i| {
+            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.);
+            let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
+            std::iter::repeat_n(c, 6)
+        })
+        .collect();
+    live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
+    live_mesh.insert_attribute(
+        Mesh::ATTRIBUTE_COLOR,
+        vec![LIVE_MAGENTA.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
+    );
+    history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
+    history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
+
+    let goni_id = commands.spawn_empty().id();
+
+    commands.entity(goni_id).insert((
+        Stereometer {
+            live_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
+            history_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
+            last_sample_idx: 0,
+            id: goni_id,
+            filterbank: None,
+        },
+        DrawableCursor,
+    ));
+    commands.spawn((
+        LiveMesh,
+        Mesh2d(meshes.add(live_mesh)),
+        MeshMaterial2d(materials.add(CustomMaterial {
+            color: LinearRgba::default(),
+            alpha_mode: AlphaMode2d::Blend,
+        })),
+        Transform::from_xyz(0.0, 0.0, 1.0),
+    ));
+    commands.spawn((
+        HistoryMesh,
+        Mesh2d(meshes.add(history_mesh)),
+        MeshMaterial2d(materials.add(CustomMaterial {
+            color: LinearRgba::default(),
+            alpha_mode: AlphaMode2d::Blend,
+        })),
+    ));
+    info!("Spawned Goniometer");
+}
+
+pub fn despawn_stereometer(
+    mut commands: Commands,
+    q_goniometer: Single<&Stereometer, With<DrawableCursor>>,
+) {
+    commands.entity(q_goniometer.id).despawn();
 }

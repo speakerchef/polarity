@@ -1,7 +1,13 @@
 pub mod palette;
 pub mod stereometer;
+pub mod ui;
 
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::render_resource::AsBindGroup,
+    shader::ShaderRef,
+    sprite_render::{AlphaMode2d, Material2d},
+};
 
 pub const NUM_VERTICES: usize = 6;
 pub const DOT_HALF_SIZE: f32 = 0.75;
@@ -32,6 +38,14 @@ pub const CRT_P7: LinearRgba = LinearRgba {
     blue: 0.35,
     alpha: 0.0,
 };
+
+pub struct FontBlock {
+    pub icon: FontSource,
+    pub text: FontSource,
+}
+
+#[derive(Component)]
+pub struct DurationText;
 
 #[derive(Component)]
 pub struct PlayingAudio;
@@ -155,5 +169,28 @@ impl From<HistoryDensity> for String {
             HistoryDensity::High => "High".to_string(),
             HistoryDensity::Ultra => "Ultra".to_string(),
         }
+    }
+}
+
+const SHADER_ASSET_PATH: &str = "shaders/custom_material.wgsl";
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct CustomMaterial {
+    #[uniform(0)]
+    pub color: LinearRgba,
+    pub alpha_mode: AlphaMode2d,
+}
+
+impl Material2d for CustomMaterial {
+    fn vertex_shader() -> ShaderRef {
+        ShaderRef::Default
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        self.alpha_mode
     }
 }

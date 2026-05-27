@@ -53,7 +53,7 @@ pub mod spacing {
 
 pub mod width {
     pub const SMALL_SELECTOR_MENU: f32 = 100.;
-    pub const MED_SELECTOR_MENU: f32 = 180.;
+    pub const MED_SELECTOR_MENU: f32 = 120.;
     pub const LARGE_SELECTOR_MENU: f32 = 240.;
 }
 
