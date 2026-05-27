@@ -51,9 +51,16 @@ pub mod spacing {
     pub const S7: f32 = 24.0;
 }
 
+pub mod width {
+    pub const SMALL_SELECTOR_MENU: f32 = 100.;
+    pub const MED_SELECTOR_MENU: f32 = 180.;
+    pub const LARGE_SELECTOR_MENU: f32 = 240.;
+}
+
 pub mod height {
     pub const ROWHEAD: f32 = 44.0;
     pub const DROPDOWN_ITEM: f32 = 37.0;
+    pub const MENU_ITEM: f32 = 40.0;
     pub const SLIDER_ROW_ITEM: f32 = 30.0;
     pub const SEG: f32 = 28.0;
     pub const INNER: f32 = 26.0;

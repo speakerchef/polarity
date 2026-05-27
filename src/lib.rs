@@ -7,10 +7,7 @@ pub const NUM_VERTICES: usize = 6;
 pub const DOT_HALF_SIZE: f32 = 0.75;
 pub const ANIM_SCALE_FACTOR: f32 = 250.0;
 pub const RADIAL_SCALE_FACTOR: f32 = 0.4;
-pub const LIVE_WINDOW_SIZE: usize = 2048;
-// pub const HISTORY_WINDOW_SIZE: usize = 16328;
-// pub const HISTORY_WINDOW_SIZE: usize = 42696;
-pub const HISTORY_WINDOW_SIZE: usize = 2048;
+pub const MAX_WINDOW_SIZE: usize = 32768;
 pub const LIVE_MAGENTA: LinearRgba = LinearRgba {
     red: 3.0,
     green: 0.5,
@@ -60,4 +57,58 @@ pub struct AudioFileContents {
     pub sample_rate: u32,
     pub num_channels: usize,
     pub samples: Vec<f32>,
+}
+
+#[derive(Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
+pub enum PointDensity {
+    Low,
+    Med,
+    #[default]
+    High,
+    XHigh,
+    Ultra,
+    Extreme,
+    PleaseDont,
+}
+
+impl PointDensity {
+    pub const COUNT: usize = 7;
+
+    pub fn count(&self) -> usize {
+        match self {
+            PointDensity::Low => 512,
+            PointDensity::Med => 1536,
+            PointDensity::High => 2048,
+            PointDensity::XHigh => 4096,
+            PointDensity::Ultra => 8192,
+            PointDensity::Extreme => 16384,
+            PointDensity::PleaseDont => 32768,
+        }
+    }
+
+    pub fn all() -> &'static [PointDensity; Self::COUNT] {
+        &[
+            PointDensity::Low,
+            PointDensity::Med,
+            PointDensity::High,
+            PointDensity::XHigh,
+            PointDensity::Ultra,
+            PointDensity::Extreme,
+            PointDensity::PleaseDont,
+        ]
+    }
+}
+
+impl From<PointDensity> for String {
+    fn from(value: PointDensity) -> Self {
+        match value {
+            PointDensity::Low => "Low".to_string(),
+            PointDensity::Med => "Med".to_string(),
+            PointDensity::High => "High".to_string(),
+            PointDensity::XHigh => "XHigh".to_string(),
+            PointDensity::Ultra => "Ultra".to_string(),
+            PointDensity::Extreme => "Extreme".to_string(),
+            PointDensity::PleaseDont => "Please Dont".to_string(),
+        }
+    }
 }

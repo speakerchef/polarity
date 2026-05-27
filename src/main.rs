@@ -7,11 +7,11 @@ use bevy::shader::ShaderRef;
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
-use polarity::stereometer::{self, StereoFilter, Stereometer, StereometerKind};
+use polarity::stereometer::{self, StereoFilter, Stereometer, StereometerKind, StereometerParams};
 use polarity::{
-    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HISTORY_WINDOW_SIZE,
-    HistoryMesh, LIVE_MAGENTA, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio,
-    PreviewCanvas, TimelineScrubber, palette,
+    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HistoryMesh, LIVE_MAGENTA,
+    LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PointDensity, PreviewCanvas,
+    TimelineScrubber, palette,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -37,12 +37,45 @@ enum DropdownItem {
     // POST FX
 }
 
+impl From<DropdownItem> for String {
+    fn from(value: DropdownItem) -> Self {
+        match value {
+            DropdownItem::Mode => "MODE".to_string(),
+            DropdownItem::Motion => "MOTION".to_string(),
+            DropdownItem::Visual => "VISUAL".to_string(),
+        }
+    }
+}
+
 #[derive(Component, Clone)]
 struct ModeSubmenu;
+
 #[derive(Component, Clone)]
 struct MotionSubmenu;
+
 #[derive(Component, Clone)]
 struct VisualSubmenu;
+
+#[derive(Component, Clone)]
+struct VisualDensityText;
+
+#[derive(Component, Clone)]
+struct VisualDensitySelectorMenu;
+
+#[derive(Component, Clone)]
+struct VisualDensityDropdown;
+
+#[derive(Component, Clone)]
+struct VisualPhosphorSelectorMenu;
+
+#[derive(Component, Clone)]
+struct VisualPhosphorDropdown;
+
+#[derive(Component, Clone)]
+struct VisualDensitySelectorText;
+
+#[derive(Component, Clone)]
+struct VisualPhosphorText;
 
 #[derive(Component, Clone)]
 struct HeaderDropdown;
@@ -85,7 +118,7 @@ struct DurationText;
 fn main() {
     App::new()
         .insert_resource(ClearColor(palette::VOID))
-        .insert_resource(StereometerKind::default())
+        .insert_resource(StereometerParams::default())
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
@@ -401,17 +434,17 @@ fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
                     .observe(on_hover_bg)
                     .observe(on_leave_bg)
                     .observe(match i {
-                        1 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            *kind = StereometerKind::LinearBipolar;
+                        1 => |_: On<Pointer<Click>>, mut params: ResMut<StereometerParams>| {
+                            params.kind = StereometerKind::LinearBipolar;
                         },
-                        2 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            *kind = StereometerKind::ScaledBipolar;
+                        2 => |_: On<Pointer<Click>>, mut params: ResMut<StereometerParams>| {
+                            params.kind = StereometerKind::ScaledBipolar;
                         },
-                        3 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            *kind = StereometerKind::LinearLissajous;
+                        3 => |_: On<Pointer<Click>>, mut params: ResMut<StereometerParams>| {
+                            params.kind = StereometerKind::LinearLissajous;
                         },
-                        4 => |_: On<Pointer<Click>>, mut kind: ResMut<StereometerKind>| {
-                            *kind = StereometerKind::ScaledLissajous;
+                        4 => |_: On<Pointer<Click>>, mut params: ResMut<StereometerParams>| {
+                            params.kind = StereometerKind::ScaledLissajous;
                         },
                         _ => unreachable!(),
                     });
@@ -419,38 +452,246 @@ fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
         });
 }
 
-fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
-    (1..=2).for_each(|i| {
+fn spawn_selector_with_size<'a>(
+    parent: &'a mut ChildSpawnerCommands,
+    sz: f32,
+    text: &str,
+    marker: impl Component + Clone,
+    font: &FontBlock,
+) -> bevy::prelude::EntityCommands<'a> {
+    let mut parent_spawner = parent.spawn((Node {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Column,
+        margin: UiRect::horizontal(px(16)),
+        width: px(sz),
+        ..Default::default()
+    },));
+    parent_spawner.with_children(|parent| {
         parent
             .spawn((
-                VisualSubmenu,
                 Node {
-                    display: Display::None,
+                    display: Display::Flex,
                     align_items: AlignItems::Center,
-                    justify_content: JustifyContent::FlexStart,
-                    height: px(palette::height::DROPDOWN_ITEM),
+                    justify_content: JustifyContent::Center,
+                    height: px(palette::height::SLIDER_ROW_ITEM),
                     width: percent(100.),
-                    padding: UiRect::left(px(12)).with_right(px(12)),
-                    border: UiRect::top(px(2)),
+                    border: UiRect::all(px(1)),
                     ..Default::default()
                 },
                 BorderColor::all(palette::BORDER),
-                BackgroundColor(palette::SURFACE),
+                BackgroundColor(palette::VOID),
             ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new(i.to_string()),
-                    TextFont {
-                        font: fonts.text.clone(),
-                        font_size: FontSize::Px(palette::font_size::BIG),
-                        weight: FontWeight(palette::font_weight::BODY),
-                        ..Default::default()
-                    },
-                    TextColor(palette::BRIGHT),
-                    LetterSpacing::Px(palette::letter_spacing::BASE),
-                ));
-            });
-    })
+            .with_children(|parent| spawn_body_text(parent, text, marker, font));
+    });
+    parent_spawner
+}
+
+fn visual_density_on_click(
+    _: On<Pointer<Click>>,
+    mut vis: Single<&mut Node, With<VisualDensityDropdown>>,
+) {
+    if vis.display != Display::Flex {
+        vis.display = Display::Flex;
+    } else {
+        vis.display = Display::None;
+    }
+}
+
+fn visual_phosphor_on_click(
+    _: On<Pointer<Click>>,
+    mut vis: Single<&mut Node, With<VisualPhosphorDropdown>>,
+) {
+    if vis.display != Display::Flex {
+        vis.display = Display::Flex;
+    } else {
+        vis.display = Display::None;
+    }
+}
+
+fn spawn_body_text(
+    parent: &mut ChildSpawnerCommands,
+    text: &str,
+    cmp: impl Component + Clone,
+    font: &FontBlock,
+) {
+    parent.spawn((
+        cmp.clone(),
+        Text::new(text),
+        TextFont {
+            font: font.text.clone(),
+            font_size: FontSize::Px(palette::font_size::BIG),
+            weight: FontWeight(palette::font_weight::BODY),
+            ..Default::default()
+        },
+        TextColor(palette::BRIGHT),
+        LetterSpacing::Px(palette::letter_spacing::BASE),
+    ));
+}
+
+fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    parent
+        .spawn((
+            VisualSubmenu,
+            Node {
+                display: Display::None,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::SpaceBetween,
+                width: percent(100.),
+                ..Default::default()
+            },
+            BorderColor::all(palette::BORDER),
+            BackgroundColor(palette::BG),
+        ))
+        .with_children(|parent| {
+            (1..=2).for_each(|i| {
+                parent
+                    .spawn((
+                        Node {
+                            display: Display::Flex,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceBetween,
+                            height: px(palette::height::MENU_ITEM),
+                            width: percent(100.),
+                            padding: UiRect::horizontal(px(12)),
+                            border: UiRect::horizontal(px(1)).with_bottom(px(1)),
+                            ..Default::default()
+                        },
+                        BorderColor::all(palette::BORDER),
+                    ))
+                    .with_children(|parent| match i {
+                        1 => {
+                            spawn_body_text(parent, "Density", VisualDensityText, fonts);
+                            spawn_selector_with_size(
+                                parent,
+                                palette::width::MED_SELECTOR_MENU,
+                                &Into::<String>::into(PointDensity::default()),
+                                VisualDensitySelectorMenu,
+                                fonts,
+                            )
+                            .with_children(|parent| {
+                                parent
+                                    .spawn((
+                                        VisualDensityDropdown,
+                                        Node {
+                                            display: Display::None,
+                                            flex_direction: FlexDirection::Column,
+                                            align_items: AlignItems::Center,
+                                            position_type: PositionType::Absolute,
+                                            top: percent(100.),
+                                            justify_content: JustifyContent::FlexStart,
+                                            width: percent(100.),
+                                            ..Default::default()
+                                        },
+                                        GlobalZIndex(1),
+                                    ))
+                                    .with_children(|parent| {
+                                        let pd = PointDensity::all();
+                                        for level in pd {
+                                            parent
+                                                .spawn((
+                                                    Node {
+                                                        display: Display::Flex,
+                                                        align_items: AlignItems::Center,
+                                                        justify_content: JustifyContent::Center,
+                                                        height: px(
+                                                            palette::height::SLIDER_ROW_ITEM,
+                                                        ),
+                                                        width: percent(100.),
+                                                        border: UiRect::all(px(1)),
+                                                        ..Default::default()
+                                                    },
+                                                    BorderColor::all(palette::BORDER),
+                                                    BackgroundColor(palette::VOID),
+                                                ))
+                                                .with_children(|parent| {
+                                                    spawn_body_text(
+                                                        parent,
+                                                        &Into::<String>::into(level.clone()),
+                                                        VisualDensityText,
+                                                        fonts,
+                                                    );
+                                                })
+                                                .observe(|_: On<Pointer<Click>>, mut stereo_params: ResMut<StereometerParams>, mut txt: Single<&mut Text, With<VisualDensitySelectorMenu>>| {
+                                                        info!("clicked");
+                                                        stereo_params.live_density = level.clone();
+                                                        txt.0 = Into::<String>::into(level.clone());
+                                                });
+                                        }
+                                    });
+                            })
+                            .observe(visual_density_on_click)
+                            .observe(on_hover_void)
+                            .observe(on_leave_void);
+                        }
+                        2 => {
+                            spawn_body_text(parent, "Phosphor", VisualPhosphorText, fonts);
+                            spawn_selector_with_size(
+                                parent,
+                                palette::width::MED_SELECTOR_MENU,
+                                &Into::<String>::into(PointDensity::default()),
+                                VisualPhosphorSelectorMenu,
+                                fonts,
+                            )
+                            .with_children(|parent| {
+                                parent
+                                    .spawn((
+                                        VisualPhosphorDropdown,
+                                        Node {
+                                            display: Display::None,
+                                            flex_direction: FlexDirection::Column,
+                                            align_items: AlignItems::Center,
+                                            position_type: PositionType::Absolute,
+                                            top: percent(100.),
+                                            justify_content: JustifyContent::FlexStart,
+                                            width: percent(100.),
+                                            ..Default::default()
+                                        },
+                                        GlobalZIndex(1),
+                                    ))
+                                    .with_children(|parent| {
+                                        let pd = PointDensity::all();
+                                        for level in pd {
+                                            parent
+                                                .spawn((
+                                                    Node {
+                                                        display: Display::Flex,
+                                                        align_items: AlignItems::Center,
+                                                        justify_content: JustifyContent::Center,
+                                                        height: px(
+                                                            palette::height::SLIDER_ROW_ITEM,
+                                                        ),
+                                                        width: percent(100.),
+                                                        border: UiRect::all(px(1)),
+                                                        ..Default::default()
+                                                    },
+                                                    BorderColor::all(palette::BORDER),
+                                                    BackgroundColor(palette::VOID),
+                                                ))
+                                                .with_children(|parent| {
+                                                    spawn_body_text(
+                                                        parent,
+                                                        &Into::<String>::into(level.clone()),
+                                                        VisualPhosphorText,
+                                                        fonts,
+                                                    );
+                                                })
+                                                .observe(|_: On<Pointer<Click>>, mut stereo_params: ResMut<StereometerParams>, mut txt: Single<&mut Text, With<VisualPhosphorSelectorMenu>>| {
+                                                        info!("clicked");
+                                                        stereo_params.history_density = level.clone();
+                                                        txt.0 = Into::<String>::into(level.clone());
+                                                });
+                                        }
+                                    });
+                            })
+                            .observe(visual_phosphor_on_click)
+                            .observe(on_hover_void)
+                            .observe(on_leave_void);
+                        }
+                        _ => unreachable!(),
+                    });
+            })
+        });
 }
 
 fn on_hover_surface(e: On<Pointer<Over>>, mut submenu: Query<&mut BackgroundColor>) {
@@ -480,6 +721,21 @@ fn on_leave_bg(e: On<Pointer<Out>>, mut submenu: Query<&mut BackgroundColor>) {
         && item.0 == palette::SURFACE
     {
         item.0 = palette::BG;
+    }
+}
+
+fn on_hover_void(e: On<Pointer<Over>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::VOID
+    {
+        item.0 = palette::SURFACE;
+    }
+}
+fn on_leave_void(e: On<Pointer<Out>>, mut submenu: Query<&mut BackgroundColor>) {
+    if let Ok(mut item) = submenu.get_mut(e.entity)
+        && item.0 == palette::SURFACE
+    {
+        item.0 = palette::VOID;
     }
 }
 
@@ -533,10 +789,16 @@ fn on_click_toggle_bright_bg(
     }
 }
 
+fn toggle_visibility_with_marker<T: Component>(
+    _: On<Pointer<Click>>,
+    mut q_submenu: Single<&mut Visibility, With<T>>,
+) {
+    q_submenu.toggle_inherited_hidden();
+}
+
 fn spawn_submenu_items(
     parent: &mut ChildSpawnerCommands,
     fonts: &FontBlock,
-    name: &str,
     dropdownitem: &DropdownItem,
     i: usize,
 ) {
@@ -558,7 +820,7 @@ fn spawn_submenu_items(
         ))
         .with_children(|parent| {
             parent.spawn((
-                Text::new(name.to_string()),
+                Text::new(dropdownitem.clone()),
                 TextFont {
                     font: fonts.text.clone(),
                     font_size: FontSize::Px(palette::font_size::BODY),
@@ -581,48 +843,42 @@ fn spawn_submenu_items(
     }
 }
 
-fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component + Clone>(
+fn spawn_primary_dropdown_header<TRoot: Component + Clone, TSubmenu: Component>(
     parent: &mut ChildSpawnerCommands,
     name: &str,
     fonts: &FontBlock,
-    submenu_items: Option<&[(&str, DropdownItem)]>,
+    root_cmp: TRoot,
     item_index: usize,
-    components: (TRoot, TSubmenu),
-    on_click: fn(
-        On<Pointer<Click>>,
-        Single<&mut Visibility, With<TSubmenu>>,
-        Single<(&mut BackgroundColor, Entity), With<TRoot>>,
-        Query<&mut TextColor>,
-        Query<&Children>,
-    ),
 ) {
     parent
-        .spawn(Node {
-            display: Display::Flex,
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Start,
-            width: percent(100.),
-            ..Default::default()
-        })
+        .spawn((
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Start,
+                width: percent(100.),
+                border: if item_index != 0 {
+                    UiRect::top(px(1))
+                } else {
+                    default()
+                },
+                ..Default::default()
+            },
+            BackgroundColor(palette::SURFACE),
+            BorderColor::all(palette::BORDER),
+        ))
         .with_children(|parent| {
             parent
                 .spawn((
                     HeaderDropdown,
-                    components.0.clone(),
+                    root_cmp.clone(),
                     Node {
                         display: Display::Flex,
                         flex_direction: FlexDirection::Row,
                         height: px(palette::height::ROWHEAD),
                         width: percent(100.),
-                        border: if item_index != 0 {
-                            UiRect::top(px(1))
-                        } else {
-                            default()
-                        },
                         ..Default::default()
                     },
-                    BackgroundColor(palette::SURFACE),
-                    BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
                     parent
@@ -676,82 +932,39 @@ fn spawn_primary_dropdown_header<TSubmenu: Component + Clone, TRoot: Component +
                                 LetterSpacing::Px(palette::letter_spacing::SPACED),
                             ));
                         });
-                })
-                .observe(
-                    |_: On<Pointer<Over>>,
-                     mut q_bg: Single<&mut BackgroundColor, With<TRoot>>,
-                     q_vis: Single<&Visibility, With<TSubmenu>>| {
-                        if matches!(*q_vis, Visibility::Inherited | Visibility::Visible) {
-                            return;
-                        }
-                        q_bg.0 = palette::SURFACE_HOVER;
-                    },
-                )
-                .observe(
-                    |_: On<Pointer<Out>>,
-                     mut q_bg: Single<&mut BackgroundColor, With<TRoot>>,
-                     q_vis: Single<&Visibility, With<TSubmenu>>| {
-                        if matches!(*q_vis, Visibility::Inherited | Visibility::Visible) {
-                            return;
-                        }
-                        q_bg.0 = palette::SURFACE;
-                    },
-                )
-                .observe(on_click_toggle_bright_surface)
-                .observe(on_click);
-
-            // submenu
-            if let Some(items) = submenu_items {
-                parent
-                    .spawn(
-                        // main container
-                        (
-                            components.1.clone(),
-                            Node {
-                                display: Display::Flex,
-                                flex_direction: FlexDirection::Column,
-                                width: percent(100.),
-                                ..Default::default()
-                            },
-                            Visibility::Hidden,
-                        ),
-                    )
-                    .with_children(|parent| {
-                        items
-                            .iter()
-                            .enumerate()
-                            .for_each(|(i, (name, dropdownitem))| {
-                                spawn_submenu_items(parent, fonts, name, dropdownitem, i);
-                            });
-                    });
-            };
-        });
+                });
+        })
+        .observe(on_hover_surface)
+        .observe(on_leave_surface)
+        .observe(on_click_toggle_bright_surface)
+        .observe(toggle_visibility_with_marker::<TSubmenu>);
 }
 
-fn generator_mainmenu_onclick(
-    _: On<Pointer<Click>>,
-    mut q_submenu: Single<&mut Visibility, With<GeneratorSubmenu>>,
-    mut q_entity: Single<(&mut BackgroundColor, Entity), With<GeneratorRootHeader>>,
-    mut textcol: Query<&mut TextColor>,
-    children: Query<&Children>,
+fn spawn_submenu(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &FontBlock,
+    items: &[DropdownItem],
+    marker: impl Component,
 ) {
-    q_submenu.toggle_inherited_hidden();
-    // let bgcol = &mut *q_entity.0;
-    // if bgcol.0 == palette::TEXT {
-    //     bgcol.0 = palette::SURFACE;
-    // } else {
-    //     bgcol.0 = palette::TEXT;
-    // }
-    // let root_entity = q_entity.1;
-    // for child in children.iter_descendants(root_entity) {
-    //     if let Ok(mut txtcol) = textcol.get_mut(child) {
-    //         if txtcol.0 == palette::VOID {
-    //             txtcol.0 = palette::BRIGHT;
-    //         } else {
-    //             txtcol.0 = palette::VOID;
-    //         }
-    //     }
-    // }
+    parent
+        .spawn(
+            // main container
+            (
+                marker,
+                Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    width: percent(100.),
+                    ..Default::default()
+                },
+                Visibility::Hidden,
+            ),
+        )
+        .with_children(|parent| {
+            items.iter().enumerate().for_each(|(i, item)| {
+                spawn_submenu_items(parent, fonts, item, i);
+            });
+        });
 }
 
 fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
@@ -771,24 +984,24 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
             BorderColor::all(palette::BORDER),
         ))
         .with_children(|parent| {
-            spawn_primary_dropdown_header(
+            spawn_primary_dropdown_header::<GeneratorRootHeader, GeneratorSubmenu>(
                 parent,
                 "GENERATOR",
                 fonts,
-                Some(&[
-                    ("MODE", DropdownItem::Mode),
-                    ("MOTION", DropdownItem::Motion),
-                    ("VISUAL", DropdownItem::Visual),
-                ]),
+                GeneratorRootHeader,
                 0,
-                (GeneratorRootHeader, GeneratorSubmenu),
-                generator_mainmenu_onclick,
             );
-            // spawn_primary_dropdown_header(parent, "POST FX", fonts, Some(&[
-            //         ("Mode", DropdownItem::Mode),
-            //         ("Motion", DropdownItem::Motion),
-            //         ("Visual", DropdownItem::Visual),
-            //     ]), 1, GeneratorRootHeader, |_: On<Pointer<Click>>, |);
+
+            spawn_submenu(
+                parent,
+                fonts,
+                &[
+                    DropdownItem::Mode,
+                    DropdownItem::Visual,
+                    DropdownItem::Motion,
+                ],
+                GeneratorSubmenu,
+            );
         });
 }
 
@@ -922,12 +1135,12 @@ fn spawn_stereometer(
         bevy::mesh::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
-    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; LIVE_WINDOW_SIZE * NUM_VERTICES];
-    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; HISTORY_WINDOW_SIZE * NUM_VERTICES];
-    let hist_colors: Vec<[f32; 4]> = (0..HISTORY_WINDOW_SIZE)
+    let live_zeros: Vec<[f32; 3]> = vec![[0., 0., 10.]; MAX_WINDOW_SIZE * NUM_VERTICES];
+    let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; MAX_WINDOW_SIZE * NUM_VERTICES];
+    let hist_colors: Vec<[f32; 4]> = (0..MAX_WINDOW_SIZE)
         .flat_map(|i| {
-            // let alpha = (i as f32 / HISTORY_WINDOW_SIZE as f32).powf(9.);
-            let alpha = 0.;
+            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(9.);
+            // let alpha = 0.;
             let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
             std::iter::repeat_n(c, 6)
         })
@@ -935,21 +1148,17 @@ fn spawn_stereometer(
     live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
     live_mesh.insert_attribute(
         Mesh::ATTRIBUTE_COLOR,
-        vec![LIVE_MAGENTA.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
+        vec![LIVE_MAGENTA.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
-    // history_mesh.insert_attribute(
-    //     Mesh::ATTRIBUTE_COLOR,
-    //     vec![HISTORY_MAGENTA.to_f32_array(); LIVE_WINDOW_SIZE * NUM_VERTICES],
-    // );
 
     let goni_id = commands.spawn_empty().id();
 
     commands.entity(goni_id).insert((
         Stereometer {
-            live_buffer: VecDeque::from([Vec2::ZERO; LIVE_WINDOW_SIZE]),
-            history_buffer: VecDeque::from([Vec2::ZERO; HISTORY_WINDOW_SIZE]),
+            live_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
+            history_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
             last_sample_idx: 0,
             id: goni_id,
             filterbank: None,

@@ -1,7 +1,6 @@
 use crate::{
-    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HISTORY_WINDOW_SIZE,
-    HistoryMesh, LIVE_WINDOW_SIZE, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
-    RADIAL_SCALE_FACTOR,
+    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HistoryMesh, LiveMesh,
+    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PointDensity, PreviewCanvas, RADIAL_SCALE_FACTOR,
 };
 use bevy::{math::ops::sqrt, prelude::*};
 use biquad::{Biquad, Coefficients, DirectForm1};
@@ -9,13 +8,19 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
 };
-#[derive(Resource, Debug, Clone, Default)]
+#[derive(Resource, Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub enum StereometerKind {
-    LinearBipolar,
     #[default]
+    LinearBipolar,
     ScaledBipolar,
     LinearLissajous,
     ScaledLissajous,
+}
+#[derive(Resource, Default, Debug, Hash, Eq, PartialEq, Clone)]
+pub struct StereometerParams {
+    pub kind: StereometerKind,
+    pub live_density: PointDensity,
+    pub history_density: PointDensity,
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +85,7 @@ pub fn update(
     mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
     canvas: Single<&UiGlobalTransform, With<PreviewCanvas>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
-    kind: Res<StereometerKind>,
+    params: Res<StereometerParams>,
 ) {
     let canvas_2d = canvas.translation;
     let (camera, camera_xform) = *camera;
@@ -106,7 +111,7 @@ pub fn update(
         for frame in history_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
-            let (x_sample, y_sample) = get_xy_from_meterkind(&*kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             goniometer.history_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
@@ -116,7 +121,10 @@ pub fn update(
 
     let live_window = &audio
         .samples
-        .get(cur_idx * audio.num_channels..(cur_idx + LIVE_WINDOW_SIZE) * audio.num_channels)
+        .get(
+            cur_idx * audio.num_channels
+                ..(cur_idx + params.live_density.count()) * audio.num_channels,
+        )
         .unwrap_or_else(|| {
             goniometer.last_sample_idx = 0;
             &[0.]
@@ -127,7 +135,7 @@ pub fn update(
             let left = frame[0];
             let right = *frame.last().unwrap_or(&frame[0]);
             // let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
-            let (x_sample, y_sample) = get_xy_from_meterkind(&*kind, left, right);
+            let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
@@ -135,28 +143,26 @@ pub fn update(
         })
         .collect();
 
-    while goniometer.live_buffer.len() > LIVE_WINDOW_SIZE {
+    while goniometer.live_buffer.len() > params.live_density.count() {
         goniometer.live_buffer.pop_front();
     }
-    while goniometer.history_buffer.len() > HISTORY_WINDOW_SIZE {
+    while goniometer.history_buffer.len() > params.history_density.count() {
         goniometer.history_buffer.pop_front();
     }
 }
 
 /// Converts 2D vertex into 2 triangles forming a rectangle
-fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; NUM_VERTICES] {
+fn point_to_quad_vertices(v: Vec2, z: f32) -> [[f32; 3]; NUM_VERTICES] {
     let s = DOT_HALF_SIZE;
     [
-        [v.x - s, v.y - s, 0.0],
-        [v.x + s, v.y - s, 0.0],
-        [v.x + s, v.y + s, 0.0],
-        [v.x - s, v.y - s, 0.0],
-        [v.x + s, v.y + s, 0.0],
-        [v.x - s, v.y + s, 0.0],
+        [v.x - s, v.y - s, z],
+        [v.x + s, v.y - s, z],
+        [v.x + s, v.y + s, z],
+        [v.x - s, v.y - s, z],
+        [v.x + s, v.y + s, z],
+        [v.x - s, v.y + s, z],
     ]
 }
-
-// fn upsample(factor: usize) -> [[]; factor]
 
 pub fn draw(
     goniometer: Single<&Stereometer, With<DrawableCursor>>,
@@ -165,10 +171,10 @@ pub fn draw(
     mut mesh: ResMut<Assets<Mesh>>,
 ) {
     if let Some(mut history_mesh) = mesh.get_mut(history_mesh.id()) {
-        let pos: Vec<[f32; 3]> = goniometer
+        let pos: Vec<_> = goniometer
             .history_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v))
+            .flat_map(|&v| point_to_quad_vertices(v, 0.0))
             .collect();
         history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
@@ -176,7 +182,7 @@ pub fn draw(
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v))
+            .flat_map(|&v| point_to_quad_vertices(v, 10.0))
             .collect();
         live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
