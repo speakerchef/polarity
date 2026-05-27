@@ -60,7 +60,7 @@ pub struct AudioFileContents {
 }
 
 #[derive(Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
-pub enum PointDensity {
+pub enum LiveDensity {
     Low,
     Med,
     #[default]
@@ -71,44 +71,89 @@ pub enum PointDensity {
     PleaseDont,
 }
 
-impl PointDensity {
+impl LiveDensity {
     pub const COUNT: usize = 7;
 
     pub fn count(&self) -> usize {
         match self {
-            PointDensity::Low => 512,
-            PointDensity::Med => 1536,
-            PointDensity::High => 2048,
-            PointDensity::XHigh => 4096,
-            PointDensity::Ultra => 8192,
-            PointDensity::Extreme => 16384,
-            PointDensity::PleaseDont => 32768,
+            LiveDensity::Low => 512,
+            LiveDensity::Med => 1536,
+            LiveDensity::High => 2048,
+            LiveDensity::XHigh => 4096,
+            LiveDensity::Ultra => 8192,
+            LiveDensity::Extreme => 16384,
+            LiveDensity::PleaseDont => 32768,
         }
     }
 
-    pub fn all() -> &'static [PointDensity; Self::COUNT] {
+    pub fn all() -> &'static [Self; Self::COUNT] {
         &[
-            PointDensity::Low,
-            PointDensity::Med,
-            PointDensity::High,
-            PointDensity::XHigh,
-            PointDensity::Ultra,
-            PointDensity::Extreme,
-            PointDensity::PleaseDont,
+            LiveDensity::Low,
+            LiveDensity::Med,
+            LiveDensity::High,
+            LiveDensity::XHigh,
+            LiveDensity::Ultra,
+            LiveDensity::Extreme,
+            LiveDensity::PleaseDont,
         ]
     }
 }
 
-impl From<PointDensity> for String {
-    fn from(value: PointDensity) -> Self {
+impl From<LiveDensity> for String {
+    fn from(value: LiveDensity) -> Self {
         match value {
-            PointDensity::Low => "Low".to_string(),
-            PointDensity::Med => "Med".to_string(),
-            PointDensity::High => "High".to_string(),
-            PointDensity::XHigh => "XHigh".to_string(),
-            PointDensity::Ultra => "Ultra".to_string(),
-            PointDensity::Extreme => "Extreme".to_string(),
-            PointDensity::PleaseDont => "Please Dont".to_string(),
+            LiveDensity::Low => "Low".to_string(),
+            LiveDensity::Med => "Med".to_string(),
+            LiveDensity::High => "High".to_string(),
+            LiveDensity::XHigh => "XHigh".to_string(),
+            LiveDensity::Ultra => "Ultra".to_string(),
+            LiveDensity::Extreme => "Extreme".to_string(),
+            LiveDensity::PleaseDont => "Please Dont".to_string(),
+        }
+    }
+}
+
+#[derive(Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
+pub enum HistoryDensity {
+    Off,
+    Low,
+    #[default]
+    Med,
+    High,
+    Ultra,
+}
+impl HistoryDensity {
+    pub const COUNT: usize = 5;
+
+    pub fn count(&self) -> usize {
+        match self {
+            HistoryDensity::Off => 1,
+            HistoryDensity::Low => 10420,
+            HistoryDensity::Med => 15696,
+            HistoryDensity::High => 24576,
+            HistoryDensity::Ultra => 32768,
+        }
+    }
+
+    pub fn all() -> &'static [Self; Self::COUNT] {
+        &[
+            HistoryDensity::Off,
+            HistoryDensity::Low,
+            HistoryDensity::Med,
+            HistoryDensity::High,
+            HistoryDensity::Ultra,
+        ]
+    }
+}
+
+impl From<HistoryDensity> for String {
+    fn from(value: HistoryDensity) -> Self {
+        match value {
+            HistoryDensity::Off => "Off".to_string(),
+            HistoryDensity::Low => "Low".to_string(),
+            HistoryDensity::Med => "Med".to_string(),
+            HistoryDensity::High => "High".to_string(),
+            HistoryDensity::Ultra => "Ultra".to_string(),
         }
     }
 }

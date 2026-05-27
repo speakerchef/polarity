@@ -1,6 +1,7 @@
 use crate::{
-    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HistoryMesh, LiveMesh,
-    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PointDensity, PreviewCanvas, RADIAL_SCALE_FACTOR,
+    ANIM_SCALE_FACTOR, AudioFileContents, DOT_HALF_SIZE, DrawableCursor, HistoryDensity,
+    HistoryMesh, LiveDensity, LiveMesh, NUM_VERTICES, PlayingAudio, PreviewCanvas,
+    RADIAL_SCALE_FACTOR,
 };
 use bevy::{math::ops::sqrt, prelude::*};
 use biquad::{Biquad, Coefficients, DirectForm1};
@@ -19,8 +20,8 @@ pub enum StereometerKind {
 #[derive(Resource, Default, Debug, Hash, Eq, PartialEq, Clone)]
 pub struct StereometerParams {
     pub kind: StereometerKind,
-    pub live_density: PointDensity,
-    pub history_density: PointDensity,
+    pub live_density: LiveDensity,
+    pub history_density: HistoryDensity,
 }
 
 #[derive(Debug, Clone)]
@@ -152,15 +153,15 @@ pub fn update(
 }
 
 /// Converts 2D vertex into 2 triangles forming a rectangle
-fn point_to_quad_vertices(v: Vec2, z: f32) -> [[f32; 3]; NUM_VERTICES] {
+fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; NUM_VERTICES] {
     let s = DOT_HALF_SIZE;
     [
-        [v.x - s, v.y - s, z],
-        [v.x + s, v.y - s, z],
-        [v.x + s, v.y + s, z],
-        [v.x - s, v.y - s, z],
-        [v.x + s, v.y + s, z],
-        [v.x - s, v.y + s, z],
+        [v.x - s, v.y - s, 0.0],
+        [v.x + s, v.y - s, 0.0],
+        [v.x + s, v.y + s, 0.0],
+        [v.x - s, v.y - s, 0.0],
+        [v.x + s, v.y + s, 0.0],
+        [v.x - s, v.y + s, 0.0],
     ]
 }
 
@@ -174,7 +175,7 @@ pub fn draw(
         let pos: Vec<_> = goniometer
             .history_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v, 0.0))
+            .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
         history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
@@ -182,7 +183,7 @@ pub fn draw(
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v, 10.0))
+            .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
         live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }

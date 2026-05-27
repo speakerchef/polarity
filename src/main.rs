@@ -9,9 +9,9 @@ use bevy_file_dialog::prelude::*;
 use biquad::*;
 use polarity::stereometer::{self, StereoFilter, Stereometer, StereometerKind, StereometerParams};
 use polarity::{
-    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HistoryMesh, LIVE_MAGENTA,
-    LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PointDensity, PreviewCanvas,
-    TimelineScrubber, palette,
+    AudioFileContents, CRT_P1, CRT_P7, DrawableCursor, HISTORY_MAGENTA, HistoryDensity,
+    HistoryMesh, LIVE_MAGENTA, LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio,
+    PreviewCanvas, TimelineScrubber, palette,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -488,23 +488,43 @@ fn spawn_selector_with_size<'a>(
 
 fn visual_density_on_click(
     _: On<Pointer<Click>>,
-    mut vis: Single<&mut Node, With<VisualDensityDropdown>>,
+    mut vis_phosphor: Single<
+        &mut Node,
+        (With<VisualPhosphorDropdown>, Without<VisualDensityDropdown>),
+    >,
+    mut vis_density: Single<
+        &mut Node,
+        (With<VisualDensityDropdown>, Without<VisualPhosphorDropdown>),
+    >,
 ) {
-    if vis.display != Display::Flex {
-        vis.display = Display::Flex;
+    if vis_density.display != Display::Flex {
+        vis_density.display = Display::Flex;
+        if vis_phosphor.display == Display::Flex {
+            vis_phosphor.display = Display::None;
+        }
     } else {
-        vis.display = Display::None;
+        vis_density.display = Display::None;
     }
 }
 
 fn visual_phosphor_on_click(
     _: On<Pointer<Click>>,
-    mut vis: Single<&mut Node, With<VisualPhosphorDropdown>>,
+    mut vis_phosphor: Single<
+        &mut Node,
+        (With<VisualPhosphorDropdown>, Without<VisualDensityDropdown>),
+    >,
+    mut vis_density: Single<
+        &mut Node,
+        (With<VisualDensityDropdown>, Without<VisualPhosphorDropdown>),
+    >,
 ) {
-    if vis.display != Display::Flex {
-        vis.display = Display::Flex;
+    if vis_phosphor.display != Display::Flex {
+        vis_phosphor.display = Display::Flex;
+        if vis_density.display == Display::Flex {
+            vis_density.display = Display::None;
+        }
     } else {
-        vis.display = Display::None;
+        vis_phosphor.display = Display::None;
     }
 }
 
@@ -565,7 +585,7 @@ fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                             spawn_selector_with_size(
                                 parent,
                                 palette::width::MED_SELECTOR_MENU,
-                                &Into::<String>::into(PointDensity::default()),
+                                &Into::<String>::into(LiveDensity::default()),
                                 VisualDensitySelectorMenu,
                                 fonts,
                             )
@@ -586,8 +606,7 @@ fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                                         GlobalZIndex(1),
                                     ))
                                     .with_children(|parent| {
-                                        let pd = PointDensity::all();
-                                        for level in pd {
+                                        for level in LiveDensity::all() {
                                             parent
                                                 .spawn((
                                                     Node {
@@ -629,7 +648,7 @@ fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                             spawn_selector_with_size(
                                 parent,
                                 palette::width::MED_SELECTOR_MENU,
-                                &Into::<String>::into(PointDensity::default()),
+                                &Into::<String>::into(HistoryDensity::default()),
                                 VisualPhosphorSelectorMenu,
                                 fonts,
                             )
@@ -650,8 +669,7 @@ fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
                                         GlobalZIndex(1),
                                     ))
                                     .with_children(|parent| {
-                                        let pd = PointDensity::all();
-                                        for level in pd {
+                                        for level in HistoryDensity::all() {
                                             parent
                                                 .spawn((
                                                     Node {
@@ -1139,8 +1157,7 @@ fn spawn_stereometer(
     let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; MAX_WINDOW_SIZE * NUM_VERTICES];
     let hist_colors: Vec<[f32; 4]> = (0..MAX_WINDOW_SIZE)
         .flat_map(|i| {
-            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(9.);
-            // let alpha = 0.;
+            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.);
             let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
             std::iter::repeat_n(c, 6)
         })
@@ -1172,6 +1189,7 @@ fn spawn_stereometer(
             color: LinearRgba::default(),
             alpha_mode: AlphaMode2d::Blend,
         })),
+        Transform::from_xyz(0.0, 0.0, 1.0),
     ));
     commands.spawn((
         HistoryMesh,
