@@ -17,11 +17,12 @@ pub enum StereometerKind {
     LinearLissajous,
     ScaledLissajous,
 }
-#[derive(Resource, Default, Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Resource, Default, Debug, PartialEq, Clone)]
 pub struct StereometerParams {
     pub kind: StereometerKind,
     pub live_density: LiveDensity,
     pub history_density: HistoryDensity,
+    pub color: LinearRgba,
 }
 
 #[derive(Debug, Clone)]
@@ -170,8 +171,19 @@ pub fn draw(
     live_mesh: Single<&Mesh2d, With<LiveMesh>>,
     history_mesh: Single<&Mesh2d, With<HistoryMesh>>,
     mut mesh: ResMut<Assets<Mesh>>,
+    params: Res<StereometerParams>,
 ) {
     if let Some(mut history_mesh) = mesh.get_mut(history_mesh.id()) {
+        history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
+            let color: Vec<_> = (0..MAX_WINDOW_SIZE)
+                .flat_map(|i| {
+                    let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
+                    let c = params.color.with_alpha(alpha).to_f32_array();
+                    std::iter::repeat_n(c, 6)
+                })
+                .collect();
+            color
+        });
         let pos: Vec<_> = goniometer
             .history_buffer
             .iter()
@@ -180,6 +192,10 @@ pub fn draw(
         history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
     if let Some(mut live_mesh) = mesh.get_mut(live_mesh.id()) {
+        live_mesh.insert_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            vec![params.color.to_f32_array(); NUM_VERTICES * MAX_WINDOW_SIZE],
+        );
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
@@ -193,6 +209,7 @@ pub fn spawn_stereometer(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<CustomMaterial>>,
+    params: Res<StereometerParams>,
 ) {
     let mut live_mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::TriangleList,
@@ -206,7 +223,7 @@ pub fn spawn_stereometer(
     let hist_zeros: Vec<[f32; 3]> = vec![[0., 0., 0.]; MAX_WINDOW_SIZE * NUM_VERTICES];
     let hist_colors: Vec<[f32; 4]> = (0..MAX_WINDOW_SIZE)
         .flat_map(|i| {
-            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.);
+            let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
             let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
             std::iter::repeat_n(c, 6)
         })
@@ -214,7 +231,8 @@ pub fn spawn_stereometer(
     live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
     live_mesh.insert_attribute(
         Mesh::ATTRIBUTE_COLOR,
-        vec![LIVE_MAGENTA.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
+        // vec![LIVE_MAGENTA.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
+        vec![params.color.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
