@@ -5,7 +5,7 @@ use bevy::sprite_render::Material2dPlugin;
 use bevy_file_dialog::prelude::*;
 use polarity::stereometer::{self, StereometerParams};
 use polarity::ui::control_panel::{file_loaded, spawn_control_panel};
-use polarity::ui::generator_visual::{color_value_submission, watch_color_input};
+use polarity::ui::generator_visual::watch_color_input_edit;
 use polarity::{
     AudioFileContents, CRT_P1, CRT_P7, CustomMaterial, DurationText, FontBlock, PlayingAudio,
     PreviewCanvas, TimelineScrubber, palette,
@@ -62,8 +62,7 @@ fn main() {
                 .chain()
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
-        .add_systems(Update, watch_color_input)
-        .add_observer(color_value_submission)
+        .add_systems(Update, watch_color_input_edit)
         .run();
 }
 

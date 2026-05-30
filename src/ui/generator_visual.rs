@@ -121,6 +121,7 @@ pub fn spawn_color_input_picker<'a, T: Component>(
             display: Display::Flex,
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
+            height: px(palette::height::INNER),
             border: UiRect::all(px(1)),
             width: px(sz),
             ..Default::default()
@@ -144,7 +145,7 @@ pub fn spawn_color_input_picker<'a, T: Component>(
                 TextLayout::no_wrap(),
                 TextFont {
                     font: font.text.clone(),
-                    font_size: FontSize::Px(palette::font_size::ICON),
+                    font_size: FontSize::Px(palette::font_size::BIG),
                     weight: FontWeight(palette::font_weight::BODY),
                     ..default()
                 },
@@ -156,67 +157,47 @@ pub fn spawn_color_input_picker<'a, T: Component>(
     parent_spawner
 }
 
-#[derive(EntityEvent)]
-pub struct ColorEditEvent {
-    entity: Entity,
-}
-
 #[derive(Component)]
 pub struct ColorPicker;
 
-pub fn watch_color_input(
-    mut commands: Commands,
+pub fn watch_color_input_edit(
     mut input_focus: ResMut<InputFocus>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     color_picker: Query<&ColorPicker>,
+    mut paramset: ParamSet<(
+        Single<&mut EditableText, With<RedColorSelector>>,
+        Single<&mut EditableText, With<GreenColorSelector>>,
+        Single<&mut EditableText, With<BlueColorSelector>>,
+    )>,
+    mut params: ResMut<StereometerParams>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Enter)
         && let Some(focused_entity) = input_focus.get()
     {
         input_focus.clear();
         if color_picker.get(focused_entity).is_ok() {
-            commands.trigger(ColorEditEvent {
-                entity: focused_entity,
-            });
+            if let Ok(mut value) = paramset.p0().value().to_string().parse::<i128>() {
+                value = value.clamp(0, 255);
+                let red = value as f32 / u8::MAX as f32;
+                params.color.red = red;
+                paramset.p0().editor_mut().set_text(&value.to_string());
+                info!("Entered red: {}", paramset.p0().value());
+            }
+            if let Ok(mut value) = paramset.p1().value().to_string().parse::<i128>() {
+                value = value.clamp(0, 255);
+                let green = value as f32 / u8::MAX as f32;
+                params.color.green = green;
+                paramset.p1().editor_mut().set_text(&value.to_string());
+                info!("Entered green: {}", paramset.p1().value());
+            }
+            if let Ok(mut value) = paramset.p2().value().to_string().parse::<i128>() {
+                value = value.clamp(0, 255);
+                let blue = value as f32 / u8::MAX as f32;
+                params.color.blue = blue;
+                paramset.p2().editor_mut().set_text(&value.to_string());
+                info!("Entered blue: {}", paramset.p2().value());
+            }
         }
-    }
-}
-
-pub fn color_value_submission(
-    e: On<ColorEditEvent>,
-    mut paramset: ParamSet<(
-        Query<&mut EditableText, With<RedColorSelector>>,
-        Query<&mut EditableText, With<GreenColorSelector>>,
-        Query<&mut EditableText, With<BlueColorSelector>>,
-    )>,
-    mut params: ResMut<StereometerParams>,
-) {
-    if let Ok(mut v) = paramset.p0().get_mut(e.entity)
-        && let Ok(mut value) = v.value().to_string().parse::<i128>()
-    {
-        value = value.clamp(0, 255);
-        let red = value as f32 / u8::MAX as f32;
-        params.color.red = red;
-        v.editor_mut().set_text(&value.to_string());
-        info!("Entered red: {}", v.value());
-    }
-    if let Ok(mut v) = paramset.p1().get_mut(e.entity)
-        && let Ok(mut value) = v.value().to_string().parse::<i128>()
-    {
-        value = value.clamp(0, 255);
-        let green = value as f32 / u8::MAX as f32;
-        params.color.green = green;
-        v.editor_mut().set_text(&value.to_string());
-        info!("Entered green: {}", v.value());
-    }
-    if let Ok(mut v) = paramset.p2().get_mut(e.entity)
-        && let Ok(mut value) = v.value().to_string().parse::<i128>()
-    {
-        value = value.clamp(0, 255);
-        let blue = value as f32 / u8::MAX as f32;
-        params.color.blue = blue;
-        v.editor_mut().set_text(&value.to_string());
-        info!("Entered blue: {}", v.value());
     }
 }
 

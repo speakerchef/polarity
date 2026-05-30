@@ -224,14 +224,13 @@ pub fn spawn_stereometer(
     let hist_colors: Vec<[f32; 4]> = (0..MAX_WINDOW_SIZE)
         .flat_map(|i| {
             let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-            let c = HISTORY_MAGENTA.with_alpha(alpha).to_f32_array();
-            std::iter::repeat_n(c, 6)
+            let c = params.color.with_alpha(alpha).to_f32_array();
+            std::iter::repeat_n(c, NUM_VERTICES)
         })
         .collect();
     live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, live_zeros);
     live_mesh.insert_attribute(
         Mesh::ATTRIBUTE_COLOR,
-        // vec![LIVE_MAGENTA.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
         vec![params.color.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
     );
     history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
