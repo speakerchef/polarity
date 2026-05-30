@@ -1,14 +1,12 @@
 use crate::{
     ANIM_SCALE_FACTOR, AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
-    LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas,
-    RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
+    FilteringMode, LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio,
+    PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
+use biquad::*;
 use biquad::{Biquad, Coefficients, DirectForm1};
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use std::collections::VecDeque;
 #[derive(Resource, Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub enum StereometerKind {
     #[default]
@@ -17,12 +15,40 @@ pub enum StereometerKind {
     LinearLissajous,
     ScaledLissajous,
 }
+
+#[derive(Resource, Default, Debug, PartialEq, Clone)]
+pub enum StereometerInputMode {
+    #[default]
+    FullSpectrum,
+    MultiBand,
+}
+
+impl From<StereometerInputMode> for String {
+    fn from(value: StereometerInputMode) -> Self {
+        match value {
+            StereometerInputMode::FullSpectrum => "Full Spectrum".to_string(),
+            StereometerInputMode::MultiBand => "Multi-Band".to_string(),
+        }
+    }
+}
+impl std::fmt::Display for StereometerInputMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StereometerInputMode::FullSpectrum => write!(f, "Full Spectrum"),
+            StereometerInputMode::MultiBand => write!(f, "Multi-Band"),
+        }
+    }
+}
+
 #[derive(Resource, Default, Debug, PartialEq, Clone)]
 pub struct StereometerParams {
     pub kind: StereometerKind,
+    pub input_mode: StereometerInputMode,
+    pub filtering_mode: FilteringMode,
     pub live_density: LiveDensity,
     pub trace_density: TraceDensity,
     pub color: LinearRgba,
+    pub freq: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +76,7 @@ pub struct Stereometer {
     pub id: Entity,
     pub last_sample_idx: usize,
 
-    pub filterbank: Option<HashMap<Arc<str>, StereoFilter>>,
+    pub filterbank: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -98,6 +124,32 @@ pub fn update(
     let pos = playing_audio.position().as_secs_f64() % audio.duration;
     let mut last_idx = goniometer.last_sample_idx;
     let cur_idx = (audio.sample_rate as f64 * pos) as usize;
+    let lpf_coeffs = Coefficients::<f32>::from_params(
+        Type::LowPass,
+        audio.sample_rate.hz(),
+        params.freq.clamp(1, 20000).hz(),
+        Q_BUTTERWORTH_F32,
+    )
+    .unwrap();
+    let bpf_coeffs = Coefficients::<f32>::from_params(
+        Type::BandPass,
+        audio.sample_rate.hz(),
+        params.freq.clamp(1, 20000).hz(),
+        Q_BUTTERWORTH_F32,
+    )
+    .unwrap();
+    let hpf_coeffs = Coefficients::<f32>::from_params(
+        Type::HighPass,
+        audio.sample_rate.hz(),
+        params.freq.clamp(1, 20000).hz(),
+        Q_BUTTERWORTH_F32,
+    )
+    .unwrap();
+    let mut filters = (
+        StereoFilter::new(lpf_coeffs),
+        StereoFilter::new(bpf_coeffs),
+        StereoFilter::new(hpf_coeffs),
+    );
 
     if cur_idx > last_idx {
         let frame_size = (cur_idx - last_idx) * audio.num_channels;
@@ -113,6 +165,15 @@ pub fn update(
         for frame in trace_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
+
+            //filtering
+            let (left, right) = match params.filtering_mode {
+                FilteringMode::Off => (left, right),
+                FilteringMode::Lpf => filters.0.run(left, right),
+                FilteringMode::Bpf => filters.1.run(left, right),
+                FilteringMode::Hpf => filters.2.run(left, right),
+            };
+
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             goniometer.trace_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
@@ -136,7 +197,15 @@ pub fn update(
         .map(|frame| {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&frame[0]);
-            // let (left, right) = goniometer.filterbank.0.run(left, right); // filtered
+
+            // Filtering
+            let (left, right) = match params.filtering_mode {
+                FilteringMode::Off => (left, right),
+                FilteringMode::Lpf => filters.0.run(left, right),
+                FilteringMode::Bpf => filters.1.run(left, right),
+                FilteringMode::Hpf => filters.2.run(left, right),
+            };
+
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,

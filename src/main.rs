@@ -5,6 +5,7 @@ use bevy::sprite_render::Material2dPlugin;
 use bevy_file_dialog::prelude::*;
 use polarity::stereometer::{self, StereometerParams};
 use polarity::ui::control_panel::{file_loaded, spawn_control_panel};
+use polarity::ui::generator_filtering::{freq_amt_text_update, freq_slider_update};
 use polarity::ui::generator_visual::watch_color_input_edit;
 use polarity::ui::postfx_bloom::{bloom_slider_update, bloom_text_update};
 use polarity::{
@@ -16,7 +17,6 @@ use polarity::{
 enum GeneratorChoice {
     #[default]
     Stereometer,
-    Oscilloscope,
 }
 
 fn main() {
@@ -65,6 +65,7 @@ fn main() {
         )
         .add_systems(Update, watch_color_input_edit)
         .add_systems(Update, (bloom_slider_update, bloom_text_update))
+        .add_systems(Update, (freq_slider_update, freq_amt_text_update))
         .run();
 }
 

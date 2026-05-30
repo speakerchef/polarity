@@ -41,6 +41,8 @@ pub fn spawn_textbox<'a, T: Component>(
     sz: f32,
     font: &FontBlock,
     marker: T,
+    vis_width: f32,
+    max_char: usize,
 ) -> bevy::prelude::EntityCommands<'a> {
     let mut parent_spawner = parent.spawn((
         Node {
@@ -62,8 +64,8 @@ pub fn spawn_textbox<'a, T: Component>(
             parent.spawn((
                 marker,
                 EditableText {
-                    visible_width: Some(4.),
-                    max_characters: Some(4),
+                    visible_width: Some(vis_width),
+                    max_characters: Some(max_char),
                     allow_newlines: false,
 
                     ..Default::default()
@@ -71,7 +73,7 @@ pub fn spawn_textbox<'a, T: Component>(
                 TextLayout::no_wrap(),
                 TextFont {
                     font: font.text.clone(),
-                    font_size: FontSize::Px(palette::font_size::BIG),
+                    font_size: FontSize::Px(palette::font_size::MED),
                     weight: FontWeight(palette::font_weight::BODY),
                     ..default()
                 },
@@ -122,6 +124,7 @@ pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                                 .spawn(horizontal_slider(
                                     PostFxBloomAmtSlider,
                                     PostFxBloomSliderThumb,
+                                    0.1,
                                 ))
                                 .observe(slider_self_update);
                             parent
@@ -137,6 +140,8 @@ pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                                         palette::width::SMALL_SELECTOR_MENU,
                                         fonts,
                                         PostFxBloomAmtValue,
+                                        4.,
+                                        4,
                                     );
                                     spawn_body_text(parent, "%", NullComponent, fonts);
                                 });
@@ -168,32 +173,32 @@ pub fn bloom_text_update(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn bloom_slider_update(
     sliders: Query<
-        (Entity, &SliderValue, &SliderRange, &SliderDragState),
+        (Entity, &SliderValue, &SliderRange),
         (
             Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
             With<PostFxBloomAmtSlider>,
         ),
     >,
-    mut thumbs: Query<
-        (&mut Node, &mut BackgroundColor, Has<PostFxBloomSliderThumb>),
-        Without<PostFxBloomAmtSlider>,
-    >,
+    mut thumbs: Query<(&mut Node, Has<PostFxBloomSliderThumb>), Without<PostFxBloomAmtSlider>>,
     children: Query<&Children>,
-    mut amt_text: Single<&mut Text, (With<PostFxBloomAmtValue>)>,
+    mut amt_text: Single<&mut Text, With<PostFxBloomAmtValue>>,
     mut params: ResMut<StereometerParams>,
 ) {
-    for (slider_ent, value, range, drag_state) in sliders.iter() {
+    for (slider_ent, value, range) in sliders.iter() {
         for child in children.iter_descendants(slider_ent) {
-            if let Ok((mut thumb_node, mut thumb_bg, is_thumb)) = thumbs.get_mut(child)
+            if let Ok((mut thumb_node, is_thumb)) = thumbs.get_mut(child)
                 && is_thumb
             {
                 amt_text.0 = format!("{:.1}", value.0);
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
                 info!("Alpha Raw: {}", value.0);
-                params.color = params.color.with_alpha((value.0 / 100.) * 10.0);
+                params.color = params
+                    .color
+                    .with_alpha(((value.0 / 100.) * 10.0).clamp(1.0, 10.0));
             }
         }
     }

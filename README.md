@@ -17,7 +17,7 @@
 - [ ] Stereometer Generator option
   - [x] 4 modes/styles: Bipolar, Scaled bipolar, lissajous, scaled lissajous
   - [ ] Controllable LPF, BPF, HPF filters
-  - [ ] 3-band mode and band-isolated rendering via above filters
+  - [ ] 3-band mode and band-isolated rendering via above filters (In Progress)
   - [ ] per-band color.
   - [x] Single color
   - [x] Tunable point density for primary and trace generators
@@ -41,5 +41,5 @@ Polarity is designed and developed by Sohan Nair, a.k.a speakerchef.
 
 The source code is licensed under GPLv3. See [LICENSE](./LICENSE).
 
-The Polarity name, logo, and visual identity are reserved by the author. See [TRADEMARKS.md](./
-TRADEMARKS.md).
+The Polarity name, logo, and visual identity are reserved by the author. See [TRADEMARKS](./
+TRADEMARKS.md)

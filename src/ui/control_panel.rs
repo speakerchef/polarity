@@ -1,3 +1,5 @@
+use crate::ui::generator_filtering::{FilterSubmenu, spawn_filtering_submenu};
+use crate::ui::generator_input::{InputSubmenu, spawn_input_submenu};
 use crate::ui::generator_mode::{ModeSubmenu, spawn_mode_submenu};
 use crate::ui::generator_visual::VisualSubmenu;
 use crate::ui::postfx_bloom::{BloomSubmenu, spawn_bloom_submenu};
@@ -35,6 +37,8 @@ pub struct MotionSubmenu;
 #[derive(Component, Clone)]
 pub enum DropdownItem {
     // GENERATOR
+    Input,
+    Filtering,
     Mode,
     Motion,
     Visual,
@@ -45,6 +49,8 @@ pub enum DropdownItem {
 impl From<DropdownItem> for String {
     fn from(value: DropdownItem) -> Self {
         match value {
+            DropdownItem::Input => "INPUT".to_string(),
+            DropdownItem::Filtering => "FILTERING".to_string(),
             DropdownItem::Mode => "MODE".to_string(),
             DropdownItem::Motion => "MOTION".to_string(),
             DropdownItem::Visual => "VISUAL".to_string(),
@@ -187,6 +193,8 @@ fn spawn_submenu_items(
         .observe(header_submenu_onclick);
 
     match dropdownitem {
+        DropdownItem::Input => spawn_input_submenu(parent, fonts),
+        DropdownItem::Filtering => spawn_filtering_submenu(parent, fonts),
         DropdownItem::Mode => spawn_mode_submenu(parent),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
         DropdownItem::Bloom => spawn_bloom_submenu(parent, fonts),
@@ -346,9 +354,10 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 parent,
                 fonts,
                 &[
+                    DropdownItem::Input,
+                    DropdownItem::Filtering,
                     DropdownItem::Mode,
                     DropdownItem::Visual,
-                    DropdownItem::Motion,
                 ],
                 GeneratorSubmenu,
             );
@@ -442,11 +451,11 @@ pub fn file_loaded(
         let hpf_coeffs =
             Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
-        stereometer.filterbank = Some(HashMap::from([
-            ("lpf".into(), StereoFilter::new(lpf_coeffs)),
-            ("bpf".into(), StereoFilter::new(bpf_coeffs)),
-            ("hpf".into(), StereoFilter::new(hpf_coeffs)),
-        ]));
+        stereometer.filterbank = Some((
+            StereoFilter::new(lpf_coeffs),
+            StereoFilter::new(bpf_coeffs),
+            StereoFilter::new(hpf_coeffs),
+        ));
 
         commands.spawn((
             PlayingAudio,
@@ -465,37 +474,49 @@ pub fn file_loaded(
 pub fn header_submenu_onclick(
     e: On<Pointer<Click>>,
     mut dropdown_items: Query<&DropdownItem>,
-    mut paramset: ParamSet<(
+    mut ps: ParamSet<(
+        Single<&mut Node, With<InputSubmenu>>,
+        Single<&mut Node, With<FilterSubmenu>>,
         Single<&mut Node, With<ModeSubmenu>>,
-        // mut motion_submenu: Single<&mut Visibility, With<MotionSubmenu>>,
         Single<&mut Node, With<VisualSubmenu>>,
         Single<&mut Node, With<BloomSubmenu>>,
     )>,
 ) {
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
         match item {
-            DropdownItem::Mode => {
-                info!("Mode");
-                if paramset.p0().display == Display::Flex {
-                    paramset.p0().display = Display::None;
+            DropdownItem::Input => {
+                if ps.p0().display == Display::Flex {
+                    ps.p0().display = Display::None;
                 } else {
-                    paramset.p0().display = Display::Flex;
+                    ps.p0().display = Display::Flex;
+                }
+            }
+            DropdownItem::Filtering => {
+                if ps.p1().display == Display::Flex {
+                    ps.p1().display = Display::None;
+                } else {
+                    ps.p1().display = Display::Flex;
+                }
+            }
+            DropdownItem::Mode => {
+                if ps.p2().display == Display::Flex {
+                    ps.p2().display = Display::None;
+                } else {
+                    ps.p2().display = Display::Flex;
                 }
             }
             DropdownItem::Visual => {
-                info!("Visual");
-                if paramset.p1().display == Display::Flex {
-                    paramset.p1().display = Display::None;
+                if ps.p3().display == Display::Flex {
+                    ps.p3().display = Display::None;
                 } else {
-                    paramset.p1().display = Display::Flex;
+                    ps.p3().display = Display::Flex;
                 }
             }
             DropdownItem::Bloom => {
-                info!("Bloom");
-                if paramset.p2().display == Display::Flex {
-                    paramset.p2().display = Display::None;
+                if ps.p4().display == Display::Flex {
+                    ps.p4().display = Display::None;
                 } else {
-                    paramset.p2().display = Display::Flex;
+                    ps.p4().display = Display::Flex;
                 }
             }
             _ => info!("Not implemented this submenu item"),

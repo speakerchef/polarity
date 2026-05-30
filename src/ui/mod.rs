@@ -1,10 +1,12 @@
 use crate::{FontBlock, palette, ui::interactions::*};
 use bevy::{
     prelude::*,
-    ui_widgets::{Slider, SliderRange, SliderThumb, SliderValue, TrackClick},
+    ui_widgets::{Slider, SliderRange, SliderStep, SliderThumb, SliderValue, TrackClick},
 };
 
 pub mod control_panel;
+pub mod generator_filtering;
+pub mod generator_input;
 pub mod generator_mode;
 pub mod generator_visual;
 pub mod interactions;
@@ -65,7 +67,11 @@ pub fn spawn_selector_with_size<'a>(
     parent_spawner
 }
 
-pub fn horizontal_slider(slider_marker: impl Component, thumb: impl Component) -> impl Bundle {
+pub fn horizontal_slider(
+    slider_marker: impl Component,
+    thumb: impl Component,
+    step_amt: f32,
+) -> impl Bundle {
     (
         Node {
             display: Display::Flex,
@@ -73,7 +79,7 @@ pub fn horizontal_slider(slider_marker: impl Component, thumb: impl Component) -
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Stretch,
             margin: UiRect::horizontal(px(8)).with_left(px(16)),
-            flex_grow: 1.0,
+            width: px(200.),
             ..default()
         },
         slider_marker,
@@ -81,13 +87,14 @@ pub fn horizontal_slider(slider_marker: impl Component, thumb: impl Component) -
             track_click: TrackClick::Snap,
             ..Default::default()
         },
-        SliderValue(50.0),
+        SliderValue(0.0),
         SliderRange::new(0.0, 100.0),
+        SliderStep(step_amt),
         Children::spawn((
             // slider track
             Spawn((
                 Node {
-                    height: px(4),
+                    height: px(6),
                     border: UiRect::all(px(1)),
                     border_radius: BorderRadius::all(px(3)),
                     ..default()

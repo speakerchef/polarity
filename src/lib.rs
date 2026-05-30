@@ -196,3 +196,33 @@ impl Material2d for CustomMaterial {
         self.alpha_mode
     }
 }
+
+#[derive(Resource, Default, Debug, PartialEq, Clone)]
+pub enum FilteringMode {
+    #[default]
+    Off,
+    Lpf,
+    Bpf,
+    Hpf,
+}
+
+impl From<FilteringMode> for String {
+    fn from(value: FilteringMode) -> Self {
+        match value {
+            FilteringMode::Off => "Off".to_string(),
+            FilteringMode::Lpf => "Low-Pass".to_string(),
+            FilteringMode::Bpf => "Band-Pass".to_string(),
+            FilteringMode::Hpf => "High-Pass".to_string(),
+        }
+    }
+}
+impl std::fmt::Display for FilteringMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilteringMode::Off => write!(f, "Off"),
+            FilteringMode::Lpf => write!(f, "Low-Pass"),
+            FilteringMode::Bpf => write!(f, "Band-Pass"),
+            FilteringMode::Hpf => write!(f, "High-Pass"),
+        }
+    }
+}
