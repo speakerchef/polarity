@@ -1,6 +1,6 @@
 use crate::{
-    FilteringMode, FontBlock, NullComponent, palette,
-    stereometer::{StereometerInputMode, StereometerParams},
+    AudioFileContents, DrawableCursor, FilteringMode, FontBlock, NullComponent, palette,
+    stereometer::{StereoFilter, Stereometer, StereometerParams},
     ui::{
         horizontal_slider, interactions::*, postfx_bloom::spawn_textbox, spawn_body_text,
         spawn_selector_with_size,
@@ -15,6 +15,7 @@ use bevy::{
         slider_self_update,
     },
 };
+use biquad::*;
 
 #[derive(Component, Clone)]
 pub struct FilterSubmenu;
@@ -242,7 +243,6 @@ pub fn freq_slider_update(
     mut thumbs: Query<(&mut Node, Has<FilterFreqThumb>), Without<FilterFreqSlider>>,
     children: Query<&Children>,
     mut amt_text: Single<&mut Text, With<FilterFreqAmt>>,
-    mut params: ResMut<StereometerParams>,
 ) {
     for (slider_ent, value, range) in sliders.iter() {
         for child in children.iter_descendants(slider_ent) {
@@ -252,8 +252,52 @@ pub fn freq_slider_update(
                 amt_text.0 = format!("{}", (value.0 * 200.0).round());
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
-                params.freq = (value.0.round() * 200.0) as u32;
             }
         }
+    }
+}
+
+pub fn update_filter_freq(
+    mut params: ResMut<StereometerParams>,
+    audio: Single<&AudioFileContents>,
+    mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
+    text: Single<&Text, With<FilterFreqAmt>>,
+) {
+    if let Ok(val) = text.0.parse::<f32>()
+        && params.freq != val as u32
+    {
+        params.freq = val as u32;
+        info!("{}", params.freq);
+        let lpf_coeffs = Coefficients::<f32>::from_params(
+            Type::LowPass,
+            audio.sample_rate.hz(),
+            params.freq.clamp(1, 20000).hz(),
+            Q_BUTTERWORTH_F32,
+        )
+        .unwrap();
+        let bpf_coeffs = Coefficients::<f32>::from_params(
+            Type::BandPass,
+            audio.sample_rate.hz(),
+            params.freq.clamp(1, 20000).hz(),
+            Q_BUTTERWORTH_F32,
+        )
+        .unwrap();
+        let hpf_coeffs = Coefficients::<f32>::from_params(
+            Type::HighPass,
+            audio.sample_rate.hz(),
+            params.freq.clamp(1, 20000).hz(),
+            Q_BUTTERWORTH_F32,
+        )
+        .unwrap();
+        goniometer.live_filterbank = Some((
+            StereoFilter::new(lpf_coeffs),
+            StereoFilter::new(bpf_coeffs),
+            StereoFilter::new(hpf_coeffs),
+        ));
+        goniometer.history_filterbank = Some((
+            StereoFilter::new(lpf_coeffs),
+            StereoFilter::new(bpf_coeffs),
+            StereoFilter::new(hpf_coeffs),
+        ));
     }
 }

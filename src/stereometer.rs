@@ -4,7 +4,6 @@ use crate::{
     PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
-use biquad::*;
 use biquad::{Biquad, Coefficients, DirectForm1};
 use std::collections::VecDeque;
 #[derive(Resource, Debug, Clone, Default, Hash, Eq, PartialEq)]
@@ -76,7 +75,8 @@ pub struct Stereometer {
     pub id: Entity,
     pub last_sample_idx: usize,
 
-    pub filterbank: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub live_filterbank: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub history_filterbank: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -124,32 +124,6 @@ pub fn update(
     let pos = playing_audio.position().as_secs_f64() % audio.duration;
     let mut last_idx = goniometer.last_sample_idx;
     let cur_idx = (audio.sample_rate as f64 * pos) as usize;
-    let lpf_coeffs = Coefficients::<f32>::from_params(
-        Type::LowPass,
-        audio.sample_rate.hz(),
-        params.freq.clamp(1, 20000).hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .unwrap();
-    let bpf_coeffs = Coefficients::<f32>::from_params(
-        Type::BandPass,
-        audio.sample_rate.hz(),
-        params.freq.clamp(1, 20000).hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .unwrap();
-    let hpf_coeffs = Coefficients::<f32>::from_params(
-        Type::HighPass,
-        audio.sample_rate.hz(),
-        params.freq.clamp(1, 20000).hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .unwrap();
-    let mut filters = (
-        StereoFilter::new(lpf_coeffs),
-        StereoFilter::new(bpf_coeffs),
-        StereoFilter::new(hpf_coeffs),
-    );
 
     if cur_idx > last_idx {
         let frame_size = (cur_idx - last_idx) * audio.num_channels;
@@ -169,9 +143,24 @@ pub fn update(
             //filtering
             let (left, right) = match params.filtering_mode {
                 FilteringMode::Off => (left, right),
-                FilteringMode::Lpf => filters.0.run(left, right),
-                FilteringMode::Bpf => filters.1.run(left, right),
-                FilteringMode::Hpf => filters.2.run(left, right),
+                FilteringMode::Lpf => goniometer
+                    .history_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .0
+                    .run(left, right),
+                FilteringMode::Bpf => goniometer
+                    .history_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .1
+                    .run(left, right),
+                FilteringMode::Hpf => goniometer
+                    .history_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .2
+                    .run(left, right),
             };
 
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
@@ -201,9 +190,24 @@ pub fn update(
             // Filtering
             let (left, right) = match params.filtering_mode {
                 FilteringMode::Off => (left, right),
-                FilteringMode::Lpf => filters.0.run(left, right),
-                FilteringMode::Bpf => filters.1.run(left, right),
-                FilteringMode::Hpf => filters.2.run(left, right),
+                FilteringMode::Lpf => goniometer
+                    .live_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .0
+                    .run(left, right),
+                FilteringMode::Bpf => goniometer
+                    .live_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .1
+                    .run(left, right),
+                FilteringMode::Hpf => goniometer
+                    .live_filterbank
+                    .as_mut()
+                    .unwrap()
+                    .2
+                    .run(left, right),
             };
 
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
@@ -313,7 +317,8 @@ pub fn spawn_stereometer(
             trace_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
             last_sample_idx: 0,
             id: goni_id,
-            filterbank: None,
+            live_filterbank: None,
+            history_filterbank: None,
         },
         DrawableCursor,
     ));

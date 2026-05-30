@@ -5,13 +5,12 @@ use crate::ui::generator_visual::VisualSubmenu;
 use crate::ui::postfx_bloom::{BloomSubmenu, spawn_bloom_submenu};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::audio::{Source, prelude::*};
 use bevy::prelude::*;
 
-use crate::stereometer::{StereoFilter, Stereometer, StereometerKind, StereometerParams};
+use crate::stereometer::{StereoFilter, Stereometer};
 use crate::ui::generator_visual::spawn_visual_submenu;
 use crate::{AudioFileContents, FontBlock, palette, ui::interactions::*};
 use crate::{DurationText, PlayingAudio, TimelineScrubber};
@@ -27,9 +26,6 @@ struct PostFxRootHeader;
 
 #[derive(Component, Clone)]
 struct PostFxSubmenu;
-
-#[derive(Component, Clone)]
-struct ModifierRootHeader;
 
 #[derive(Component, Clone)]
 pub struct MotionSubmenu;
@@ -451,7 +447,12 @@ pub fn file_loaded(
         let hpf_coeffs =
             Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
-        stereometer.filterbank = Some((
+        stereometer.live_filterbank = Some((
+            StereoFilter::new(lpf_coeffs),
+            StereoFilter::new(bpf_coeffs),
+            StereoFilter::new(hpf_coeffs),
+        ));
+        stereometer.history_filterbank = Some((
             StereoFilter::new(lpf_coeffs),
             StereoFilter::new(bpf_coeffs),
             StereoFilter::new(hpf_coeffs),
