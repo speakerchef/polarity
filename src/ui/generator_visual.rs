@@ -3,12 +3,8 @@ use crate::palette;
 use crate::stereometer::StereometerParams;
 use crate::ui::interactions::*;
 use crate::ui::spawn_body_text;
-use crate::{FontBlock, HistoryDensity};
-use bevy::ecs::observer;
-use bevy::ecs::relationship::RelationshipSourceCollection;
-use bevy::input;
-use bevy::input::keyboard::KeyboardInput;
-use bevy::input_focus;
+use crate::ui::spawn_selector_with_size;
+use crate::{FontBlock, TraceDensity};
 use bevy::input_focus::AutoFocus;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
@@ -49,19 +45,19 @@ pub struct VisualDensitySelectorMenu;
 pub struct VisualDensityDropdown;
 
 #[derive(Component, Clone)]
-pub struct VisualPhosphorSelectorMenu;
+pub struct VisualTraceSelectorMenu;
 
 #[derive(Component, Clone)]
-pub struct VisualPhosphorDropdown;
+pub struct VisualTraceDropdown;
 
 #[derive(Component, Clone)]
 pub struct VisualDensitySelectorText;
 
 #[derive(Component, Clone)]
-pub struct VisualPhosphorMarker;
+pub struct VisualTraceMarker;
 
 #[derive(Component, Clone)]
-pub struct VisualPhosphorText;
+pub struct VisualTraceText;
 
 #[derive(Component, Clone)]
 pub struct VisualColorMarker;
@@ -75,43 +71,9 @@ pub struct VisualColorSelectorMenu;
 #[derive(Component, Clone)]
 pub struct VisualColorPicker;
 
-pub fn spawn_selector_with_size<'a>(
-    parent: &'a mut ChildSpawnerCommands,
-    sz: f32,
-    text: &str,
-    marker: impl Component + Clone,
-    font: &FontBlock,
-) -> bevy::prelude::EntityCommands<'a> {
-    let mut parent_spawner = parent.spawn((Node {
-        display: Display::Flex,
-        flex_direction: FlexDirection::Column,
-        width: px(sz),
-        ..Default::default()
-    },));
-    parent_spawner.with_children(|parent| {
-        parent
-            .spawn((
-                Node {
-                    display: Display::Flex,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    height: px(palette::height::SLIDER_ROW_ITEM),
-                    width: percent(100.),
-                    border: UiRect::all(px(1)),
-                    ..Default::default()
-                },
-                BorderColor::all(palette::BORDER),
-                BackgroundColor(palette::VOID),
-            ))
-            .with_children(|parent| spawn_body_text(parent, text, marker, font))
-            .observe(on_hover_void)
-            .observe(on_leave_void);
-    });
-    parent_spawner
-}
-
 pub fn spawn_color_input_picker<'a, T: Component>(
     parent: &'a mut ChildSpawnerCommands,
+    default_text: &str,
     sz: f32,
     marker: T,
     font: &FontBlock,
@@ -142,6 +104,7 @@ pub fn spawn_color_input_picker<'a, T: Component>(
 
                     ..Default::default()
                 },
+                Text::new(default_text),
                 TextLayout::no_wrap(),
                 TextFont {
                     font: font.text.clone(),
@@ -203,48 +166,36 @@ pub fn watch_color_input_edit(
 
 pub fn visual_density_on_click(
     _: On<Pointer<Click>>,
-    mut vis_phosphor: Single<
-        &mut Node,
-        (With<VisualPhosphorDropdown>, Without<VisualDensityDropdown>),
-    >,
-    mut vis_density: Single<
-        &mut Node,
-        (With<VisualDensityDropdown>, Without<VisualPhosphorDropdown>),
-    >,
+    mut vis_trace: Single<&mut Node, (With<VisualTraceDropdown>, Without<VisualDensityDropdown>)>,
+    mut vis_density: Single<&mut Node, (With<VisualDensityDropdown>, Without<VisualTraceDropdown>)>,
 ) {
     if vis_density.display != Display::Flex {
         vis_density.display = Display::Flex;
-        if vis_phosphor.display == Display::Flex {
-            vis_phosphor.display = Display::None;
+        if vis_trace.display == Display::Flex {
+            vis_trace.display = Display::None;
         }
     } else {
         vis_density.display = Display::None;
     }
 }
 
-pub fn visual_phosphor_on_click(
+pub fn visual_trace_on_click(
     _: On<Pointer<Click>>,
-    mut vis_phosphor: Single<
-        &mut Node,
-        (With<VisualPhosphorDropdown>, Without<VisualDensityDropdown>),
-    >,
-    mut vis_density: Single<
-        &mut Node,
-        (With<VisualDensityDropdown>, Without<VisualPhosphorDropdown>),
-    >,
+    mut vis_trace: Single<&mut Node, (With<VisualTraceDropdown>, Without<VisualDensityDropdown>)>,
+    mut vis_density: Single<&mut Node, (With<VisualDensityDropdown>, Without<VisualTraceDropdown>)>,
 ) {
-    if vis_phosphor.display != Display::Flex {
-        vis_phosphor.display = Display::Flex;
+    if vis_trace.display != Display::Flex {
+        vis_trace.display = Display::Flex;
         if vis_density.display == Display::Flex {
             vis_density.display = Display::None;
         }
     } else {
-        vis_phosphor.display = Display::None;
+        vis_trace.display = Display::None;
     }
 }
 
-fn spawn_history_density_options(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
-    for level in HistoryDensity::all() {
+fn spawn_trace_density_options(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+    for level in TraceDensity::all() {
         parent
             .spawn((
                 Node {
@@ -263,16 +214,16 @@ fn spawn_history_density_options(parent: &mut ChildSpawnerCommands, fonts: &Font
                 spawn_body_text(
                     parent,
                     &Into::<String>::into(level.clone()),
-                    VisualPhosphorText,
+                    VisualTraceText,
                     fonts,
                 );
             })
             .observe(
                 |_: On<Pointer<Click>>,
                  mut stereo_params: ResMut<StereometerParams>,
-                 mut txt: Single<&mut Text, With<VisualPhosphorSelectorMenu>>| {
+                 mut txt: Single<&mut Text, With<VisualTraceSelectorMenu>>| {
                     info!("clicked");
-                    stereo_params.history_density = level.clone();
+                    stereo_params.trace_density = level.clone();
                     txt.0 = Into::<String>::into(level.clone());
                 },
             )
@@ -383,18 +334,18 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                             .observe(visual_density_on_click);
                         }
                         2 => {
-                            spawn_body_text(parent, "Phosphor", VisualPhosphorMarker, fonts);
+                            spawn_body_text(parent, "Trace", VisualTraceMarker, fonts);
                             spawn_selector_with_size(
                                 parent,
                                 palette::width::MED_SELECTOR_MENU,
-                                &Into::<String>::into(HistoryDensity::default()),
-                                VisualPhosphorSelectorMenu,
+                                &Into::<String>::into(TraceDensity::default()),
+                                VisualTraceSelectorMenu,
                                 fonts,
                             )
                             .with_children(|parent| {
                                 parent
                                     .spawn((
-                                        VisualPhosphorDropdown,
+                                        VisualTraceDropdown,
                                         Node {
                                             display: Display::None,
                                             flex_direction: FlexDirection::Column,
@@ -408,10 +359,10 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                                         GlobalZIndex(1),
                                     ))
                                     .with_children(|parent| {
-                                        spawn_history_density_options(parent, fonts);
+                                        spawn_trace_density_options(parent, fonts);
                                     });
                             })
-                            .observe(visual_phosphor_on_click);
+                            .observe(visual_trace_on_click);
                         }
                         3 => {
                             spawn_body_text(parent, "Color", VisualColorMarker, fonts);
@@ -441,6 +392,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                                             spawn_body_text(parent, "R:", RedSelectorMarker, fonts);
                                             spawn_color_input_picker(
                                                 parent,
+                                                "255",
                                                 palette::width::SMALL_SELECTOR_MENU,
                                                 RedColorSelector,
                                                 fonts,
@@ -464,6 +416,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                                             );
                                             spawn_color_input_picker(
                                                 parent,
+                                                "255",
                                                 palette::width::SMALL_SELECTOR_MENU,
                                                 GreenColorSelector,
                                                 fonts,
@@ -487,6 +440,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                                             );
                                             spawn_color_input_picker(
                                                 parent,
+                                                "255",
                                                 palette::width::SMALL_SELECTOR_MENU,
                                                 BlueColorSelector,
                                                 fonts,

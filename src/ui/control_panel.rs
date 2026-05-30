@@ -1,5 +1,6 @@
 use crate::ui::generator_mode::{ModeSubmenu, spawn_mode_submenu};
 use crate::ui::generator_visual::VisualSubmenu;
+use crate::ui::postfx_bloom::{BloomSubmenu, spawn_bloom_submenu};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
 use std::collections::HashMap;
@@ -20,6 +21,12 @@ struct GeneratorRootHeader;
 struct GeneratorSubmenu;
 
 #[derive(Component, Clone)]
+struct PostFxRootHeader;
+
+#[derive(Component, Clone)]
+struct PostFxSubmenu;
+
+#[derive(Component, Clone)]
 struct ModifierRootHeader;
 
 #[derive(Component, Clone)]
@@ -32,6 +39,7 @@ pub enum DropdownItem {
     Motion,
     Visual,
     // POST FX
+    Bloom,
 }
 
 impl From<DropdownItem> for String {
@@ -40,6 +48,7 @@ impl From<DropdownItem> for String {
             DropdownItem::Mode => "MODE".to_string(),
             DropdownItem::Motion => "MOTION".to_string(),
             DropdownItem::Visual => "VISUAL".to_string(),
+            DropdownItem::Bloom => "BLOOM".to_string(),
         }
     }
 }
@@ -175,11 +184,12 @@ fn spawn_submenu_items(
         .observe(on_hover_surface)
         .observe(on_leave_surface)
         .observe(on_click_toggle_bright_surface)
-        .observe(generator_submenu_onclick);
+        .observe(header_submenu_onclick);
 
     match dropdownitem {
         DropdownItem::Mode => spawn_mode_submenu(parent),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
+        DropdownItem::Bloom => spawn_bloom_submenu(parent, fonts),
         _ => info!("No children for this yet"),
     }
 }
@@ -292,12 +302,11 @@ fn spawn_submenu(
             (
                 marker,
                 Node {
-                    display: Display::Flex,
+                    display: Display::None,
                     flex_direction: FlexDirection::Column,
                     width: percent(100.),
                     ..Default::default()
                 },
-                Visibility::Hidden,
             ),
         )
         .with_children(|parent| {
@@ -324,6 +333,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
             BorderColor::all(palette::BORDER),
         ))
         .with_children(|parent| {
+            // Generator
             spawn_primary_dropdown_header::<GeneratorRootHeader, GeneratorSubmenu>(
                 parent,
                 "GENERATOR",
@@ -342,6 +352,16 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 ],
                 GeneratorSubmenu,
             );
+
+            // POST FX
+            spawn_primary_dropdown_header::<PostFxRootHeader, PostFxSubmenu>(
+                parent,
+                "POST FX",
+                fonts,
+                PostFxRootHeader,
+                1,
+            );
+            spawn_submenu(parent, fonts, &[DropdownItem::Bloom], PostFxSubmenu);
         });
 }
 
@@ -442,34 +462,40 @@ pub fn file_loaded(
     }
 }
 
-pub fn generator_submenu_onclick(
+pub fn header_submenu_onclick(
     e: On<Pointer<Click>>,
     mut dropdown_items: Query<&DropdownItem>,
-    mode_submenu: Query<&mut Node, (With<ModeSubmenu>, Without<VisualSubmenu>)>,
-    // mut motion_submenu: Single<&mut Visibility, With<MotionSubmenu>>,
-    visual_submenu: Query<&mut Node, (With<VisualSubmenu>, Without<MotionSubmenu>)>,
+    mut paramset: ParamSet<(
+        Single<&mut Node, With<ModeSubmenu>>,
+        // mut motion_submenu: Single<&mut Visibility, With<MotionSubmenu>>,
+        Single<&mut Node, With<VisualSubmenu>>,
+        Single<&mut Node, With<BloomSubmenu>>,
+    )>,
 ) {
-    info!("clicked");
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
         match item {
             DropdownItem::Mode => {
                 info!("Mode");
-                for mut m in mode_submenu {
-                    if m.display == Display::Flex {
-                        m.display = Display::None;
-                    } else {
-                        m.display = Display::Flex;
-                    }
+                if paramset.p0().display == Display::Flex {
+                    paramset.p0().display = Display::None;
+                } else {
+                    paramset.p0().display = Display::Flex;
                 }
             }
             DropdownItem::Visual => {
                 info!("Visual");
-                for mut m in visual_submenu {
-                    if m.display == Display::Flex {
-                        m.display = Display::None;
-                    } else {
-                        m.display = Display::Flex;
-                    }
+                if paramset.p1().display == Display::Flex {
+                    paramset.p1().display = Display::None;
+                } else {
+                    paramset.p1().display = Display::Flex;
+                }
+            }
+            DropdownItem::Bloom => {
+                info!("Bloom");
+                if paramset.p2().display == Display::Flex {
+                    paramset.p2().display = Display::None;
+                } else {
+                    paramset.p2().display = Display::Flex;
                 }
             }
             _ => info!("Not implemented this submenu item"),

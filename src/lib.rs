@@ -43,6 +43,8 @@ pub struct FontBlock {
     pub icon: FontSource,
     pub text: FontSource,
 }
+#[derive(Component, Clone)]
+pub struct NullComponent;
 
 #[derive(Component)]
 pub struct DurationText;
@@ -63,7 +65,7 @@ pub struct PreviewCanvas;
 pub struct LiveMesh;
 
 #[derive(Component)]
-pub struct HistoryMesh;
+pub struct TraceMesh;
 
 #[derive(Component, Debug)]
 pub struct AudioFileContents {
@@ -128,7 +130,7 @@ impl From<LiveDensity> for String {
 }
 
 #[derive(Component, Default, Debug, Hash, Eq, PartialEq, Clone)]
-pub enum HistoryDensity {
+pub enum TraceDensity {
     Off,
     Low,
     #[default]
@@ -136,38 +138,38 @@ pub enum HistoryDensity {
     High,
     Ultra,
 }
-impl HistoryDensity {
+impl TraceDensity {
     pub const COUNT: usize = 5;
 
     pub fn count(&self) -> usize {
         match self {
-            HistoryDensity::Off => 1,
-            HistoryDensity::Low => 10420,
-            HistoryDensity::Med => 15696,
-            HistoryDensity::High => 24576,
-            HistoryDensity::Ultra => 32768,
+            TraceDensity::Off => 1,
+            TraceDensity::Low => 10420,
+            TraceDensity::Med => 15696,
+            TraceDensity::High => 24576,
+            TraceDensity::Ultra => 32768,
         }
     }
 
     pub fn all() -> &'static [Self; Self::COUNT] {
         &[
-            HistoryDensity::Off,
-            HistoryDensity::Low,
-            HistoryDensity::Med,
-            HistoryDensity::High,
-            HistoryDensity::Ultra,
+            TraceDensity::Off,
+            TraceDensity::Low,
+            TraceDensity::Med,
+            TraceDensity::High,
+            TraceDensity::Ultra,
         ]
     }
 }
 
-impl From<HistoryDensity> for String {
-    fn from(value: HistoryDensity) -> Self {
+impl From<TraceDensity> for String {
+    fn from(value: TraceDensity) -> Self {
         match value {
-            HistoryDensity::Off => "Off".to_string(),
-            HistoryDensity::Low => "Low".to_string(),
-            HistoryDensity::Med => "Med".to_string(),
-            HistoryDensity::High => "High".to_string(),
-            HistoryDensity::Ultra => "Ultra".to_string(),
+            TraceDensity::Off => "Off".to_string(),
+            TraceDensity::Low => "Low".to_string(),
+            TraceDensity::Med => "Med".to_string(),
+            TraceDensity::High => "High".to_string(),
+            TraceDensity::Ultra => "Ultra".to_string(),
         }
     }
 }

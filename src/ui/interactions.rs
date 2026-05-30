@@ -98,9 +98,13 @@ pub fn on_click_toggle_bright_bg(
 
 pub fn toggle_visibility_with_marker<T: Component>(
     _: On<Pointer<Click>>,
-    mut q_submenu: Single<&mut Visibility, With<T>>,
+    mut node: Single<&mut Node, With<T>>,
 ) {
-    q_submenu.toggle_inherited_hidden();
+    if node.display == Display::Flex {
+        node.display = Display::None;
+    } else {
+        node.display = Display::Flex;
+    }
 }
 
 pub fn on_hover_bg_bright(

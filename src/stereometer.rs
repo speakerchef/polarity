@@ -1,7 +1,7 @@
 use crate::{
     ANIM_SCALE_FACTOR, AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
-    HISTORY_MAGENTA, HistoryDensity, HistoryMesh, LIVE_MAGENTA, LiveDensity, LiveMesh,
-    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR,
+    LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas,
+    RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
 use biquad::{Biquad, Coefficients, DirectForm1};
@@ -21,7 +21,7 @@ pub enum StereometerKind {
 pub struct StereometerParams {
     pub kind: StereometerKind,
     pub live_density: LiveDensity,
-    pub history_density: HistoryDensity,
+    pub trace_density: TraceDensity,
     pub color: LinearRgba,
 }
 
@@ -46,7 +46,7 @@ impl StereoFilter {
 #[derive(Component, Debug, Clone)]
 pub struct Stereometer {
     pub live_buffer: VecDeque<Vec2>,
-    pub history_buffer: VecDeque<Vec2>,
+    pub trace_buffer: VecDeque<Vec2>,
     pub id: Entity,
     pub last_sample_idx: usize,
 
@@ -102,7 +102,7 @@ pub fn update(
     if cur_idx > last_idx {
         let frame_size = (cur_idx - last_idx) * audio.num_channels;
         last_idx *= audio.num_channels;
-        let history_window = &audio
+        let trace_window = &audio
             .samples
             .get(last_idx..last_idx + frame_size)
             .unwrap_or_else(|| {
@@ -110,11 +110,11 @@ pub fn update(
                 &[0.]
             });
         goniometer.last_sample_idx = cur_idx;
-        for frame in history_window.chunks_exact(audio.num_channels) {
+        for frame in trace_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
-            goniometer.history_buffer.push_back(Vec2 {
+            goniometer.trace_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
             });
@@ -148,8 +148,8 @@ pub fn update(
     while goniometer.live_buffer.len() > params.live_density.count() {
         goniometer.live_buffer.pop_front();
     }
-    while goniometer.history_buffer.len() > params.history_density.count() {
-        goniometer.history_buffer.pop_front();
+    while goniometer.trace_buffer.len() > params.trace_density.count() {
+        goniometer.trace_buffer.pop_front();
     }
 }
 
@@ -169,12 +169,12 @@ fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; NUM_VERTICES] {
 pub fn draw(
     goniometer: Single<&Stereometer, With<DrawableCursor>>,
     live_mesh: Single<&Mesh2d, With<LiveMesh>>,
-    history_mesh: Single<&Mesh2d, With<HistoryMesh>>,
+    trace_mesh: Single<&Mesh2d, With<TraceMesh>>,
     mut mesh: ResMut<Assets<Mesh>>,
     params: Res<StereometerParams>,
 ) {
-    if let Some(mut history_mesh) = mesh.get_mut(history_mesh.id()) {
-        history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
+    if let Some(mut trace_mesh) = mesh.get_mut(trace_mesh.id()) {
+        trace_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
             let color: Vec<_> = (0..MAX_WINDOW_SIZE)
                 .flat_map(|i| {
                     let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
@@ -185,11 +185,11 @@ pub fn draw(
             color
         });
         let pos: Vec<_> = goniometer
-            .history_buffer
+            .trace_buffer
             .iter()
             .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
-        history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+        trace_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
     }
     if let Some(mut live_mesh) = mesh.get_mut(live_mesh.id()) {
         live_mesh.insert_attribute(
@@ -215,7 +215,7 @@ pub fn spawn_stereometer(
         bevy::mesh::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
-    let mut history_mesh = Mesh::new(
+    let mut trace_mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
@@ -233,15 +233,15 @@ pub fn spawn_stereometer(
         Mesh::ATTRIBUTE_COLOR,
         vec![params.color.to_f32_array(); MAX_WINDOW_SIZE * NUM_VERTICES],
     );
-    history_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
-    history_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
+    trace_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, hist_zeros);
+    trace_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, hist_colors);
 
     let goni_id = commands.spawn_empty().id();
 
     commands.entity(goni_id).insert((
         Stereometer {
             live_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
-            history_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
+            trace_buffer: VecDeque::from([Vec2::ZERO; MAX_WINDOW_SIZE]),
             last_sample_idx: 0,
             id: goni_id,
             filterbank: None,
@@ -258,8 +258,8 @@ pub fn spawn_stereometer(
         Transform::from_xyz(0.0, 0.0, 1.0),
     ));
     commands.spawn((
-        HistoryMesh,
-        Mesh2d(meshes.add(history_mesh)),
+        TraceMesh,
+        Mesh2d(meshes.add(trace_mesh)),
         MeshMaterial2d(materials.add(CustomMaterial {
             color: LinearRgba::default(),
             alpha_mode: AlphaMode2d::Blend,

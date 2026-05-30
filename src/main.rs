@@ -6,6 +6,7 @@ use bevy_file_dialog::prelude::*;
 use polarity::stereometer::{self, StereometerParams};
 use polarity::ui::control_panel::{file_loaded, spawn_control_panel};
 use polarity::ui::generator_visual::watch_color_input_edit;
+use polarity::ui::postfx_bloom::{bloom_slider_update, bloom_text_update};
 use polarity::{
     AudioFileContents, CRT_P1, CRT_P7, CustomMaterial, DurationText, FontBlock, PlayingAudio,
     PreviewCanvas, TimelineScrubber, palette,
@@ -63,6 +64,7 @@ fn main() {
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
         .add_systems(Update, watch_color_input_edit)
+        .add_systems(Update, (bloom_slider_update, bloom_text_update))
         .run();
 }
 
