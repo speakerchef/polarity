@@ -9,6 +9,7 @@ use bevy::input_focus::AutoFocus;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
+use bevy::text::TextBrush;
 use bevy::text::TextCursorStyle;
 
 #[derive(Component, Clone)]
@@ -123,6 +124,14 @@ pub fn spawn_color_input_picker<'a, T: Component>(
 #[derive(Component)]
 pub struct ColorPicker;
 
+fn set_color<T: Component>(mut p: Single<&mut EditableText, With<T>>, mut v: i128, c: &mut f32) {
+    v = v.clamp(0, 255);
+    let col = v as f32 / u8::MAX as f32;
+    *c = col;
+    p.editor_mut().set_text(&v.to_string());
+}
+
+#[allow(clippy::type_complexity)]
 pub fn watch_color_input_edit(
     mut input_focus: ResMut<InputFocus>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -132,6 +141,11 @@ pub fn watch_color_input_edit(
         Single<&mut EditableText, With<GreenColorSelector>>,
         Single<&mut EditableText, With<BlueColorSelector>>,
     )>,
+    ps_color_textbox: ParamSet<(
+        Single<&mut Text, With<RedColorSelector>>,
+        Single<&mut Text, With<GreenColorSelector>>,
+        Single<&mut Text, With<BlueColorSelector>>,
+    )>,
     mut params: ResMut<StereometerParams>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Enter)
@@ -139,27 +153,16 @@ pub fn watch_color_input_edit(
     {
         input_focus.clear();
         if color_picker.get(focused_entity).is_ok() {
-            if let Ok(mut value) = paramset.p0().value().to_string().parse::<i128>() {
-                value = value.clamp(0, 255);
-                let red = value as f32 / u8::MAX as f32;
-                params.color.red = red;
-                paramset.p0().editor_mut().set_text(&value.to_string());
-                info!("Entered red: {}", paramset.p0().value());
+            if let Ok(value) = paramset.p0().value().to_string().parse::<i128>() {
+                set_color(paramset.p0(), value, &mut params.color.red);
             }
-            if let Ok(mut value) = paramset.p1().value().to_string().parse::<i128>() {
-                value = value.clamp(0, 255);
-                let green = value as f32 / u8::MAX as f32;
-                params.color.green = green;
-                paramset.p1().editor_mut().set_text(&value.to_string());
-                info!("Entered green: {}", paramset.p1().value());
+            if let Ok(value) = paramset.p1().value().to_string().parse::<i128>() {
+                set_color(paramset.p1(), value, &mut params.color.green);
             }
-            if let Ok(mut value) = paramset.p2().value().to_string().parse::<i128>() {
-                value = value.clamp(0, 255);
-                let blue = value as f32 / u8::MAX as f32;
-                params.color.blue = blue;
-                paramset.p2().editor_mut().set_text(&value.to_string());
-                info!("Entered blue: {}", paramset.p2().value());
+            if let Ok(value) = paramset.p2().value().to_string().parse::<i128>() {
+                set_color(paramset.p2(), value, &mut params.color.blue);
             }
+            update_color_picker_textbox(ps_color_textbox, &mut params.color);
         }
     }
 }
@@ -452,4 +455,18 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                     });
             })
         });
+}
+
+#[allow(clippy::type_complexity)]
+pub fn update_color_picker_textbox(
+    mut ps: ParamSet<(
+        Single<&mut Text, With<RedColorSelector>>,
+        Single<&mut Text, With<GreenColorSelector>>,
+        Single<&mut Text, With<BlueColorSelector>>,
+    )>,
+    color: &mut LinearRgba,
+) {
+    ps.p0().0 = ((color.red * u8::MAX as f32) as u8).to_string();
+    ps.p1().0 = ((color.green * u8::MAX as f32) as u8).to_string();
+    ps.p2().0 = ((color.blue * u8::MAX as f32) as u8).to_string();
 }

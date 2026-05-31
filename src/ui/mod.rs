@@ -1,6 +1,8 @@
 use crate::{FontBlock, palette, ui::interactions::*};
 use bevy::{
+    input_focus::AutoFocus,
     prelude::*,
+    text::{EditableText, TextCursorStyle},
     ui_widgets::{Slider, SliderRange, SliderStep, SliderThumb, SliderValue, TrackClick},
 };
 
@@ -10,7 +12,7 @@ pub mod generator_input;
 pub mod generator_mode;
 pub mod generator_visual;
 pub mod interactions;
-pub mod postfx_bloom;
+pub mod postfx_sparkle;
 
 pub fn spawn_body_text(
     parent: &mut ChildSpawnerCommands,
@@ -132,4 +134,54 @@ pub fn horizontal_slider(
             )),
         )),
     )
+}
+
+pub fn spawn_textbox<'a, T: Component>(
+    parent: &'a mut ChildSpawnerCommands,
+    sz: f32,
+    font: &FontBlock,
+    marker: T,
+    vis_width: f32,
+    max_char: usize,
+) -> bevy::prelude::EntityCommands<'a> {
+    let mut parent_spawner = parent.spawn((
+        Node {
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            height: px(palette::height::INNER),
+            border: UiRect::all(px(1)),
+            width: px(sz),
+            column_gap: px(2),
+            ..Default::default()
+        },
+        AutoFocus,
+        BorderColor::all(palette::BORDER),
+        BackgroundColor(palette::VOID),
+    ));
+    parent_spawner
+        .with_children(|parent| {
+            parent.spawn((
+                marker,
+                EditableText {
+                    visible_width: Some(vis_width),
+                    max_characters: Some(max_char),
+                    allow_newlines: false,
+
+                    ..Default::default()
+                },
+                TextLayout::no_wrap(),
+                TextFont {
+                    font: font.text.clone(),
+                    font_size: FontSize::Px(palette::font_size::MED),
+                    weight: FontWeight(palette::font_weight::BODY),
+                    ..default()
+                },
+                Text::new("0"),
+                TextCursorStyle::default(),
+            ));
+        })
+        .observe(on_hover_void)
+        .observe(on_leave_void);
+    parent_spawner
 }

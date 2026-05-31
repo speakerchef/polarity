@@ -2,7 +2,7 @@ use crate::ui::generator_filtering::{FilterSubmenu, spawn_filtering_submenu};
 use crate::ui::generator_input::{InputSubmenu, spawn_input_submenu};
 use crate::ui::generator_mode::{ModeSubmenu, spawn_mode_submenu};
 use crate::ui::generator_visual::VisualSubmenu;
-use crate::ui::postfx_bloom::{BloomSubmenu, spawn_bloom_submenu};
+use crate::ui::postfx_sparkle::{SparkleSubmenu, spawn_sparkle_submenu};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ pub enum DropdownItem {
     Motion,
     Visual,
     // POST FX
-    Bloom,
+    Sparkle,
 }
 
 impl From<DropdownItem> for String {
@@ -50,7 +50,7 @@ impl From<DropdownItem> for String {
             DropdownItem::Mode => "MODE".to_string(),
             DropdownItem::Motion => "MOTION".to_string(),
             DropdownItem::Visual => "VISUAL".to_string(),
-            DropdownItem::Bloom => "BLOOM".to_string(),
+            DropdownItem::Sparkle => "SPARKLE".to_string(),
         }
     }
 }
@@ -193,7 +193,7 @@ fn spawn_submenu_items(
         DropdownItem::Filtering => spawn_filtering_submenu(parent, fonts),
         DropdownItem::Mode => spawn_mode_submenu(parent),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
-        DropdownItem::Bloom => spawn_bloom_submenu(parent, fonts),
+        DropdownItem::Sparkle => spawn_sparkle_submenu(parent, fonts),
         _ => info!("No children for this yet"),
     }
 }
@@ -366,7 +366,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 PostFxRootHeader,
                 1,
             );
-            spawn_submenu(parent, fonts, &[DropdownItem::Bloom], PostFxSubmenu);
+            spawn_submenu(parent, fonts, &[DropdownItem::Sparkle], PostFxSubmenu);
         });
 }
 
@@ -480,7 +480,7 @@ pub fn header_submenu_onclick(
         Single<&mut Node, With<FilterSubmenu>>,
         Single<&mut Node, With<ModeSubmenu>>,
         Single<&mut Node, With<VisualSubmenu>>,
-        Single<&mut Node, With<BloomSubmenu>>,
+        Single<&mut Node, With<SparkleSubmenu>>,
     )>,
 ) {
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
@@ -513,7 +513,7 @@ pub fn header_submenu_onclick(
                     ps.p3().display = Display::Flex;
                 }
             }
-            DropdownItem::Bloom => {
+            DropdownItem::Sparkle => {
                 if ps.p4().display == Display::Flex {
                     ps.p4().display = Display::None;
                 } else {

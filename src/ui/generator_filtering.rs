@@ -2,8 +2,8 @@ use crate::{
     AudioFileContents, DrawableCursor, FilteringMode, FontBlock, NullComponent, palette,
     stereometer::{StereoFilter, Stereometer, StereometerParams},
     ui::{
-        horizontal_slider, interactions::*, postfx_bloom::spawn_textbox, spawn_body_text,
-        spawn_selector_with_size,
+        horizontal_slider, interactions::*, spawn_body_text, spawn_selector_with_size,
+        spawn_textbox,
     },
 };
 use bevy::{

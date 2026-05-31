@@ -169,6 +169,8 @@ pub fn update(
                 y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
             });
         }
+    } else {
+        goniometer.last_sample_idx = cur_idx;
     }
 
     let live_window = &audio
@@ -247,34 +249,35 @@ pub fn draw(
     params: Res<StereometerParams>,
 ) {
     if let Some(mut trace_mesh) = mesh.get_mut(trace_mesh.id()) {
-        trace_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
-            let color: Vec<_> = (0..MAX_WINDOW_SIZE)
-                .flat_map(|i| {
-                    let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-                    let c = params.color.with_alpha(alpha).to_f32_array();
-                    std::iter::repeat_n(c, 6)
-                })
-                .collect();
-            color
-        });
         let pos: Vec<_> = goniometer
             .trace_buffer
             .iter()
             .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
         trace_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+        trace_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
+            let color: Vec<_> = (0..goniometer.trace_buffer.len())
+                .flat_map(|i| {
+                    let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
+                    // let alpha = (i as f32 / goniometer.trace_buffer.len() as f32).powf(2.5);
+                    let c = params.color.with_alpha(alpha).to_f32_array();
+                    std::iter::repeat_n(c, NUM_VERTICES)
+                })
+                .collect();
+            color
+        });
     }
     if let Some(mut live_mesh) = mesh.get_mut(live_mesh.id()) {
-        live_mesh.insert_attribute(
-            Mesh::ATTRIBUTE_COLOR,
-            vec![params.color.to_f32_array(); NUM_VERTICES * MAX_WINDOW_SIZE],
-        );
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
             .flat_map(|&v| point_to_quad_vertices(v))
             .collect();
         live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+        live_mesh.insert_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            vec![params.color.to_f32_array(); NUM_VERTICES * goniometer.live_buffer.len()],
+        );
     }
 }
 

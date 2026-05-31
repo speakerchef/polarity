@@ -9,7 +9,7 @@ use polarity::ui::generator_filtering::{
     freq_amt_text_update, freq_slider_update, update_filter_freq,
 };
 use polarity::ui::generator_visual::watch_color_input_edit;
-use polarity::ui::postfx_bloom::{bloom_slider_update, bloom_text_update};
+use polarity::ui::postfx_sparkle::{sparkle_slider_update, sparkle_text_update};
 use polarity::{
     AudioFileContents, CustomMaterial, DurationText, FontBlock, PlayingAudio, PreviewCanvas,
     TimelineScrubber, palette,
@@ -65,8 +65,8 @@ fn main() {
                 .chain()
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
-        .add_systems(Update, watch_color_input_edit)
-        .add_systems(Update, (bloom_slider_update, bloom_text_update))
+        .add_systems(Update, (watch_color_input_edit,))
+        .add_systems(Update, (sparkle_slider_update, sparkle_text_update))
         .add_systems(
             Update,
             (freq_slider_update, freq_amt_text_update, update_filter_freq),

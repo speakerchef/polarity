@@ -1,8 +1,6 @@
 use crate::NullComponent;
 use crate::stereometer::StereometerParams;
-use crate::ui::horizontal_slider;
-use crate::ui::spawn_body_text;
-use bevy::input_focus::AutoFocus;
+use crate::ui::{horizontal_slider, spawn_body_text, spawn_textbox};
 use bevy::input_focus::InputFocus;
 use bevy::ui_widgets::SetSliderValue;
 use bevy::ui_widgets::SliderDragState;
@@ -10,84 +8,32 @@ use bevy::ui_widgets::SliderRange;
 use bevy::ui_widgets::SliderValue;
 use bevy::ui_widgets::SliderValueChange;
 use bevy::ui_widgets::slider_self_update;
-use bevy::{
-    prelude::*,
-    text::{EditableText, TextCursorStyle},
-};
+use bevy::{prelude::*, text::EditableText};
 
-use crate::{FontBlock, palette, ui::interactions::*};
+use crate::{FontBlock, palette};
 
 #[derive(Component, Clone)]
-pub struct PostFxBloomMarker;
+pub struct PostFxSparkleMarker;
 
 #[derive(Component, Clone)]
-pub struct PostFxBloomAmtSlider;
+pub struct PostFxSparkleSlider;
 
 #[derive(Component, Clone)]
-pub struct PostFxBloomSliderThumb;
+pub struct PostFxSparkleThumb;
 
 #[derive(Component, Clone)]
-pub struct PostFxBloomAmtValue;
+pub struct PostFxSparkleAmt;
 
 #[derive(Component, Clone)]
-pub struct PostFxBloomText;
+pub struct PostFxSparkleText;
 
 #[derive(Component, Clone)]
-pub struct BloomSubmenu;
-pub fn spawn_textbox<'a, T: Component>(
-    parent: &'a mut ChildSpawnerCommands,
-    sz: f32,
-    font: &FontBlock,
-    marker: T,
-    vis_width: f32,
-    max_char: usize,
-) -> bevy::prelude::EntityCommands<'a> {
-    let mut parent_spawner = parent.spawn((
-        Node {
-            display: Display::Flex,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            height: px(palette::height::INNER),
-            border: UiRect::all(px(1)),
-            width: px(sz),
-            column_gap: px(2),
-            ..Default::default()
-        },
-        AutoFocus,
-        BorderColor::all(palette::BORDER),
-        BackgroundColor(palette::VOID),
-    ));
-    parent_spawner
-        .with_children(|parent| {
-            parent.spawn((
-                marker,
-                EditableText {
-                    visible_width: Some(vis_width),
-                    max_characters: Some(max_char),
-                    allow_newlines: false,
+pub struct SparkleSubmenu;
 
-                    ..Default::default()
-                },
-                TextLayout::no_wrap(),
-                TextFont {
-                    font: font.text.clone(),
-                    font_size: FontSize::Px(palette::font_size::MED),
-                    weight: FontWeight(palette::font_weight::BODY),
-                    ..default()
-                },
-                Text::new("0"),
-                TextCursorStyle::default(),
-            ));
-        })
-        .observe(on_hover_void)
-        .observe(on_leave_void);
-    parent_spawner
-}
-
-pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+pub fn spawn_sparkle_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
-            BloomSubmenu,
+            SparkleSubmenu,
             Node {
                 display: Display::None,
                 align_items: AlignItems::Center,
@@ -117,11 +63,11 @@ pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                     ))
                     .with_children(|parent| match i {
                         1 => {
-                            spawn_body_text(parent, "Amount", PostFxBloomMarker, fonts);
+                            spawn_body_text(parent, "Amount", PostFxSparkleMarker, fonts);
                             parent
                                 .spawn(horizontal_slider(
-                                    PostFxBloomAmtSlider,
-                                    PostFxBloomSliderThumb,
+                                    PostFxSparkleSlider,
+                                    PostFxSparkleThumb,
                                     0.1,
                                 ))
                                 .observe(slider_self_update);
@@ -137,7 +83,7 @@ pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                                         parent,
                                         palette::width::SMALL_SELECTOR_MENU,
                                         fonts,
-                                        PostFxBloomAmtValue,
+                                        PostFxSparkleAmt,
                                         4.,
                                         4,
                                     );
@@ -150,12 +96,12 @@ pub fn spawn_bloom_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
         });
 }
 
-pub fn bloom_text_update(
+pub fn sparkle_text_update(
     mut commands: Commands,
     input_focus: Res<InputFocus>,
     button_input: Res<ButtonInput<KeyCode>>,
-    sliders: Query<Entity, With<PostFxBloomAmtSlider>>,
-    text: Query<&EditableText, With<PostFxBloomAmtValue>>,
+    sliders: Query<Entity, With<PostFxSparkleSlider>>,
+    text: Query<&EditableText, With<PostFxSparkleAmt>>,
 ) {
     if button_input.just_pressed(KeyCode::Enter)
         && let Some(focused_ent) = input_focus.get()
@@ -172,17 +118,17 @@ pub fn bloom_text_update(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn bloom_slider_update(
+pub fn sparkle_slider_update(
     sliders: Query<
         (Entity, &SliderValue, &SliderRange),
         (
             Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
-            With<PostFxBloomAmtSlider>,
+            With<PostFxSparkleSlider>,
         ),
     >,
-    mut thumbs: Query<(&mut Node, Has<PostFxBloomSliderThumb>), Without<PostFxBloomAmtSlider>>,
+    mut thumbs: Query<(&mut Node, Has<PostFxSparkleThumb>), Without<PostFxSparkleSlider>>,
     children: Query<&Children>,
-    mut amt_text: Single<&mut Text, With<PostFxBloomAmtValue>>,
+    mut amt_text: Single<&mut Text, With<PostFxSparkleAmt>>,
     mut params: ResMut<StereometerParams>,
 ) {
     for (slider_ent, value, range) in sliders.iter() {
@@ -193,7 +139,6 @@ pub fn bloom_slider_update(
                 amt_text.0 = format!("{:.1}", value.0);
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
-                info!("Alpha Raw: {}", value.0);
                 params.color = params
                     .color
                     .with_alpha(((value.0 / 100.) * 10.0).clamp(1.0, 10.0));
