@@ -1,5 +1,5 @@
 use crate::{
-    ANIM_SCALE_FACTOR, AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
+    AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
     FilteringMode, LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio,
     PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
 };
@@ -47,7 +47,9 @@ pub struct StereometerParams {
     pub live_density: LiveDensity,
     pub trace_density: TraceDensity,
     pub color: LinearRgba,
-    pub freq: u32,
+    pub freq: f32,
+
+    pub scale_factor: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -165,8 +167,8 @@ pub fn update(
 
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             goniometer.trace_buffer.push_back(Vec2 {
-                x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
-                y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
+                x: world_pos.x + x_sample * params.scale_factor,
+                y: world_pos.y + y_sample * params.scale_factor,
             });
         }
     } else {
@@ -214,8 +216,8 @@ pub fn update(
 
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
             Vec2 {
-                x: world_pos.x + x_sample * ANIM_SCALE_FACTOR,
-                y: world_pos.y + y_sample * ANIM_SCALE_FACTOR,
+                x: world_pos.x + x_sample * params.scale_factor,
+                y: world_pos.y + y_sample * params.scale_factor,
             }
         })
         .collect();

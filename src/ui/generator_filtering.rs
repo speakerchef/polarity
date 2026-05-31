@@ -2,8 +2,8 @@ use crate::{
     AudioFileContents, DrawableCursor, FilteringMode, FontBlock, NullComponent, palette,
     stereometer::{StereoFilter, Stereometer, StereometerParams},
     ui::{
-        horizontal_slider, interactions::*, spawn_body_text, spawn_selector_with_size,
-        spawn_textbox,
+        interactions::*, menu_row_container, spawn_body_text,
+        spawn_dropdown_row, spawn_slider_row,
     },
 };
 use bevy::{
@@ -12,7 +12,6 @@ use bevy::{
     text::EditableText,
     ui_widgets::{
         SetSliderValue, SliderDragState, SliderRange, SliderValue, SliderValueChange,
-        slider_self_update,
     },
 };
 use biquad::*;
@@ -47,87 +46,32 @@ pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBl
         ))
         .with_children(|parent| {
             parent
-                .spawn((
-                    Node {
-                        display: Display::Flex,
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::SpaceBetween,
-                        height: px(palette::height::MENU_ITEM),
-                        width: percent(100.),
-                        padding: UiRect::horizontal(px(12)),
-                        border: UiRect::horizontal(px(1)).with_bottom(px(1)),
-                        ..Default::default()
-                    },
-                    BorderColor::all(palette::BORDER),
-                ))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
                 .with_children(|parent| {
-                    spawn_body_text(parent, "Mode", NullComponent, fonts);
-                    spawn_selector_with_size(
+                    spawn_dropdown_row(
                         parent,
-                        palette::width::MED_SELECTOR_MENU,
-                        "Off",
-                        FilterModeSelectorMenu,
                         fonts,
+                        "Mode",
+                        ("Off", FilterModeSelectorMenu),
+                        FilterModeDropdown,
+                        spawn_filtering_mode_options,
                     )
-                    .with_children(|parent| {
-                        parent
-                            .spawn((
-                                FilterModeDropdown,
-                                Node {
-                                    display: Display::None,
-                                    flex_direction: FlexDirection::Column,
-                                    align_items: AlignItems::Center,
-                                    position_type: PositionType::Absolute,
-                                    top: percent(100.),
-                                    justify_content: JustifyContent::FlexStart,
-                                    width: percent(100.),
-                                    ..Default::default()
-                                },
-                                GlobalZIndex(1),
-                            ))
-                            .with_children(|parent| {
-                                spawn_filtering_mode_options(parent, fonts);
-                            });
-                    })
                     .observe(filtering_mode_on_click);
                 });
+
+            // Freq slider
+            let (min, max, step, def) = (20.0, 20000.0, 1.0, 20.0);
             parent
-                .spawn((
-                    Node {
-                        display: Display::Flex,
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::SpaceBetween,
-                        height: px(palette::height::MENU_ITEM),
-                        width: percent(100.),
-                        padding: UiRect::horizontal(px(12)),
-                        border: UiRect::horizontal(px(1)).with_bottom(px(1)),
-                        ..Default::default()
-                    },
-                    BorderColor::all(palette::BORDER),
-                ))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
                 .with_children(|parent| {
-                    spawn_body_text(parent, "Freq", NullComponent, fonts);
-                    parent
-                        .spawn(horizontal_slider(FilterFreqSlider, FilterFreqThumb, 1.0))
-                        .observe(slider_self_update);
-                    parent
-                        .spawn(Node {
-                            column_gap: px(4),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..Default::default()
-                        })
-                        .with_children(|parent| {
-                            spawn_textbox(
-                                parent,
-                                palette::width::SMALL_SELECTOR_MENU,
-                                fonts,
-                                FilterFreqAmt,
-                                5.,
-                                5,
-                            );
-                            spawn_body_text(parent, "Hz", NullComponent, fonts);
-                        });
+                    spawn_slider_row(
+                        parent,
+                        fonts,
+                        "Freq",
+                        (min, max, step, def, FilterFreqSlider, FilterFreqThumb),
+                        (palette::width::MED_SELECTOR_MENU, 6, FilterFreqAmt),
+                        "Hz",
+                    )
                 });
         });
 }
@@ -174,7 +118,6 @@ fn spawn_filtering_mode_options(parent: &mut ChildSpawnerCommands, fonts: &FontB
                  mut txt: Single<&mut Text, With<FilterModeSelectorMenu>>| {
                     info!("clicked");
                     params.filtering_mode = mode.clone();
-                    let scale = 100. / 20000.;
                     for e in sliders {
                         match mode {
                             FilteringMode::Off => {
@@ -186,19 +129,19 @@ fn spawn_filtering_mode_options(parent: &mut ChildSpawnerCommands, fonts: &FontB
                             FilteringMode::Lpf => {
                                 commands.trigger(SetSliderValue {
                                     entity: e,
-                                    change: SliderValueChange::Absolute(300. * scale),
+                                    change: SliderValueChange::Absolute(300.),
                                 });
                             }
                             FilteringMode::Bpf => {
                                 commands.trigger(SetSliderValue {
                                     entity: e,
-                                    change: SliderValueChange::Absolute(1000. * scale),
+                                    change: SliderValueChange::Absolute(1000.),
                                 });
                             }
                             FilteringMode::Hpf => {
                                 commands.trigger(SetSliderValue {
                                     entity: e,
-                                    change: SliderValueChange::Absolute(3000. * scale),
+                                    change: SliderValueChange::Absolute(3000.),
                                 });
                             }
                         }
@@ -217,7 +160,8 @@ pub fn freq_amt_text_update(
     sliders: Query<Entity, With<FilterFreqSlider>>,
     text: Query<&EditableText, With<FilterFreqAmt>>,
 ) {
-    if button_input.just_pressed(KeyCode::Enter)
+    if (button_input.just_pressed(KeyCode::Enter)
+        || button_input.just_pressed(KeyCode::NumpadEnter))
         && let Some(focused_ent) = input_focus.get()
         && let Ok(text_entity) = text.get(focused_ent)
         && let Ok(text_to_f32) = text_entity.value().to_string().parse::<f32>()
@@ -242,14 +186,14 @@ pub fn freq_slider_update(
     >,
     mut thumbs: Query<(&mut Node, Has<FilterFreqThumb>), Without<FilterFreqSlider>>,
     children: Query<&Children>,
-    mut amt_text: Single<&mut Text, With<FilterFreqAmt>>,
+    mut amt_text: Single<&mut EditableText, With<FilterFreqAmt>>,
 ) {
     for (slider_ent, value, range) in sliders.iter() {
         for child in children.iter_descendants(slider_ent) {
             if let Ok((mut thumb_node, is_thumb)) = thumbs.get_mut(child)
                 && is_thumb
             {
-                amt_text.0 = format!("{}", (value.0 * 200.0).round());
+                amt_text.editor_mut().set_text(&value.0.round().to_string());
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
             }
@@ -261,31 +205,31 @@ pub fn update_filter_freq(
     mut params: ResMut<StereometerParams>,
     audio: Single<&AudioFileContents>,
     mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
-    text: Single<&Text, With<FilterFreqAmt>>,
+    text: Single<&EditableText, With<FilterFreqAmt>>,
 ) {
-    if let Ok(val) = text.0.parse::<f32>()
-        && params.freq != val as u32
+    if let Ok(val) = text.value().to_string().parse::<f32>()
+        && params.freq != val.round()
     {
-        params.freq = val as u32;
+        params.freq = val.round();
         info!("{}", params.freq);
         let lpf_coeffs = Coefficients::<f32>::from_params(
             Type::LowPass,
             audio.sample_rate.hz(),
-            params.freq.clamp(1, 20000).hz(),
+            params.freq.hz(),
             Q_BUTTERWORTH_F32,
         )
         .unwrap();
         let bpf_coeffs = Coefficients::<f32>::from_params(
             Type::BandPass,
             audio.sample_rate.hz(),
-            params.freq.clamp(1, 20000).hz(),
+            params.freq.hz(),
             Q_BUTTERWORTH_F32,
         )
         .unwrap();
         let hpf_coeffs = Coefficients::<f32>::from_params(
             Type::HighPass,
             audio.sample_rate.hz(),
-            params.freq.clamp(1, 20000).hz(),
+            params.freq.hz(),
             Q_BUTTERWORTH_F32,
         )
         .unwrap();

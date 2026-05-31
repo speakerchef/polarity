@@ -52,9 +52,12 @@ pub mod spacing {
 }
 
 pub mod width {
-    pub const SMALL_SELECTOR_MENU: f32 = 40.;
-    pub const MED_SELECTOR_MENU: f32 = 120.;
-    pub const LARGE_SELECTOR_MENU: f32 = 240.;
+    pub const SMALL_SELECTOR_MENU: f32 = 45.0;
+    pub const MED_SELECTOR_MENU: f32 = 50.0;
+    pub const LARGE_SELECTOR_MENU: f32 = 120.0;
+    pub const XLARGE_SELECTOR_MENU: f32 = 180.0;
+
+    pub const MED_SLIDER: f32 = 180.0;
 }
 
 pub mod height {

@@ -24,7 +24,10 @@ enum GeneratorChoice {
 fn main() {
     App::new()
         .insert_resource(ClearColor(palette::VOID))
-        .insert_resource(StereometerParams::default())
+        .insert_resource(StereometerParams {
+            scale_factor: 250.0,
+            ..Default::default()
+        })
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {

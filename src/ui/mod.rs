@@ -1,9 +1,11 @@
-use crate::{FontBlock, palette, ui::interactions::*};
+use crate::{FontBlock, NullComponent, palette, ui::interactions::*};
 use bevy::{
     input_focus::AutoFocus,
     prelude::*,
     text::{EditableText, TextCursorStyle},
-    ui_widgets::{Slider, SliderRange, SliderStep, SliderThumb, SliderValue, TrackClick},
+    ui_widgets::{
+        Slider, SliderRange, SliderStep, SliderThumb, SliderValue, TrackClick, slider_self_update,
+    },
 };
 
 pub mod control_panel;
@@ -25,7 +27,7 @@ pub fn spawn_body_text(
         Text::new(text),
         TextFont {
             font: font.text.clone(),
-            font_size: FontSize::Px(palette::font_size::BIG),
+            font_size: FontSize::Px(palette::font_size::BODY),
             weight: FontWeight(palette::font_weight::BODY),
             ..Default::default()
         },
@@ -72,7 +74,10 @@ pub fn spawn_selector_with_size<'a>(
 pub fn horizontal_slider(
     slider_marker: impl Component,
     thumb: impl Component,
+    min: f32,
+    max: f32,
     step_amt: f32,
+    def: f32,
 ) -> impl Bundle {
     (
         Node {
@@ -80,8 +85,7 @@ pub fn horizontal_slider(
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Stretch,
-            margin: UiRect::horizontal(px(8)).with_left(px(16)),
-            width: px(200.),
+            width: px(palette::width::MED_SLIDER),
             ..default()
         },
         slider_marker,
@@ -89,8 +93,8 @@ pub fn horizontal_slider(
             track_click: TrackClick::Snap,
             ..Default::default()
         },
-        SliderValue(0.0),
-        SliderRange::new(0.0, 100.0),
+        SliderValue(def),
+        SliderRange::new(min, max),
         SliderStep(step_amt),
         Children::spawn((
             // slider track
@@ -98,7 +102,6 @@ pub fn horizontal_slider(
                 Node {
                     height: px(6),
                     border: UiRect::all(px(1)),
-                    border_radius: BorderRadius::all(px(3)),
                     ..default()
                 },
                 BorderColor::all(palette::BORDER),
@@ -122,14 +125,15 @@ pub fn horizontal_slider(
                     SliderThumb,
                     Node {
                         display: Display::Flex,
+                        border: UiRect::all(px(1)),
                         width: px(16),
                         height: px(16),
                         position_type: PositionType::Absolute,
                         left: percent(0),
-                        border_radius: BorderRadius::MAX,
                         ..default()
                     },
                     BackgroundColor(palette::BRIGHT),
+                    BorderColor::all(palette::BORDER)
                 )],
             )),
         )),
@@ -163,6 +167,13 @@ pub fn spawn_textbox<'a, T: Component>(
         .with_children(|parent| {
             parent.spawn((
                 marker,
+                Node {
+                    width: percent(100.0),
+                    height: percent(100.0),
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(px(4)),
+                    ..default()
+                },
                 EditableText {
                     visible_width: Some(vis_width),
                     max_characters: Some(max_char),
@@ -170,18 +181,139 @@ pub fn spawn_textbox<'a, T: Component>(
 
                     ..Default::default()
                 },
-                TextLayout::no_wrap(),
+                TextLayout::no_wrap().with_justify(Justify::Right),
                 TextFont {
                     font: font.text.clone(),
                     font_size: FontSize::Px(palette::font_size::MED),
                     weight: FontWeight(palette::font_weight::BODY),
                     ..default()
                 },
-                Text::new("0"),
                 TextCursorStyle::default(),
             ));
         })
         .observe(on_hover_void)
         .observe(on_leave_void);
     parent_spawner
+}
+
+pub fn menu_row_container(justify_content: JustifyContent) -> impl Bundle {
+    (
+        Node {
+            display: Display::Flex,
+            align_items: AlignItems::Center,
+            justify_content,
+            height: px(palette::height::MENU_ITEM),
+            width: percent(100.),
+            padding: UiRect::horizontal(px(12)),
+            border: UiRect::horizontal(px(1)).with_bottom(px(1)),
+            ..Default::default()
+        },
+        BorderColor::all(palette::BORDER),
+    )
+}
+
+pub fn spawn_dropdown_row<'a, S, D>(
+    parent: &'a mut ChildSpawnerCommands,
+    fonts: &FontBlock,
+    label_text: &str,
+    selector: (&str, S),
+    dropdown_marker: D,
+    dropdown_spawner: fn(&mut ChildSpawnerCommands, &FontBlock),
+) -> EntityCommands<'a>
+where
+    S: Component + Clone,
+    D: Component,
+{
+    spawn_body_text(parent, label_text, NullComponent, fonts);
+    let mut parent_spawner = spawn_selector_with_size(
+        parent,
+        palette::width::LARGE_SELECTOR_MENU,
+        selector.0,
+        selector.1,
+        fonts,
+    );
+    parent_spawner.with_children(|parent| {
+        parent
+            .spawn((
+                dropdown_marker,
+                Node {
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    position_type: PositionType::Absolute,
+                    top: percent(100.),
+                    justify_content: JustifyContent::FlexStart,
+                    width: percent(100.),
+                    ..Default::default()
+                },
+                GlobalZIndex(1),
+            ))
+            .with_children(|parent| {
+                dropdown_spawner(parent, fonts);
+            });
+    });
+    parent_spawner
+}
+
+pub fn spawn_slider_row<S, T, A>(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &FontBlock,
+    label_text: &str,
+    slider: (f32, f32, f32, f32, S, T),
+    textbox: (f32, usize, A),
+    textbox_postfix_text: &str,
+) where
+    S: Component,
+    T: Component,
+    A: Component,
+{
+    parent
+        .spawn((Node {
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::FlexStart,
+            width: px(45),
+            ..Default::default()
+        },))
+        .with_children(|parent| spawn_body_text(parent, label_text, NullComponent, fonts));
+    let (min, max, step, def, slider_marker, thumb_marker) = slider;
+    parent
+        .spawn(Node {
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            width: px(palette::width::MED_SLIDER),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn(horizontal_slider(
+                    slider_marker,
+                    thumb_marker,
+                    min,
+                    max,
+                    step,
+                    def,
+                ))
+                .observe(slider_self_update);
+        });
+    parent
+        .spawn(Node {
+            column_gap: px(4),
+            justify_content: JustifyContent::FlexEnd,
+            align_items: AlignItems::Center,
+            margin: UiRect::right(px(-8)),
+            width: px(80.),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            let (width, max_chars, textbox_marker) = textbox;
+            spawn_textbox(
+                parent,
+                width,
+                fonts,
+                textbox_marker,
+                max_chars as f32,
+                max_chars,
+            );
+            spawn_body_text(parent, textbox_postfix_text, NullComponent, fonts);
+        });
 }

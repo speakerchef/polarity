@@ -2,14 +2,14 @@ use crate::LiveDensity;
 use crate::palette;
 use crate::stereometer::StereometerParams;
 use crate::ui::interactions::*;
+use crate::ui::menu_row_container;
 use crate::ui::spawn_body_text;
-use crate::ui::spawn_selector_with_size;
+use crate::ui::spawn_dropdown_row;
 use crate::{FontBlock, TraceDensity};
 use bevy::input_focus::AutoFocus;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use bevy::text::TextBrush;
 use bevy::text::TextCursorStyle;
 
 #[derive(Component, Clone)]
@@ -148,7 +148,8 @@ pub fn watch_color_input_edit(
     )>,
     mut params: ResMut<StereometerParams>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Enter)
+    if (keyboard_input.just_pressed(KeyCode::Enter)
+        || keyboard_input.just_pressed(KeyCode::NumpadEnter))
         && let Some(focused_entity) = input_focus.get()
     {
         input_focus.clear();
@@ -291,80 +292,34 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
         .with_children(|parent| {
             (1..=3).for_each(|i| {
                 parent
-                    .spawn((
-                        Node {
-                            display: Display::Flex,
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
-                            height: px(palette::height::MENU_ITEM),
-                            width: percent(100.),
-                            padding: UiRect::horizontal(px(12)),
-                            border: UiRect::horizontal(px(1)).with_bottom(px(1)),
-                            ..Default::default()
-                        },
-                        BorderColor::all(palette::BORDER),
-                    ))
+                    .spawn(menu_row_container(JustifyContent::SpaceBetween))
                     .with_children(|parent| match i {
                         1 => {
-                            spawn_body_text(parent, "Density", VisualDensityMarker, fonts);
-                            spawn_selector_with_size(
+                            spawn_dropdown_row(
                                 parent,
-                                palette::width::MED_SELECTOR_MENU,
-                                &Into::<String>::into(LiveDensity::default()),
-                                VisualDensitySelectorMenu,
                                 fonts,
+                                "Density",
+                                (
+                                    &Into::<String>::into(LiveDensity::default()),
+                                    VisualDensitySelectorMenu,
+                                ),
+                                VisualDensityDropdown,
+                                spawn_point_density_options,
                             )
-                            .with_children(|parent| {
-                                parent
-                                    .spawn((
-                                        VisualDensityDropdown,
-                                        Node {
-                                            display: Display::None,
-                                            flex_direction: FlexDirection::Column,
-                                            align_items: AlignItems::Center,
-                                            position_type: PositionType::Absolute,
-                                            top: percent(100.),
-                                            justify_content: JustifyContent::FlexStart,
-                                            width: percent(100.),
-                                            ..Default::default()
-                                        },
-                                        GlobalZIndex(1),
-                                    ))
-                                    .with_children(|parent| {
-                                        spawn_point_density_options(parent, fonts);
-                                    });
-                            })
                             .observe(visual_density_on_click);
                         }
                         2 => {
-                            spawn_body_text(parent, "Trace", VisualTraceMarker, fonts);
-                            spawn_selector_with_size(
+                            spawn_dropdown_row(
                                 parent,
-                                palette::width::MED_SELECTOR_MENU,
-                                &Into::<String>::into(TraceDensity::default()),
-                                VisualTraceSelectorMenu,
                                 fonts,
+                                "Trace",
+                                (
+                                    &Into::<String>::into(TraceDensity::default()),
+                                    VisualTraceSelectorMenu,
+                                ),
+                                VisualTraceDropdown,
+                                spawn_trace_density_options,
                             )
-                            .with_children(|parent| {
-                                parent
-                                    .spawn((
-                                        VisualTraceDropdown,
-                                        Node {
-                                            display: Display::None,
-                                            flex_direction: FlexDirection::Column,
-                                            align_items: AlignItems::Center,
-                                            position_type: PositionType::Absolute,
-                                            top: percent(100.),
-                                            justify_content: JustifyContent::FlexStart,
-                                            width: percent(100.),
-                                            ..Default::default()
-                                        },
-                                        GlobalZIndex(1),
-                                    ))
-                                    .with_children(|parent| {
-                                        spawn_trace_density_options(parent, fonts);
-                                    });
-                            })
                             .observe(visual_trace_on_click);
                         }
                         3 => {

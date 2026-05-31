@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     FontBlock, NullComponent, palette,
     stereometer::{StereometerInputMode, StereometerParams},
-    ui::{interactions::*, spawn_body_text, spawn_selector_with_size},
+    ui::{interactions::*, spawn_body_text, spawn_dropdown_row},
 };
 
 #[derive(Component, Clone)]
@@ -44,34 +44,14 @@ pub fn spawn_input_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                     BorderColor::all(palette::BORDER),
                 ))
                 .with_children(|parent| {
-                    spawn_body_text(parent, "Mode", NullComponent, fonts);
-                    spawn_selector_with_size(
+                    spawn_dropdown_row(
                         parent,
-                        palette::width::MED_SELECTOR_MENU,
-                        "Full Spectrum",
-                        InputModeSelectorMenu,
                         fonts,
+                        "Mode",
+                        ("Full Spectrum", InputModeSelectorMenu),
+                        InputModeDropdown,
+                        spawn_input_mode_options,
                     )
-                    .with_children(|parent| {
-                        parent
-                            .spawn((
-                                InputModeDropdown,
-                                Node {
-                                    display: Display::None,
-                                    flex_direction: FlexDirection::Column,
-                                    align_items: AlignItems::Center,
-                                    position_type: PositionType::Absolute,
-                                    top: percent(100.),
-                                    justify_content: JustifyContent::FlexStart,
-                                    width: percent(100.),
-                                    ..Default::default()
-                                },
-                                GlobalZIndex(1),
-                            ))
-                            .with_children(|parent| {
-                                spawn_input_mode_options(parent, fonts);
-                            });
-                    })
                     .observe(input_mode_on_click);
                 });
         });
