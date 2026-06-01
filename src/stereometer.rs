@@ -1,10 +1,10 @@
 use crate::{
-    AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor,
-    FilteringMode, LiveDensity, LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio,
-    PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
+    AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor, FilteringMode, LiveDensity,
+    LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR,
+    TraceDensity, TraceMesh,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
-use biquad::{Biquad, Coefficients, DirectForm1};
+use biquad::*;
 use std::collections::VecDeque;
 #[derive(Resource, Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub enum StereometerKind {
@@ -65,6 +65,20 @@ impl StereoFilter {
         }
     }
 
+    pub fn from_coeffs_butterworth(ty: Type<f32>, f0: f32, fs: u32) -> Self {
+        let coeffs = Coefficients::<f32>::from_params(
+            ty,
+            fs.clamp(1, 192_000).hz(),
+            f0.clamp(1.0, 20_000.0).hz(),
+            Q_BUTTERWORTH_F32,
+        )
+        .unwrap();
+        StereoFilter {
+            l: DirectForm1::<f32>::new(coeffs),
+            r: DirectForm1::<f32>::new(coeffs),
+        }
+    }
+
     pub fn run(&mut self, l: f32, r: f32) -> (f32, f32) {
         (self.l.run(l), self.r.run(r))
     }
@@ -112,7 +126,7 @@ fn radial_scale(left: f32, right: f32) -> f32 {
 pub fn update(
     playing_audio: Single<&AudioSink, With<PlayingAudio>>,
     audio: Single<&AudioFileContents>,
-    mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
+    mut stereometer: Single<&mut Stereometer, With<DrawableCursor>>,
     canvas: Single<&UiGlobalTransform, With<PreviewCanvas>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
     params: Res<StereometerParams>,
@@ -124,7 +138,7 @@ pub fn update(
     };
 
     let pos = playing_audio.position().as_secs_f64() % audio.duration;
-    let mut last_idx = goniometer.last_sample_idx;
+    let mut last_idx = stereometer.last_sample_idx;
     let cur_idx = (audio.sample_rate as f64 * pos) as usize;
 
     if cur_idx > last_idx {
@@ -134,10 +148,10 @@ pub fn update(
             .samples
             .get(last_idx..last_idx + frame_size)
             .unwrap_or_else(|| {
-                goniometer.last_sample_idx = 0;
+                stereometer.last_sample_idx = 0;
                 &[0.]
             });
-        goniometer.last_sample_idx = cur_idx;
+        stereometer.last_sample_idx = cur_idx;
         for frame in trace_window.chunks_exact(audio.num_channels) {
             let left = frame[0];
             let right = *frame.last().unwrap_or(&left);
@@ -145,19 +159,19 @@ pub fn update(
             //filtering
             let (left, right) = match params.filtering_mode {
                 FilteringMode::Off => (left, right),
-                FilteringMode::Lpf => goniometer
+                FilteringMode::Lpf => stereometer
                     .history_filterbank
                     .as_mut()
                     .unwrap()
                     .0
                     .run(left, right),
-                FilteringMode::Bpf => goniometer
+                FilteringMode::Bpf => stereometer
                     .history_filterbank
                     .as_mut()
                     .unwrap()
                     .1
                     .run(left, right),
-                FilteringMode::Hpf => goniometer
+                FilteringMode::Hpf => stereometer
                     .history_filterbank
                     .as_mut()
                     .unwrap()
@@ -166,13 +180,13 @@ pub fn update(
             };
 
             let (x_sample, y_sample) = get_xy_from_meterkind(&params.kind, left, right);
-            goniometer.trace_buffer.push_back(Vec2 {
+            stereometer.trace_buffer.push_back(Vec2 {
                 x: world_pos.x + x_sample * params.scale_factor,
                 y: world_pos.y + y_sample * params.scale_factor,
             });
         }
     } else {
-        goniometer.last_sample_idx = cur_idx;
+        stereometer.last_sample_idx = cur_idx;
     }
 
     let live_window = &audio
@@ -182,10 +196,10 @@ pub fn update(
                 ..(cur_idx + params.live_density.count()) * audio.num_channels,
         )
         .unwrap_or_else(|| {
-            goniometer.last_sample_idx = 0;
+            stereometer.last_sample_idx = 0;
             &[0.]
         });
-    goniometer.live_buffer = live_window
+    stereometer.live_buffer = live_window
         .chunks_exact(audio.num_channels)
         .map(|frame| {
             let left = frame[0];
@@ -194,19 +208,19 @@ pub fn update(
             // Filtering
             let (left, right) = match params.filtering_mode {
                 FilteringMode::Off => (left, right),
-                FilteringMode::Lpf => goniometer
+                FilteringMode::Lpf => stereometer
                     .live_filterbank
                     .as_mut()
                     .unwrap()
                     .0
                     .run(left, right),
-                FilteringMode::Bpf => goniometer
+                FilteringMode::Bpf => stereometer
                     .live_filterbank
                     .as_mut()
                     .unwrap()
                     .1
                     .run(left, right),
-                FilteringMode::Hpf => goniometer
+                FilteringMode::Hpf => stereometer
                     .live_filterbank
                     .as_mut()
                     .unwrap()
@@ -222,11 +236,11 @@ pub fn update(
         })
         .collect();
 
-    while goniometer.live_buffer.len() > params.live_density.count() {
-        goniometer.live_buffer.pop_front();
+    while stereometer.live_buffer.len() > params.live_density.count() {
+        stereometer.live_buffer.pop_front();
     }
-    while goniometer.trace_buffer.len() > params.trace_density.count() {
-        goniometer.trace_buffer.pop_front();
+    while stereometer.trace_buffer.len() > params.trace_density.count() {
+        stereometer.trace_buffer.pop_front();
     }
 }
 

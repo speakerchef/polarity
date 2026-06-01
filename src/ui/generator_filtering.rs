@@ -204,44 +204,22 @@ pub fn freq_slider_update(
 pub fn update_filter_freq(
     mut params: ResMut<StereometerParams>,
     audio: Single<&AudioFileContents>,
-    mut goniometer: Single<&mut Stereometer, With<DrawableCursor>>,
+    mut stereometer: Single<&mut Stereometer, With<DrawableCursor>>,
     text: Single<&EditableText, With<FilterFreqAmt>>,
 ) {
     if let Ok(val) = text.value().to_string().parse::<f32>()
         && params.freq != val.round()
     {
         params.freq = val.round();
-        info!("{}", params.freq);
-        let lpf_coeffs = Coefficients::<f32>::from_params(
-            Type::LowPass,
-            audio.sample_rate.hz(),
-            params.freq.hz(),
-            Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-        let bpf_coeffs = Coefficients::<f32>::from_params(
-            Type::BandPass,
-            audio.sample_rate.hz(),
-            params.freq.hz(),
-            Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-        let hpf_coeffs = Coefficients::<f32>::from_params(
-            Type::HighPass,
-            audio.sample_rate.hz(),
-            params.freq.hz(),
-            Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-        goniometer.live_filterbank = Some((
-            StereoFilter::new(lpf_coeffs),
-            StereoFilter::new(bpf_coeffs),
-            StereoFilter::new(hpf_coeffs),
+        stereometer.live_filterbank = Some((
+            StereoFilter::from_coeffs_butterworth(Type::LowPass, params.freq, audio.sample_rate),
+            StereoFilter::from_coeffs_butterworth(Type::BandPass, params.freq, audio.sample_rate),
+            StereoFilter::from_coeffs_butterworth(Type::HighPass, params.freq, audio.sample_rate),
         ));
-        goniometer.history_filterbank = Some((
-            StereoFilter::new(lpf_coeffs),
-            StereoFilter::new(bpf_coeffs),
-            StereoFilter::new(hpf_coeffs),
+        stereometer.history_filterbank = Some((
+            StereoFilter::from_coeffs_butterworth(Type::LowPass, params.freq, audio.sample_rate),
+            StereoFilter::from_coeffs_butterworth(Type::BandPass, params.freq, audio.sample_rate),
+            StereoFilter::from_coeffs_butterworth(Type::HighPass, params.freq, audio.sample_rate),
         ));
     }
 }
