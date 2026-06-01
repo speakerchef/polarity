@@ -17,12 +17,12 @@
 - [ ] Stereometer Generator option
   - [x] 4 modes/styles: Bipolar, Scaled bipolar, lissajous, scaled lissajous
   - [x] Controllable LPF, BPF, HPF filters
-  - [ ] 3-band mode and band-isolated rendering via above filters
+  - [x] 3-band mode and band-isolated rendering via above filters
   - [ ] per-band color.
   - [x] Single color
   - [x] Tunable point density for primary and trace generators
-  - [ ] Editable point size
-  - [ ] Tunable animation scale-factor
+  - [x] Editable point size
+  - [x] Tunable animation scale-factor
 - [ ] Primitive Rack of Post FX modules
   - [x] Bloom / Sparkle
   - [ ] Chromatic aberration

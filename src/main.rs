@@ -6,6 +6,7 @@ use bevy_file_dialog::prelude::*;
 use polarity::stereometer::{self, StereometerParams};
 use polarity::ui::control_panel::{file_loaded, spawn_control_panel};
 use polarity::ui::generator_filtering::{freq_amt_text_update, freq_slider_update};
+use polarity::ui::generator_render::watch_render_mode;
 use polarity::ui::generator_visual::{
     dot_size_amt_text_update, dot_size_slider_update, scale_amt_text_update, scale_slider_update,
     watch_color_input_edit,
@@ -66,7 +67,7 @@ fn main() {
                 .chain()
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
-        .add_systems(Update, (watch_color_input_edit,))
+        .add_systems(Update, (watch_color_input_edit, watch_render_mode))
         .add_systems(Update, (scale_amt_text_update, scale_slider_update))
         .add_systems(Update, (dot_size_amt_text_update, dot_size_slider_update))
         .add_systems(Update, (sparkle_slider_update, sparkle_text_update))

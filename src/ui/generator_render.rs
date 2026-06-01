@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     FontBlock, NullComponent, palette,
-    stereometer::{StereometerInputMode, StereometerParams},
+    stereometer::{StereometerParams, StereometerRenderMode},
     ui::{
         control_panel::{DropdownItem, SubmenuItem},
         interactions::*,
@@ -11,17 +11,17 @@ use crate::{
 };
 
 #[derive(Component, Clone)]
-pub struct InputSubmenu;
+pub struct RenderModeSubmenu;
 #[derive(Component, Clone)]
-pub struct InputModeSelectorMenu;
+pub struct RenderModeSelectorMenu;
 #[derive(Component, Clone)]
-pub struct InputModeDropdown;
+pub struct RenderModeDropdown;
 
-pub fn spawn_input_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+pub fn spawn_render_mode_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
-            SubmenuItem(DropdownItem::Input),
-            InputSubmenu,
+            SubmenuItem(DropdownItem::Render),
+            RenderModeSubmenu,
             Node {
                 display: Display::None,
                 align_items: AlignItems::Center,
@@ -53,15 +53,21 @@ pub fn spawn_input_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                         parent,
                         fonts,
                         "Mode",
-                        ("Full Spectrum", InputModeSelectorMenu),
-                        InputModeDropdown,
-                        spawn_input_mode_options,
+                        (
+                            &StereometerRenderMode::default().to_string(),
+                            RenderModeSelectorMenu,
+                        ),
+                        RenderModeDropdown,
+                        spawn_render_mode_options,
                     )
-                    .observe(input_mode_on_click);
+                    .observe(render_mode_on_click);
                 });
         });
 }
-fn input_mode_on_click(_: On<Pointer<Click>>, mut vis: Single<&mut Node, With<InputModeDropdown>>) {
+fn render_mode_on_click(
+    _: On<Pointer<Click>>,
+    mut vis: Single<&mut Node, With<RenderModeDropdown>>,
+) {
     if vis.display != Display::Flex {
         vis.display = Display::Flex;
     } else {
@@ -69,10 +75,10 @@ fn input_mode_on_click(_: On<Pointer<Click>>, mut vis: Single<&mut Node, With<In
     }
 }
 
-fn spawn_input_mode_options(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
+fn spawn_render_mode_options(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     for mode in &[
-        StereometerInputMode::FullSpectrum,
-        StereometerInputMode::MultiBand,
+        StereometerRenderMode::FullSpectrum,
+        StereometerRenderMode::MultiBand,
     ] {
         parent
             .spawn((
@@ -94,13 +100,34 @@ fn spawn_input_mode_options(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
             .observe(
                 |_: On<Pointer<Click>>,
                  mut stereo_params: ResMut<StereometerParams>,
-                 mut txt: Single<&mut Text, With<InputModeSelectorMenu>>| {
+                 mut txt: Single<&mut Text, With<RenderModeSelectorMenu>>| {
                     info!("clicked");
-                    stereo_params.input_mode = mode.clone();
+                    stereo_params.render_mode = mode.clone();
                     txt.0 = mode.to_string();
                 },
             )
             .observe(on_hover_void)
             .observe(on_leave_void);
+    }
+}
+
+pub fn watch_render_mode(
+    params: Res<StereometerParams>,
+    filter: Query<(&mut Node, &DropdownItem)>,
+) {
+    for (mut node, item) in filter {
+        if matches!(item, DropdownItem::Filtering) {
+            if matches!(params.render_mode, StereometerRenderMode::MultiBand) {
+                node.display = match node.display {
+                    Display::Flex => Display::None,
+                    _ => return,
+                }
+            } else {
+                node.display = match node.display {
+                    Display::None => Display::Flex,
+                    _ => return,
+                }
+            }
+        }
     }
 }

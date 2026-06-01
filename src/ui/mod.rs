@@ -10,8 +10,8 @@ use bevy::{
 
 pub mod control_panel;
 pub mod generator_filtering;
-pub mod generator_input;
 pub mod generator_mode;
+pub mod generator_render;
 pub mod generator_visual;
 pub mod interactions;
 pub mod postfx_sparkle;

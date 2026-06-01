@@ -219,7 +219,7 @@ pub fn freq_slider_update(
                             audio.sample_rate,
                         ),
                     ));
-                    stereometer.history_filterbank = Some((
+                    stereometer.trace_filterbank = Some((
                         StereoFilter::from_coeffs_butterworth(
                             Type::LowPass,
                             params.freq,

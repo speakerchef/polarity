@@ -1,6 +1,6 @@
 use crate::ui::generator_filtering::spawn_filtering_submenu;
-use crate::ui::generator_input::spawn_input_submenu;
 use crate::ui::generator_mode::spawn_mode_submenu;
+use crate::ui::generator_render::spawn_render_mode_submenu;
 use crate::ui::postfx_sparkle::spawn_sparkle_submenu;
 use bevy_file_dialog::prelude::*;
 use biquad::*;
@@ -32,7 +32,7 @@ pub struct MotionSubmenu;
 #[derive(Component, Clone, PartialEq, Eq)]
 pub enum DropdownItem {
     // GENERATOR
-    Input,
+    Render,
     Filtering,
     Mode,
     Motion,
@@ -44,7 +44,7 @@ pub enum DropdownItem {
 impl From<DropdownItem> for String {
     fn from(value: DropdownItem) -> Self {
         match value {
-            DropdownItem::Input => "INPUT".to_string(),
+            DropdownItem::Render => "RENDER".to_string(),
             DropdownItem::Filtering => "FILTERING".to_string(),
             DropdownItem::Mode => "MODE".to_string(),
             DropdownItem::Motion => "MOTION".to_string(),
@@ -191,7 +191,7 @@ fn spawn_submenu_items(
         .observe(header_submenu_onclick);
 
     match dropdownitem {
-        DropdownItem::Input => spawn_input_submenu(parent, fonts),
+        DropdownItem::Render => spawn_render_mode_submenu(parent, fonts),
         DropdownItem::Filtering => spawn_filtering_submenu(parent, fonts),
         DropdownItem::Mode => spawn_mode_submenu(parent),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
@@ -355,7 +355,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 parent,
                 fonts,
                 &[
-                    DropdownItem::Input,
+                    DropdownItem::Render,
                     DropdownItem::Filtering,
                     DropdownItem::Mode,
                     DropdownItem::Visual,
@@ -444,20 +444,25 @@ pub fn file_loaded(
         };
         let fs = file_contents.sample_rate.hz();
         let lpf_coeffs =
-            Coefficients::<f32>::from_params(Type::LowPass, fs, 300.hz(), Q_BUTTERWORTH_F32)
+            Coefficients::<f32>::from_params(Type::LowPass, fs, 200.hz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         let bpf_coeffs =
             Coefficients::<f32>::from_params(Type::BandPass, fs, 1.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         let hpf_coeffs =
-            Coefficients::<f32>::from_params(Type::HighPass, fs, 3.khz(), Q_BUTTERWORTH_F32)
+            Coefficients::<f32>::from_params(Type::HighPass, fs, 5.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         stereometer.live_filterbank = Some((
             StereoFilter::new(lpf_coeffs),
             StereoFilter::new(bpf_coeffs),
             StereoFilter::new(hpf_coeffs),
         ));
-        stereometer.history_filterbank = Some((
+        stereometer.trace_filterbank = Some((
+            StereoFilter::new(lpf_coeffs),
+            StereoFilter::new(bpf_coeffs),
+            StereoFilter::new(hpf_coeffs),
+        ));
+        stereometer.mb_filterbank = Some((
             StereoFilter::new(lpf_coeffs),
             StereoFilter::new(bpf_coeffs),
             StereoFilter::new(hpf_coeffs),
