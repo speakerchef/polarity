@@ -288,6 +288,13 @@ pub struct VisualScaleThumb;
 #[derive(Component, Clone)]
 pub struct VisualScaleAmt;
 
+#[derive(Component, Clone)]
+pub struct VisualDotSizeSlider;
+#[derive(Component, Clone)]
+pub struct VisualDotSizeThumb;
+#[derive(Component, Clone)]
+pub struct VisualDotSizeAmt;
+
 pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
@@ -343,7 +350,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                     spawn_slider_row(
                         parent,
                         fonts,
-                        "Scale",
+                        "Scale(%)",
                         (
                             100.0,
                             500.0,
@@ -353,7 +360,24 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                             VisualScaleThumb,
                         ),
                         (palette::width::SMALL_SELECTOR_MENU, 4, VisualScaleAmt),
-                        "%",
+                    )
+                });
+            parent
+                .spawn(menu_row_container(JustifyContent::Default))
+                .with_children(|parent| {
+                    spawn_slider_row(
+                        parent,
+                        fonts,
+                        "Pixel(Px)",
+                        (
+                            0.20,
+                            2.00,
+                            0.01,
+                            0.75,
+                            VisualDotSizeSlider,
+                            VisualDotSizeThumb,
+                        ),
+                        (palette::width::SMALL_SELECTOR_MENU, 4, VisualDotSizeAmt),
                     )
                 });
             parent
@@ -478,6 +502,56 @@ pub fn scale_slider_update(
             {
                 amt_text.editor_mut().set_text(&value.0.round().to_string());
                 params.scale_factor = value.0.round();
+                let position = range.thumb_position(value.0) * 100.0;
+                thumb_node.left = percent(position);
+            }
+        }
+    }
+}
+
+pub fn dot_size_amt_text_update(
+    mut commands: Commands,
+    input_focus: Res<InputFocus>,
+    button_input: Res<ButtonInput<KeyCode>>,
+    sliders: Query<Entity, With<VisualDotSizeSlider>>,
+    text: Query<&EditableText, With<VisualDotSizeAmt>>,
+) {
+    if (button_input.just_pressed(KeyCode::Enter)
+        || button_input.just_pressed(KeyCode::NumpadEnter))
+        && let Some(focused_ent) = input_focus.get()
+        && let Ok(text_entity) = text.get(focused_ent)
+        && let Ok(text_to_f32) = text_entity.value().to_string().parse::<f32>()
+    {
+        for e in sliders {
+            commands.trigger(SetSliderValue {
+                entity: e,
+                change: SliderValueChange::Absolute(text_to_f32),
+            })
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn dot_size_slider_update(
+    sliders: Query<
+        (Entity, &SliderValue, &SliderRange),
+        (
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
+            With<VisualDotSizeSlider>,
+        ),
+    >,
+    mut thumbs: Query<(&mut Node, Has<VisualDotSizeThumb>), Without<VisualDotSizeSlider>>,
+    children: Query<&Children>,
+    mut amt_text: Single<&mut EditableText, With<VisualDotSizeAmt>>,
+    mut params: ResMut<StereometerParams>,
+) {
+    for (slider_ent, value, range) in sliders.iter() {
+        for child in children.iter_descendants(slider_ent) {
+            if let Ok((mut thumb_node, is_thumb)) = thumbs.get_mut(child)
+                && is_thumb
+            {
+                amt_text.editor_mut().set_text(&format!("{:.2}", value.0));
+                params.dot_size = value.0;
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
             }

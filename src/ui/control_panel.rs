@@ -165,7 +165,7 @@ fn spawn_submenu_items(
                 justify_content: JustifyContent::FlexStart,
                 height: px(palette::height::DROPDOWN_ITEM),
                 width: percent(100.),
-                padding: UiRect::left(px(12)).with_right(px(12)),
+                padding: UiRect::horizontal(px(10)),
                 border: UiRect::top(px(2)),
                 ..Default::default()
             },
@@ -178,7 +178,7 @@ fn spawn_submenu_items(
                 TextFont {
                     font: fonts.text.clone(),
                     font_size: FontSize::Px(palette::font_size::BODY),
-                    weight: FontWeight(palette::font_weight::BODY),
+                    weight: FontWeight(palette::font_weight::MED),
                     ..Default::default()
                 },
                 TextColor(palette::BRIGHT),

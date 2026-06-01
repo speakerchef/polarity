@@ -10,8 +10,6 @@ use bevy::{
 };
 
 pub const NUM_VERTICES: usize = 6;
-pub const DOT_HALF_SIZE: f32 = 0.75;
-pub const ANIM_SCALE_FACTOR: f32 = 250.0;
 pub const RADIAL_SCALE_FACTOR: f32 = 0.4;
 pub const MAX_WINDOW_SIZE: usize = 32768;
 pub const LIVE_MAGENTA: LinearRgba = LinearRgba {

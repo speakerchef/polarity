@@ -1,17 +1,17 @@
 use crate::{
-    AudioFileContents, CustomMaterial, DOT_HALF_SIZE, DrawableCursor, FilteringMode, LiveDensity,
-    LiveMesh, MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR,
-    TraceDensity, TraceMesh,
+    AudioFileContents, CustomMaterial, DrawableCursor, FilteringMode, LiveDensity, LiveMesh,
+    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity,
+    TraceMesh,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
 use biquad::*;
 use std::collections::VecDeque;
 #[derive(Resource, Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub enum StereometerKind {
-    #[default]
     LinearBipolar,
     ScaledBipolar,
     LinearLissajous,
+    #[default]
     ScaledLissajous,
 }
 
@@ -50,6 +50,7 @@ pub struct StereometerParams {
     pub freq: f32,
 
     pub scale_factor: f32,
+    pub dot_size: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -245,15 +246,14 @@ pub fn update(
 }
 
 /// Converts 2D vertex into 2 triangles forming a rectangle
-fn point_to_quad_vertices(v: Vec2) -> [[f32; 3]; NUM_VERTICES] {
-    let s = DOT_HALF_SIZE;
+fn point_to_quad_vertices(v: Vec2, dot_sz: f32) -> [[f32; 3]; NUM_VERTICES] {
     [
-        [v.x - s, v.y - s, 0.0],
-        [v.x + s, v.y - s, 0.0],
-        [v.x + s, v.y + s, 0.0],
-        [v.x - s, v.y - s, 0.0],
-        [v.x + s, v.y + s, 0.0],
-        [v.x - s, v.y + s, 0.0],
+        [v.x - dot_sz, v.y - dot_sz, 0.0],
+        [v.x + dot_sz, v.y - dot_sz, 0.0],
+        [v.x + dot_sz, v.y + dot_sz, 0.0],
+        [v.x - dot_sz, v.y - dot_sz, 0.0],
+        [v.x + dot_sz, v.y + dot_sz, 0.0],
+        [v.x - dot_sz, v.y + dot_sz, 0.0],
     ]
 }
 
@@ -268,7 +268,7 @@ pub fn draw(
         let pos: Vec<_> = goniometer
             .trace_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v))
+            .flat_map(|&v| point_to_quad_vertices(v, params.dot_size))
             .collect();
         trace_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
         trace_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, {
@@ -287,7 +287,7 @@ pub fn draw(
         let pos: Vec<_> = goniometer
             .live_buffer
             .iter()
-            .flat_map(|&v| point_to_quad_vertices(v))
+            .flat_map(|&v| point_to_quad_vertices(v, params.dot_size))
             .collect();
         live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
         live_mesh.insert_attribute(

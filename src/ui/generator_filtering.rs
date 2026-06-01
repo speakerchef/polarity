@@ -67,10 +67,9 @@ pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBl
                     spawn_slider_row(
                         parent,
                         fonts,
-                        "Freq",
+                        "Freq(Hz)",
                         (min, max, step, def, FilterFreqSlider, FilterFreqThumb),
-                        (palette::width::MED_SELECTOR_MENU, 6, FilterFreqAmt),
-                        "Hz",
+                        (palette::width::MED_SELECTOR_MENU, 5, FilterFreqAmt),
                     )
                 });
         });
@@ -187,6 +186,9 @@ pub fn freq_slider_update(
     mut thumbs: Query<(&mut Node, Has<FilterFreqThumb>), Without<FilterFreqSlider>>,
     children: Query<&Children>,
     mut amt_text: Single<&mut EditableText, With<FilterFreqAmt>>,
+    mut params: ResMut<StereometerParams>,
+    audio: Single<&AudioFileContents>,
+    mut stereometer: Single<&mut Stereometer, With<DrawableCursor>>,
 ) {
     for (slider_ent, value, range) in sliders.iter() {
         for child in children.iter_descendants(slider_ent) {
@@ -196,30 +198,46 @@ pub fn freq_slider_update(
                 amt_text.editor_mut().set_text(&value.0.round().to_string());
                 let position = range.thumb_position(value.0) * 100.0;
                 thumb_node.left = percent(position);
+
+                // update filters
+                if params.freq != value.0.round() {
+                    params.freq = value.0.round();
+                    stereometer.live_filterbank = Some((
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::LowPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::BandPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::HighPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                    ));
+                    stereometer.history_filterbank = Some((
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::LowPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::BandPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                        StereoFilter::from_coeffs_butterworth(
+                            Type::HighPass,
+                            params.freq,
+                            audio.sample_rate,
+                        ),
+                    ));
+                }
             }
         }
-    }
-}
-
-pub fn update_filter_freq(
-    mut params: ResMut<StereometerParams>,
-    audio: Single<&AudioFileContents>,
-    mut stereometer: Single<&mut Stereometer, With<DrawableCursor>>,
-    text: Single<&EditableText, With<FilterFreqAmt>>,
-) {
-    if let Ok(val) = text.value().to_string().parse::<f32>()
-        && params.freq != val.round()
-    {
-        params.freq = val.round();
-        stereometer.live_filterbank = Some((
-            StereoFilter::from_coeffs_butterworth(Type::LowPass, params.freq, audio.sample_rate),
-            StereoFilter::from_coeffs_butterworth(Type::BandPass, params.freq, audio.sample_rate),
-            StereoFilter::from_coeffs_butterworth(Type::HighPass, params.freq, audio.sample_rate),
-        ));
-        stereometer.history_filterbank = Some((
-            StereoFilter::from_coeffs_butterworth(Type::LowPass, params.freq, audio.sample_rate),
-            StereoFilter::from_coeffs_butterworth(Type::BandPass, params.freq, audio.sample_rate),
-            StereoFilter::from_coeffs_butterworth(Type::HighPass, params.freq, audio.sample_rate),
-        ));
     }
 }

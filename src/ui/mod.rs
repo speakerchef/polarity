@@ -28,9 +28,10 @@ pub fn spawn_body_text(
         TextFont {
             font: font.text.clone(),
             font_size: FontSize::Px(palette::font_size::BODY),
-            weight: FontWeight(palette::font_weight::BODY),
+            weight: FontWeight(palette::font_weight::MED),
             ..Default::default()
         },
+        TextLayout::no_wrap().with_justify(Justify::Left),
         TextColor(palette::BRIGHT),
         LetterSpacing::Px(palette::letter_spacing::BASE),
     ));
@@ -204,7 +205,7 @@ pub fn menu_row_container(justify_content: JustifyContent) -> impl Bundle {
             justify_content,
             height: px(palette::height::MENU_ITEM),
             width: percent(100.),
-            padding: UiRect::horizontal(px(12)),
+            padding: UiRect::horizontal(px(10)),
             border: UiRect::horizontal(px(1)).with_bottom(px(1)),
             ..Default::default()
         },
@@ -261,7 +262,6 @@ pub fn spawn_slider_row<S, T, A>(
     label_text: &str,
     slider: (f32, f32, f32, f32, S, T),
     textbox: (f32, usize, A),
-    textbox_postfix_text: &str,
 ) where
     S: Component,
     T: Component,
@@ -271,7 +271,7 @@ pub fn spawn_slider_row<S, T, A>(
         .spawn((Node {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::FlexStart,
-            width: px(45),
+            width: px(90),
             ..Default::default()
         },))
         .with_children(|parent| spawn_body_text(parent, label_text, NullComponent, fonts));
@@ -281,6 +281,7 @@ pub fn spawn_slider_row<S, T, A>(
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             width: px(palette::width::MED_SLIDER),
+            // flex_grow: 2.0,
             ..Default::default()
         })
         .with_children(|parent| {
@@ -300,7 +301,7 @@ pub fn spawn_slider_row<S, T, A>(
             column_gap: px(4),
             justify_content: JustifyContent::FlexEnd,
             align_items: AlignItems::Center,
-            margin: UiRect::right(px(-8)),
+            // margin: UiRect::right(px(-6)),
             width: px(80.),
             ..Default::default()
         })
@@ -314,6 +315,6 @@ pub fn spawn_slider_row<S, T, A>(
                 max_chars as f32,
                 max_chars,
             );
-            spawn_body_text(parent, textbox_postfix_text, NullComponent, fonts);
+            // spawn_body_text(parent, textbox_postfix_text, NullComponent, fonts);
         });
 }
