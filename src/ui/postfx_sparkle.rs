@@ -55,7 +55,7 @@ pub fn spawn_sparkle_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                             spawn_slider_row(
                                 parent,
                                 fonts,
-                                "Amt(%)",
+                                "Amount %",
                                 (min, max, step, def, PostFxSparkleSlider, PostFxSparkleThumb),
                                 (palette::width::SMALL_SELECTOR_MENU, 4, PostFxSparkleAmt),
                             )

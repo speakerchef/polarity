@@ -67,7 +67,7 @@ pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBl
                     spawn_slider_row(
                         parent,
                         fonts,
-                        "Freq(Hz)",
+                        "Frequency",
                         (min, max, step, def, FilterFreqSlider, FilterFreqThumb),
                         (palette::width::MED_SELECTOR_MENU, 5, FilterFreqAmt),
                     )

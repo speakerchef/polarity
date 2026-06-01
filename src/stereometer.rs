@@ -47,8 +47,8 @@ pub struct StereometerParams {
     pub live_density: LiveDensity,
     pub trace_density: TraceDensity,
 
-    pub color: LinearRgba,
-    pub multiband_color: (LinearRgba, LinearRgba, LinearRgba),
+    pub color: Hsla,
+    pub multiband_color: (Hsla, Hsla, Hsla),
 
     pub freq: f32,
 
@@ -342,7 +342,7 @@ pub fn draw(
                     let color: Vec<_> = (0..stereometer.trace_buffer.len())
                         .flat_map(|i| {
                             let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-                            let c = params.color.with_alpha(alpha).to_f32_array();
+                            let c = LinearRgba::from(params.color.with_alpha(alpha)).to_f32_array();
                             std::iter::repeat_n(c, NUM_VERTICES)
                         })
                         .collect();
@@ -408,7 +408,10 @@ pub fn draw(
                 live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
                 live_mesh.insert_attribute(
                     Mesh::ATTRIBUTE_COLOR,
-                    vec![params.color.to_f32_array(); NUM_VERTICES * stereometer.live_buffer.len()],
+                    vec![
+                        LinearRgba::from(params.color).to_f32_array();
+                        NUM_VERTICES * stereometer.live_buffer.len()
+                    ],
                 );
             }
             StereometerRenderMode::MultiBand => {

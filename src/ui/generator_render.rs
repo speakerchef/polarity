@@ -6,7 +6,7 @@ use crate::{
     ui::{
         control_panel::{DropdownItem, SubmenuItem},
         interactions::*,
-        spawn_body_text, spawn_dropdown_row,
+        menu_row_container, spawn_body_text, spawn_dropdown_row,
     },
 };
 
@@ -35,19 +35,7 @@ pub fn spawn_render_mode_submenu(parent: &mut ChildSpawnerCommands, fonts: &Font
         ))
         .with_children(|parent| {
             parent
-                .spawn((
-                    Node {
-                        display: Display::Flex,
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::SpaceBetween,
-                        height: px(palette::height::MENU_ITEM),
-                        width: percent(100.),
-                        padding: UiRect::horizontal(px(12)),
-                        border: UiRect::horizontal(px(1)).with_bottom(px(1)),
-                        ..Default::default()
-                    },
-                    BorderColor::all(palette::BORDER),
-                ))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
                 .with_children(|parent| {
                     spawn_dropdown_row(
                         parent,

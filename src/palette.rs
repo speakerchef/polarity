@@ -36,6 +36,7 @@ pub mod font_weight {
 }
 
 pub mod letter_spacing {
+    pub const MINIMAL: f32 = 0.5;
     pub const BASE: f32 = 1.;
     pub const SPACED: f32 = 2.;
     pub const ULTRAWIDE: f32 = 3.;
@@ -57,7 +58,7 @@ pub mod width {
     pub const LARGE_SELECTOR_MENU: f32 = 120.0;
     pub const XLARGE_SELECTOR_MENU: f32 = 180.0;
 
-    pub const MED_SLIDER: f32 = 180.0;
+    pub const SLIDER: f32 = 200.0;
 }
 
 pub mod height {

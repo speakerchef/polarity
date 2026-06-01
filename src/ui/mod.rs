@@ -9,6 +9,7 @@ use bevy::{
 };
 
 pub mod control_panel;
+pub mod generator_color;
 pub mod generator_filtering;
 pub mod generator_mode;
 pub mod generator_render;
@@ -33,7 +34,7 @@ pub fn spawn_body_text(
         },
         TextLayout::no_wrap().with_justify(Justify::Left),
         TextColor(palette::BRIGHT),
-        LetterSpacing::Px(palette::letter_spacing::BASE),
+        LetterSpacing::Px(palette::letter_spacing::MINIMAL),
     ));
 }
 
@@ -86,7 +87,7 @@ pub fn horizontal_slider(
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Stretch,
-            width: px(palette::width::MED_SLIDER),
+            width: px(palette::width::SLIDER),
             ..default()
         },
         slider_marker,
@@ -206,7 +207,7 @@ pub fn menu_row_container(justify_content: JustifyContent) -> impl Bundle {
             height: px(palette::height::MENU_ITEM),
             width: percent(100.),
             padding: UiRect::horizontal(px(10)),
-            border: UiRect::horizontal(px(1)).with_bottom(px(1)),
+            border: UiRect::bottom(px(1)),
             ..Default::default()
         },
         BorderColor::all(palette::BORDER),
@@ -271,7 +272,7 @@ pub fn spawn_slider_row<S, T, A>(
         .spawn((Node {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::FlexStart,
-            width: px(90),
+            width: px(100),
             ..Default::default()
         },))
         .with_children(|parent| spawn_body_text(parent, label_text, NullComponent, fonts));
@@ -280,7 +281,7 @@ pub fn spawn_slider_row<S, T, A>(
         .spawn(Node {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            width: px(palette::width::MED_SLIDER),
+            width: px(palette::width::SLIDER),
             // flex_grow: 2.0,
             ..Default::default()
         })
@@ -301,7 +302,6 @@ pub fn spawn_slider_row<S, T, A>(
             column_gap: px(4),
             justify_content: JustifyContent::FlexEnd,
             align_items: AlignItems::Center,
-            // margin: UiRect::right(px(-6)),
             width: px(80.),
             ..Default::default()
         })

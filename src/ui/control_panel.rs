@@ -1,3 +1,4 @@
+use crate::ui::generator_color::spawn_color_submenu;
 use crate::ui::generator_filtering::spawn_filtering_submenu;
 use crate::ui::generator_mode::spawn_mode_submenu;
 use crate::ui::generator_render::spawn_render_mode_submenu;
@@ -35,7 +36,7 @@ pub enum DropdownItem {
     Render,
     Filtering,
     Mode,
-    Motion,
+    Color,
     Visual,
     // POST FX
     Sparkle,
@@ -47,7 +48,7 @@ impl From<DropdownItem> for String {
             DropdownItem::Render => "RENDER".to_string(),
             DropdownItem::Filtering => "FILTERING".to_string(),
             DropdownItem::Mode => "MODE".to_string(),
-            DropdownItem::Motion => "MOTION".to_string(),
+            DropdownItem::Color => "COLOR".to_string(),
             DropdownItem::Visual => "VISUAL".to_string(),
             DropdownItem::Sparkle => "SPARKLE".to_string(),
         }
@@ -121,8 +122,7 @@ fn spawn_import_export_button(parent: &mut ChildSpawnerCommands, fonts: &FontBlo
                 height: px(42),
                 flex_shrink: 0.,
                 width: percent(100.),
-                border: UiRect::left(px(palette::FRAME_WIDTH * 2.))
-                    .with_bottom(px(palette::FRAME_WIDTH)),
+                border: UiRect::left(px(1)).with_bottom(px(1)),
                 ..Default::default()
             },
             BackgroundColor(palette::BG),
@@ -166,7 +166,7 @@ fn spawn_submenu_items(
                 height: px(palette::height::DROPDOWN_ITEM),
                 width: percent(100.),
                 padding: UiRect::horizontal(px(10)),
-                border: UiRect::top(px(2)),
+                border: UiRect::top(px(1)),
                 ..Default::default()
             },
             BorderColor::all(palette::BORDER),
@@ -194,9 +194,9 @@ fn spawn_submenu_items(
         DropdownItem::Render => spawn_render_mode_submenu(parent, fonts),
         DropdownItem::Filtering => spawn_filtering_submenu(parent, fonts),
         DropdownItem::Mode => spawn_mode_submenu(parent),
+        DropdownItem::Color => spawn_color_submenu(parent, fonts),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
         DropdownItem::Sparkle => spawn_sparkle_submenu(parent, fonts),
-        _ => info!("No children for this yet"),
     }
 }
 
@@ -334,8 +334,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 flex_direction: FlexDirection::Column,
                 height: percent(100.),
                 width: percent(100.),
-                border: UiRect::left(px(palette::FRAME_WIDTH * 2.)),
-                padding: UiRect::all(px(12.)),
+                border: UiRect::left(px(1)),
                 ..Default::default()
             },
             BackgroundColor(palette::BG),
@@ -358,6 +357,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                     DropdownItem::Render,
                     DropdownItem::Filtering,
                     DropdownItem::Mode,
+                    DropdownItem::Color,
                     DropdownItem::Visual,
                 ],
                 GeneratorSubmenu,
