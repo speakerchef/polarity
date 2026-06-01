@@ -15,6 +15,7 @@ use polarity::ui::generator_visual::{
     dot_size_amt_text_update, dot_size_slider_update, scale_amt_text_update, scale_slider_update,
 };
 use polarity::ui::postfx_sparkle::{sparkle_slider_update, sparkle_text_update};
+use polarity::ui::{on_scroll_handler, send_scroll_events};
 use polarity::{
     AudioFileContents, CustomMaterial, DurationText, FontBlock, PlayingAudio, PreviewCanvas,
     TimelineScrubber, palette,
@@ -73,6 +74,8 @@ fn main() {
                 .chain()
                 .run_if(in_state(GeneratorChoice::Stereometer)),
         )
+        .add_systems(Update, send_scroll_events)
+        .add_observer(on_scroll_handler)
         .add_systems(Update, watch_render_mode)
         .add_systems(Update, (scale_slider_update, scale_amt_text_update))
         .add_systems(Update, (dot_size_slider_update, dot_size_amt_text_update))
@@ -213,7 +216,8 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                         .spawn((Node {
                             display: Display::Flex,
                             flex_direction: FlexDirection::Row,
-                            height: percent(100.),
+                            flex_grow: 1.0,
+                            min_height: px(0),
                             width: percent(100.),
                             ..Default::default()
                         },))
