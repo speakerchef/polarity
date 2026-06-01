@@ -1,8 +1,7 @@
-use crate::ui::generator_filtering::{FilterSubmenu, spawn_filtering_submenu};
-use crate::ui::generator_input::{InputSubmenu, spawn_input_submenu};
-use crate::ui::generator_mode::{ModeSubmenu, spawn_mode_submenu};
-use crate::ui::generator_visual::VisualSubmenu;
-use crate::ui::postfx_sparkle::{SparkleSubmenu, spawn_sparkle_submenu};
+use crate::ui::generator_filtering::spawn_filtering_submenu;
+use crate::ui::generator_input::spawn_input_submenu;
+use crate::ui::generator_mode::spawn_mode_submenu;
+use crate::ui::postfx_sparkle::spawn_sparkle_submenu;
 use bevy_file_dialog::prelude::*;
 use biquad::*;
 use std::sync::Arc;
@@ -30,7 +29,7 @@ struct PostFxSubmenu;
 #[derive(Component, Clone)]
 pub struct MotionSubmenu;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, PartialEq, Eq)]
 pub enum DropdownItem {
     // GENERATOR
     Input,
@@ -149,6 +148,9 @@ fn spawn_import_export_button(parent: &mut ChildSpawnerCommands, fonts: &FontBlo
         });
 }
 
+#[derive(Component, Clone)]
+pub struct SubmenuItem(pub DropdownItem);
+
 fn spawn_submenu_items(
     parent: &mut ChildSpawnerCommands,
     fonts: &FontBlock,
@@ -198,13 +200,16 @@ fn spawn_submenu_items(
     }
 }
 
-fn spawn_primary_dropdown_header<TRoot: Component + Clone, TSubmenu: Component>(
+fn spawn_primary_dropdown_header<R, S>(
     parent: &mut ChildSpawnerCommands,
     name: &str,
     fonts: &FontBlock,
-    root_cmp: TRoot,
+    root_cmp: R,
     item_index: usize,
-) {
+) where
+    R: Component + Clone,
+    S: Component,
+{
     parent
         .spawn((
             Node {
@@ -291,7 +296,7 @@ fn spawn_primary_dropdown_header<TRoot: Component + Clone, TSubmenu: Component>(
         .observe(on_hover_surface)
         .observe(on_leave_surface)
         .observe(on_click_toggle_bright_surface)
-        .observe(toggle_visibility_with_marker::<TSubmenu>);
+        .observe(toggle_visibility_with_marker::<S>);
 }
 
 fn spawn_submenu(
@@ -472,55 +477,19 @@ pub fn file_loaded(
     }
 }
 
-pub fn header_submenu_onclick(
+fn header_submenu_onclick(
     e: On<Pointer<Click>>,
     mut dropdown_items: Query<&DropdownItem>,
-    mut ps: ParamSet<(
-        Single<&mut Node, With<InputSubmenu>>,
-        Single<&mut Node, With<FilterSubmenu>>,
-        Single<&mut Node, With<ModeSubmenu>>,
-        Single<&mut Node, With<VisualSubmenu>>,
-        Single<&mut Node, With<SparkleSubmenu>>,
-    )>,
+    submenu_items: Query<(&mut Node, &SubmenuItem)>,
 ) {
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
-        match item {
-            DropdownItem::Input => {
-                if ps.p0().display == Display::Flex {
-                    ps.p0().display = Display::None;
-                } else {
-                    ps.p0().display = Display::Flex;
-                }
+        for (mut node, sub) in submenu_items {
+            if sub.0 == *item {
+                node.display = match node.display {
+                    Display::Flex => Display::None,
+                    _ => Display::Flex,
+                };
             }
-            DropdownItem::Filtering => {
-                if ps.p1().display == Display::Flex {
-                    ps.p1().display = Display::None;
-                } else {
-                    ps.p1().display = Display::Flex;
-                }
-            }
-            DropdownItem::Mode => {
-                if ps.p2().display == Display::Flex {
-                    ps.p2().display = Display::None;
-                } else {
-                    ps.p2().display = Display::Flex;
-                }
-            }
-            DropdownItem::Visual => {
-                if ps.p3().display == Display::Flex {
-                    ps.p3().display = Display::None;
-                } else {
-                    ps.p3().display = Display::Flex;
-                }
-            }
-            DropdownItem::Sparkle => {
-                if ps.p4().display == Display::Flex {
-                    ps.p4().display = Display::None;
-                } else {
-                    ps.p4().display = Display::Flex;
-                }
-            }
-            _ => info!("Not implemented this submenu item"),
         }
     }
 }

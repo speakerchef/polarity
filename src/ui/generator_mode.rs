@@ -3,7 +3,10 @@ use bevy::prelude::*;
 use crate::{
     palette,
     stereometer::{StereometerKind, StereometerParams},
-    ui::interactions::*,
+    ui::{
+        control_panel::{DropdownItem, SubmenuItem},
+        interactions::*,
+    },
 };
 
 #[derive(Component, Clone)]
@@ -12,6 +15,7 @@ pub struct ModeSubmenu;
 pub fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn((
+            SubmenuItem(DropdownItem::Mode),
             ModeSubmenu,
             Node {
                 display: Display::None,

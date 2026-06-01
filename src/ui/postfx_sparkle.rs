@@ -1,7 +1,6 @@
 use crate::stereometer::StereometerParams;
-use crate::ui::{
-    menu_row_container, spawn_slider_row,
-};
+use crate::ui::control_panel::{DropdownItem, SubmenuItem};
+use crate::ui::{menu_row_container, spawn_slider_row};
 use bevy::input_focus::InputFocus;
 use bevy::ui_widgets::SetSliderValue;
 use bevy::ui_widgets::SliderDragState;
@@ -33,6 +32,7 @@ pub struct SparkleSubmenu;
 pub fn spawn_sparkle_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
+            SubmenuItem(DropdownItem::Sparkle),
             SparkleSubmenu,
             Node {
                 display: Display::None,

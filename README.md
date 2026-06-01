@@ -21,7 +21,6 @@
   - [ ] per-band color.
   - [x] Single color
   - [x] Tunable point density for primary and trace generators
-  - [ ] Individual color for primary and trace gens
   - [ ] Editable point size
   - [ ] Tunable animation scale-factor
 - [ ] Primitive Rack of Post FX modules

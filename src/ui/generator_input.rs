@@ -3,7 +3,11 @@ use bevy::prelude::*;
 use crate::{
     FontBlock, NullComponent, palette,
     stereometer::{StereometerInputMode, StereometerParams},
-    ui::{interactions::*, spawn_body_text, spawn_dropdown_row},
+    ui::{
+        control_panel::{DropdownItem, SubmenuItem},
+        interactions::*,
+        spawn_body_text, spawn_dropdown_row,
+    },
 };
 
 #[derive(Component, Clone)]
@@ -16,6 +20,7 @@ pub struct InputModeDropdown;
 pub fn spawn_input_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
+            SubmenuItem(DropdownItem::Input),
             InputSubmenu,
             Node {
                 display: Display::None,

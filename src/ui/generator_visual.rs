@@ -1,6 +1,8 @@
 use crate::LiveDensity;
 use crate::palette;
 use crate::stereometer::StereometerParams;
+use crate::ui::control_panel::DropdownItem;
+use crate::ui::control_panel::SubmenuItem;
 use crate::ui::interactions::*;
 use crate::ui::menu_row_container;
 use crate::ui::spawn_body_text;
@@ -277,6 +279,7 @@ fn spawn_point_density_options(parent: &mut ChildSpawnerCommands, fonts: &FontBl
 pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
+            SubmenuItem(DropdownItem::Visual),
             VisualSubmenu,
             Node {
                 display: Display::None,

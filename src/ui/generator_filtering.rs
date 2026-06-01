@@ -2,17 +2,16 @@ use crate::{
     AudioFileContents, DrawableCursor, FilteringMode, FontBlock, NullComponent, palette,
     stereometer::{StereoFilter, Stereometer, StereometerParams},
     ui::{
-        interactions::*, menu_row_container, spawn_body_text,
-        spawn_dropdown_row, spawn_slider_row,
+        control_panel::{DropdownItem, SubmenuItem},
+        interactions::*,
+        menu_row_container, spawn_body_text, spawn_dropdown_row, spawn_slider_row,
     },
 };
 use bevy::{
     input_focus::InputFocus,
     prelude::*,
     text::EditableText,
-    ui_widgets::{
-        SetSliderValue, SliderDragState, SliderRange, SliderValue, SliderValueChange,
-    },
+    ui_widgets::{SetSliderValue, SliderDragState, SliderRange, SliderValue, SliderValueChange},
 };
 use biquad::*;
 
@@ -32,6 +31,7 @@ pub struct FilterFreqAmt;
 pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
+            SubmenuItem(DropdownItem::Filtering),
             FilterSubmenu,
             Node {
                 display: Display::None,
