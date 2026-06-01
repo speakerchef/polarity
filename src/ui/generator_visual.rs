@@ -7,12 +7,18 @@ use crate::ui::interactions::*;
 use crate::ui::menu_row_container;
 use crate::ui::spawn_body_text;
 use crate::ui::spawn_dropdown_row;
+use crate::ui::spawn_slider_row;
 use crate::{FontBlock, TraceDensity};
 use bevy::input_focus::AutoFocus;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::text::TextCursorStyle;
+use bevy::ui_widgets::SetSliderValue;
+use bevy::ui_widgets::SliderDragState;
+use bevy::ui_widgets::SliderRange;
+use bevy::ui_widgets::SliderValue;
+use bevy::ui_widgets::SliderValueChange;
 
 #[derive(Component, Clone)]
 pub struct RedColorSelector;
@@ -275,6 +281,12 @@ fn spawn_point_density_options(parent: &mut ChildSpawnerCommands, fonts: &FontBl
             .observe(on_leave_void);
     }
 }
+#[derive(Component, Clone)]
+pub struct VisualScaleSlider;
+#[derive(Component, Clone)]
+pub struct VisualScaleThumb;
+#[derive(Component, Clone)]
+pub struct VisualScaleAmt;
 
 pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
@@ -293,126 +305,184 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
             BackgroundColor(palette::BG),
         ))
         .with_children(|parent| {
-            (1..=3).for_each(|i| {
-                parent
-                    .spawn(menu_row_container(JustifyContent::SpaceBetween))
-                    .with_children(|parent| match i {
-                        1 => {
-                            spawn_dropdown_row(
-                                parent,
-                                fonts,
-                                "Density",
-                                (
-                                    &Into::<String>::into(LiveDensity::default()),
-                                    VisualDensitySelectorMenu,
-                                ),
-                                VisualDensityDropdown,
-                                spawn_point_density_options,
-                            )
-                            .observe(visual_density_on_click);
-                        }
-                        2 => {
-                            spawn_dropdown_row(
-                                parent,
-                                fonts,
-                                "Trace",
-                                (
-                                    &Into::<String>::into(TraceDensity::default()),
-                                    VisualTraceSelectorMenu,
-                                ),
-                                VisualTraceDropdown,
-                                spawn_trace_density_options,
-                            )
-                            .observe(visual_trace_on_click);
-                        }
-                        3 => {
-                            spawn_body_text(parent, "Color", VisualColorMarker, fonts);
+            parent
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .with_children(|parent| {
+                    spawn_dropdown_row(
+                        parent,
+                        fonts,
+                        "Density",
+                        (
+                            &Into::<String>::into(LiveDensity::default()),
+                            VisualDensitySelectorMenu,
+                        ),
+                        VisualDensityDropdown,
+                        spawn_point_density_options,
+                    )
+                    .observe(visual_density_on_click);
+                });
+            parent
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .with_children(|parent| {
+                    spawn_dropdown_row(
+                        parent,
+                        fonts,
+                        "Trace",
+                        (
+                            &Into::<String>::into(TraceDensity::default()),
+                            VisualTraceSelectorMenu,
+                        ),
+                        VisualTraceDropdown,
+                        spawn_trace_density_options,
+                    )
+                    .observe(visual_trace_on_click);
+                });
+            parent
+                .spawn(menu_row_container(JustifyContent::Default))
+                .with_children(|parent| {
+                    spawn_slider_row(
+                        parent,
+                        fonts,
+                        "Scale",
+                        (
+                            100.0,
+                            500.0,
+                            1.0,
+                            250.0,
+                            VisualScaleSlider,
+                            VisualScaleThumb,
+                        ),
+                        (palette::width::SMALL_SELECTOR_MENU, 4, VisualScaleAmt),
+                        "%",
+                    )
+                });
+            parent
+                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .with_children(|parent| {
+                    spawn_body_text(parent, "Color", VisualColorMarker, fonts);
+                    parent
+                        .spawn((
+                            Node {
+                                display: Display::Flex,
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::SpaceBetween,
+                                column_gap: px(8),
+                                ..Default::default()
+                            },
+                            BackgroundColor(palette::BG),
+                        ))
+                        .with_children(|parent| {
                             parent
-                                .spawn((
-                                    Node {
-                                        display: Display::Flex,
-                                        flex_direction: FlexDirection::Row,
-                                        align_items: AlignItems::Center,
-                                        justify_content: JustifyContent::SpaceBetween,
-                                        column_gap: px(8),
-                                        ..Default::default()
-                                    },
-                                    BackgroundColor(palette::BG),
-                                ))
+                                .spawn((Node {
+                                    display: Display::Flex,
+                                    flex_direction: FlexDirection::Row,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::SpaceBetween,
+                                    column_gap: px(2),
+                                    ..Default::default()
+                                },))
                                 .with_children(|parent| {
-                                    parent
-                                        .spawn((Node {
-                                            display: Display::Flex,
-                                            flex_direction: FlexDirection::Row,
-                                            align_items: AlignItems::Center,
-                                            justify_content: JustifyContent::SpaceBetween,
-                                            column_gap: px(2),
-                                            ..Default::default()
-                                        },))
-                                        .with_children(|parent| {
-                                            spawn_body_text(parent, "R:", RedSelectorMarker, fonts);
-                                            spawn_color_input_picker(
-                                                parent,
-                                                "255",
-                                                palette::width::SMALL_SELECTOR_MENU,
-                                                RedColorSelector,
-                                                fonts,
-                                            );
-                                        });
-                                    parent
-                                        .spawn((Node {
-                                            display: Display::Flex,
-                                            flex_direction: FlexDirection::Row,
-                                            align_items: AlignItems::Center,
-                                            justify_content: JustifyContent::SpaceBetween,
-                                            column_gap: px(4),
-                                            ..Default::default()
-                                        },))
-                                        .with_children(|parent| {
-                                            spawn_body_text(
-                                                parent,
-                                                "G:",
-                                                GreenSelectorMarker,
-                                                fonts,
-                                            );
-                                            spawn_color_input_picker(
-                                                parent,
-                                                "255",
-                                                palette::width::SMALL_SELECTOR_MENU,
-                                                GreenColorSelector,
-                                                fonts,
-                                            );
-                                        });
-                                    parent
-                                        .spawn((Node {
-                                            display: Display::Flex,
-                                            flex_direction: FlexDirection::Row,
-                                            align_items: AlignItems::Center,
-                                            justify_content: JustifyContent::SpaceBetween,
-                                            column_gap: px(4),
-                                            ..Default::default()
-                                        },))
-                                        .with_children(|parent| {
-                                            spawn_body_text(
-                                                parent,
-                                                "B:",
-                                                BlueSelectorMarker,
-                                                fonts,
-                                            );
-                                            spawn_color_input_picker(
-                                                parent,
-                                                "255",
-                                                palette::width::SMALL_SELECTOR_MENU,
-                                                BlueColorSelector,
-                                                fonts,
-                                            );
-                                        });
+                                    spawn_body_text(parent, "R:", RedSelectorMarker, fonts);
+                                    spawn_color_input_picker(
+                                        parent,
+                                        "255",
+                                        palette::width::SMALL_SELECTOR_MENU,
+                                        RedColorSelector,
+                                        fonts,
+                                    );
                                 });
-                        }
-                        _ => unreachable!(),
-                    });
-            })
+                            parent
+                                .spawn((Node {
+                                    display: Display::Flex,
+                                    flex_direction: FlexDirection::Row,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::SpaceBetween,
+                                    column_gap: px(4),
+                                    ..Default::default()
+                                },))
+                                .with_children(|parent| {
+                                    spawn_body_text(parent, "G:", GreenSelectorMarker, fonts);
+                                    spawn_color_input_picker(
+                                        parent,
+                                        "255",
+                                        palette::width::SMALL_SELECTOR_MENU,
+                                        GreenColorSelector,
+                                        fonts,
+                                    );
+                                });
+                            parent
+                                .spawn((Node {
+                                    display: Display::Flex,
+                                    flex_direction: FlexDirection::Row,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::SpaceBetween,
+                                    column_gap: px(4),
+                                    ..Default::default()
+                                },))
+                                .with_children(|parent| {
+                                    spawn_body_text(parent, "B:", BlueSelectorMarker, fonts);
+                                    spawn_color_input_picker(
+                                        parent,
+                                        "255",
+                                        palette::width::SMALL_SELECTOR_MENU,
+                                        BlueColorSelector,
+                                        fonts,
+                                    );
+                                });
+                        });
+                });
         });
+}
+
+pub fn scale_amt_text_update(
+    mut commands: Commands,
+    input_focus: Res<InputFocus>,
+    button_input: Res<ButtonInput<KeyCode>>,
+    sliders: Query<Entity, With<VisualScaleSlider>>,
+    text: Query<&EditableText, With<VisualScaleAmt>>,
+) {
+    if (button_input.just_pressed(KeyCode::Enter)
+        || button_input.just_pressed(KeyCode::NumpadEnter))
+        && let Some(focused_ent) = input_focus.get()
+        && let Ok(text_entity) = text.get(focused_ent)
+        && let Ok(text_to_f32) = text_entity.value().to_string().parse::<f32>()
+    {
+        for e in sliders {
+            commands.trigger(SetSliderValue {
+                entity: e,
+                change: SliderValueChange::Absolute(text_to_f32),
+            })
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn scale_slider_update(
+    sliders: Query<
+        (Entity, &SliderValue, &SliderRange),
+        (
+            Or<(Changed<SliderValue>, Changed<SliderDragState>)>,
+            With<VisualScaleSlider>,
+        ),
+    >,
+    mut thumbs: Query<(&mut Node, Has<VisualScaleThumb>), Without<VisualScaleSlider>>,
+    children: Query<&Children>,
+    mut amt_text: Single<&mut EditableText, With<VisualScaleAmt>>,
+    mut params: ResMut<StereometerParams>,
+) {
+    for (slider_ent, value, range) in sliders.iter() {
+        for child in children.iter_descendants(slider_ent) {
+            if let Ok((mut thumb_node, is_thumb)) = thumbs.get_mut(child)
+                && is_thumb
+            {
+                amt_text.editor_mut().set_text(&value.0.round().to_string());
+                params.scale_factor = value.0.round();
+                let position = range.thumb_position(value.0) * 100.0;
+                thumb_node.left = percent(position);
+            }
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
