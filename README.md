@@ -18,7 +18,7 @@
   - [x] 4 modes/styles: Bipolar, Scaled bipolar, lissajous, scaled lissajous
   - [x] Controllable LPF, BPF, HPF filters
   - [x] 3-band mode and band-isolated rendering via above filters
-  - [ ] per-band color.
+  - [x] per-band color.
   - [x] Single color
   - [x] Tunable point density for primary and trace generators
   - [x] Editable point size

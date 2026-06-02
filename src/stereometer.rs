@@ -371,24 +371,24 @@ pub fn draw(
                 let color_lf: Vec<_> = (0..stereometer.trace_lf_buffer.len())
                     .flat_map(|i| {
                         let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-                        // let c = params.multiband_color.0.with_alpha(alpha).to_f32_array();
-                        let c = LinearRgba::RED.with_alpha(alpha).to_f32_array();
+                        let c = LinearRgba::from(params.multiband_color.0.with_alpha(alpha))
+                            .to_f32_array();
                         std::iter::repeat_n(c, NUM_VERTICES)
                     })
                     .collect();
                 let color_mf: Vec<_> = (0..stereometer.trace_mf_buffer.len())
                     .flat_map(|i| {
                         let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-                        // let c = params.multiband_color.0.with_alpha(alpha).to_f32_array();
-                        let c = LinearRgba::GREEN.with_alpha(alpha).to_f32_array();
+                        let c = LinearRgba::from(params.multiband_color.1.with_alpha(alpha))
+                            .to_f32_array();
                         std::iter::repeat_n(c, NUM_VERTICES)
                     })
                     .collect();
                 let color_hf: Vec<_> = (0..stereometer.trace_hf_buffer.len())
                     .flat_map(|i| {
                         let alpha = (i as f32 / MAX_WINDOW_SIZE as f32).powf(2.5);
-                        // let c = params.multiband_color.0.with_alpha(alpha).to_f32_array();
-                        let c = LinearRgba::BLUE.with_alpha(alpha).to_f32_array();
+                        let c = LinearRgba::from(params.multiband_color.2.with_alpha(alpha))
+                            .to_f32_array();
                         std::iter::repeat_n(c, NUM_VERTICES)
                     })
                     .collect();
@@ -434,21 +434,22 @@ pub fn draw(
                 live_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
 
                 let color_lf = vec![
-                    LinearRgba::RED.to_f32_array();
+                    // LinearRgba::RED.to_f32_array();
+                    LinearRgba::from(params.multiband_color.0.with_alpha(params.color.alpha)).to_f32_array();
                     NUM_VERTICES * stereometer.live_lf_buffer.len()
                 ];
-                let color_mf = vec![
-                    LinearRgba::GREEN
-                        .with_alpha(params.color.alpha)
-                        .to_f32_array();
-                    NUM_VERTICES * stereometer.live_mf_buffer.len()
-                ];
-                let color_hf = vec![
-                    LinearRgba::BLUE
-                        .with_alpha(params.color.alpha)
-                        .to_f32_array();
-                    NUM_VERTICES * stereometer.live_hf_buffer.len()
-                ];
+                let color_mf =
+                    vec![
+                        LinearRgba::from(params.multiband_color.1.with_alpha(params.color.alpha))
+                            .to_f32_array();
+                        NUM_VERTICES * stereometer.live_mf_buffer.len()
+                    ];
+                let color_hf =
+                    vec![
+                        LinearRgba::from(params.multiband_color.2.with_alpha(params.color.alpha))
+                            .to_f32_array();
+                        NUM_VERTICES * stereometer.live_hf_buffer.len()
+                    ];
                 let colors = [color_lf, color_mf, color_hf].concat();
                 live_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
             }

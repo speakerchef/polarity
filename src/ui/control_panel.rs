@@ -1,4 +1,4 @@
-use crate::ui::generator_color::spawn_color_submenu;
+use crate::ui::generator_color::{MBColorSubmenu, spawn_color_submenu};
 use crate::ui::generator_filtering::spawn_filtering_submenu;
 use crate::ui::generator_mode::spawn_mode_submenu;
 use crate::ui::generator_render::spawn_render_mode_submenu;
@@ -10,7 +10,7 @@ use std::sync::Arc;
 use bevy::audio::{Source, prelude::*};
 use bevy::prelude::*;
 
-use crate::stereometer::{StereoFilter, Stereometer};
+use crate::stereometer::{StereoFilter, Stereometer, StereometerParams, StereometerRenderMode};
 use crate::ui::generator_visual::spawn_visual_submenu;
 use crate::{AudioFileContents, FontBlock, palette, ui::interactions::*};
 use crate::{DurationText, PlayingAudio, TimelineScrubber};
@@ -193,7 +193,7 @@ fn spawn_submenu_items(
     match dropdownitem {
         DropdownItem::Render => spawn_render_mode_submenu(parent, fonts),
         DropdownItem::Filtering => spawn_filtering_submenu(parent, fonts),
-        DropdownItem::Mode => spawn_mode_submenu(parent),
+        DropdownItem::Mode => spawn_mode_submenu(parent, fonts),
         DropdownItem::Color => spawn_color_submenu(parent, fonts),
         DropdownItem::Visual => spawn_visual_submenu(parent, fonts),
         DropdownItem::Sparkle => spawn_sparkle_submenu(parent, fonts),
@@ -488,11 +488,18 @@ pub fn file_loaded(
 fn header_submenu_onclick(
     e: On<Pointer<Click>>,
     mut dropdown_items: Query<&DropdownItem>,
-    submenu_items: Query<(&mut Node, &SubmenuItem)>,
+    submenu_items: Query<(&mut Node, &SubmenuItem, Has<MBColorSubmenu>)>,
+    params: Res<StereometerParams>,
 ) {
     if let Ok(item) = dropdown_items.get_mut(e.entity) {
-        for (mut node, sub) in submenu_items {
+        for (mut node, sub, is_mb) in submenu_items {
             if sub.0 == *item {
+                if *item == DropdownItem::Color
+                    && (params.render_mode == StereometerRenderMode::MultiBand && !is_mb)
+                    || (params.render_mode == StereometerRenderMode::FullSpectrum && is_mb)
+                {
+                    continue;
+                }
                 node.display = match node.display {
                     Display::Flex => Display::None,
                     _ => Display::Flex,

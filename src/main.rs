@@ -6,8 +6,7 @@ use bevy_file_dialog::prelude::*;
 use polarity::stereometer::{self, StereometerParams};
 use polarity::ui::control_panel::{file_loaded, spawn_control_panel};
 use polarity::ui::generator_color::{
-    hue_slider_update, hue_text_update, luminance_slider_update, luminance_text_update,
-    saturation_slider_update, saturation_text_update,
+    HighHsla, HslaSliderUpdater, LowHsla, MainHsla, MidHsla, set_color_display_with_render_mode,
 };
 use polarity::ui::generator_filtering::{freq_amt_text_update, freq_slider_update};
 use polarity::ui::generator_render::watch_render_mode;
@@ -32,6 +31,11 @@ fn main() {
         .insert_resource(ClearColor(palette::VOID))
         .insert_resource(StereometerParams {
             color: Hsla::new(0.0, 1.0, 0.5, 1.0),
+            multiband_color: (
+                LinearRgba::RED.into(),
+                LinearRgba::GREEN.into(),
+                LinearRgba::BLUE.into(),
+            ),
             ..Default::default()
         })
         .add_plugins(
@@ -79,9 +83,11 @@ fn main() {
         .add_systems(Update, watch_render_mode)
         .add_systems(Update, (scale_slider_update, scale_amt_text_update))
         .add_systems(Update, (dot_size_slider_update, dot_size_amt_text_update))
-        .add_systems(Update, (hue_slider_update, hue_text_update))
-        .add_systems(Update, (saturation_slider_update, saturation_text_update))
-        .add_systems(Update, (luminance_slider_update, luminance_text_update))
+        .add_systems(Update, (MainHsla::slider_update, MainHsla::text_update))
+        .add_systems(Update, (LowHsla::slider_update, LowHsla::text_update))
+        .add_systems(Update, (MidHsla::slider_update, MidHsla::text_update))
+        .add_systems(Update, (HighHsla::slider_update, HighHsla::text_update))
+        .add_systems(Update, set_color_display_with_render_mode)
         .add_systems(Update, (sparkle_text_update, sparkle_slider_update))
         .add_systems(Update, (freq_amt_text_update, freq_slider_update))
         .run();

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    palette,
+    FontBlock, palette,
     stereometer::{StereometerKind, StereometerParams},
     ui::{
         control_panel::{DropdownItem, SubmenuItem},
@@ -12,7 +12,7 @@ use crate::{
 #[derive(Component, Clone)]
 pub struct ModeSubmenu;
 
-pub fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
+pub fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) {
     parent
         .spawn((
             SubmenuItem(DropdownItem::Mode),
@@ -47,7 +47,15 @@ pub fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands) {
                         BorderColor::all(palette::BORDER),
                     ))
                     .with_children(|parent| {
-                        parent.spawn((Text::new(i.to_string()),));
+                        parent.spawn((
+                            Text::new(i.to_string()),
+                            TextFont {
+                                font: fonts.text.clone(),
+                                font_size: FontSize::Px(palette::font_size::ICON),
+                                weight: FontWeight(palette::font_weight::MED),
+                                ..Default::default()
+                            },
+                        ));
                     })
                     .observe(on_hover_bg)
                     .observe(on_leave_bg)
