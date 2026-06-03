@@ -1,8 +1,12 @@
+use crate::UserPlaybackMode;
 use crate::ui::generator_color::{MBColorSubmenu, spawn_color_submenu};
 use crate::ui::generator_filtering::spawn_filtering_submenu;
 use crate::ui::generator_mode::spawn_mode_submenu;
 use crate::ui::generator_render::spawn_render_mode_submenu;
 use crate::ui::postfx_sparkle::spawn_sparkle_submenu;
+use crate::ui::timeline::{
+    AudioReloadEvent, DurationText, FilePathText, PlayingAudio, SampleRateInfoText,
+};
 use bevy_file_dialog::prelude::*;
 use biquad::*;
 use std::sync::Arc;
@@ -13,7 +17,6 @@ use bevy::prelude::*;
 use crate::stereometer::{StereoFilter, Stereometer, StereometerParams, StereometerRenderMode};
 use crate::ui::generator_visual::spawn_visual_submenu;
 use crate::{AudioFileContents, FontBlock, palette, ui::interactions::*};
-use crate::{DurationText, PlayingAudio, TimelineScrubber};
 
 #[derive(Component, Clone)]
 struct GeneratorRootHeader;
@@ -335,6 +338,7 @@ fn spawn_control_panel_menus(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 flex_grow: 1.0,
                 overflow: Overflow::scroll_y(),
                 min_height: px(0),
+                padding: UiRect::all(px(12)),
                 width: percent(100.),
                 border: UiRect::left(px(1)),
                 ..Default::default()
@@ -416,11 +420,15 @@ fn export_file(mut _commands: Commands) {
     // commands.dialog().save_file::<AudioFileContents>();
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn file_loaded(
     mut file_events: MessageReader<DialogFileLoaded<AudioFileContents>>,
     existing_files: Query<Entity, With<AudioFileContents>>,
-    mut timeline_scrubber: Single<&mut TimelineScrubber>,
-    mut decoder_text: Single<&mut Text, With<DurationText>>,
+    mut ps: ParamSet<(
+        Single<&mut Text, With<DurationText>>,
+        Single<&mut Text, With<FilePathText>>,
+        Single<&mut Text, With<SampleRateInfoText>>,
+    )>,
     mut stereometer: Single<&mut Stereometer>,
     mut commands: Commands,
     asset_server: ResMut<AssetServer>,
@@ -435,25 +443,31 @@ pub fn file_loaded(
 
         let bytes: Arc<[u8]> = f.contents.clone().into();
         let audio_src = AudioSource { bytes };
-        let duration = audio_src.decoder().total_duration();
-        decoder_text.0 = format!("Song Duration: {:.2}s, ", duration.unwrap().as_secs_f64());
-        timeline_scrubber.0 = duration;
+        let duration = audio_src.decoder().total_duration().unwrap();
+        let mins = (duration.as_secs_f64() / 60.0) as u64;
+        let secs = (duration.as_secs_f64() % 60.0) as u64;
 
-        let file_contents = AudioFileContents {
-            duration: audio_src.decoder().total_duration().unwrap().as_secs_f64(),
-            sample_rate: audio_src.decoder().sample_rate().into(),
-            num_channels: Into::<u16>::into(audio_src.decoder().channels()) as usize,
-            samples: audio_src.decoder().collect(),
-        };
-        let fs = file_contents.sample_rate.hz();
+        ps.p0().0 = format!("{mins:02}:{secs:02}");
+        ps.p1().0 = f
+            .path
+            .components()
+            .next_back()
+            .unwrap()
+            .as_os_str()
+            .to_str()
+            .unwrap_or("Error: Unsupported Characters in File Name")
+            .to_string();
+        let sr: u32 = audio_src.decoder().sample_rate().into();
+        ps.p2().0 = format!("{:.1} kHz", sr as f32 / 1000.0);
+
         let lpf_coeffs =
-            Coefficients::<f32>::from_params(Type::LowPass, fs, 200.hz(), Q_BUTTERWORTH_F32)
+            Coefficients::<f32>::from_params(Type::LowPass, sr.hz(), 200.hz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         let bpf_coeffs =
-            Coefficients::<f32>::from_params(Type::BandPass, fs, 1.khz(), Q_BUTTERWORTH_F32)
+            Coefficients::<f32>::from_params(Type::BandPass, sr.hz(), 1.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         let hpf_coeffs =
-            Coefficients::<f32>::from_params(Type::HighPass, fs, 5.khz(), Q_BUTTERWORTH_F32)
+            Coefficients::<f32>::from_params(Type::HighPass, sr.hz(), 5.khz(), Q_BUTTERWORTH_F32)
                 .unwrap();
         stereometer.live_filterbank = Some((
             StereoFilter::new(lpf_coeffs),
@@ -471,18 +485,53 @@ pub fn file_loaded(
             StereoFilter::new(hpf_coeffs),
         ));
 
-        commands.spawn((
+        let group_id = commands.spawn_empty().id();
+        commands.entity(group_id).insert((
             PlayingAudio,
             AudioPlayer::new(asset_server.load(f.path.clone())),
             PlaybackSettings {
                 paused: true,
-                mode: bevy::audio::PlaybackMode::Loop,
+                mode: bevy::audio::PlaybackMode::Once,
                 ..Default::default()
             },
-            file_contents,
+            AudioFileContents {
+                path: f.path.clone(),
+                duration,
+                sample_rate: audio_src.decoder().sample_rate().into(),
+                num_channels: Into::<u16>::into(audio_src.decoder().channels()) as usize,
+                samples: audio_src.decoder().collect(),
+                group_id,
+            },
         ));
+
         info!("Opened file `{}`", f.file_name);
     }
+}
+
+pub fn loop_audio(
+    _: On<AudioReloadEvent>,
+    mut commands: Commands,
+    fc: Single<&AudioFileContents>,
+    sink: Single<&AudioSink, With<PlayingAudio>>,
+    asset_server: ResMut<AssetServer>,
+    usr_playback: Res<UserPlaybackMode>,
+) {
+    let new_fc = AudioFileContents {
+        group_id: commands.spawn_empty().id(),
+        ..fc.clone()
+    };
+    let paused = sink.is_paused() && *usr_playback == UserPlaybackMode::Once;
+    commands.entity(fc.group_id).despawn();
+    commands.entity(new_fc.group_id).insert((
+        PlayingAudio,
+        AudioPlayer::new(asset_server.load(new_fc.path.clone())),
+        PlaybackSettings {
+            paused,
+            mode: bevy::audio::PlaybackMode::Once,
+            ..Default::default()
+        },
+        new_fc,
+    ));
 }
 
 fn header_submenu_onclick(

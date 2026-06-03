@@ -23,7 +23,7 @@ pub fn spawn_mode_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock) 
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
                 width: percent(100.),
-                border: UiRect::top(px(1)),
+                border: UiRect::horizontal(px(1)).with_top(px(1)),
                 padding: UiRect::all(px(palette::APP_PADDING)),
                 ..Default::default()
             },

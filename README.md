@@ -14,7 +14,7 @@
 - [x] Desktop app shell
 - [x] Audio file import (Formats: WAV, MP3, OGGVORBIS)
 - [x] Preview Canvas
-- [ ] Stereometer Generator option
+- [x] Stereometer Generator option
   - [x] 4 modes/styles: Bipolar, Scaled bipolar, lissajous, scaled lissajous
   - [x] Controllable LPF, BPF, HPF filters
   - [x] 3-band mode and band-isolated rendering via above filters
@@ -27,7 +27,7 @@
   - [x] Bloom / Sparkle
   - [ ] Chromatic aberration
   - [ ] Phosphor
-  - [ ] Vignette
+- [x] Transport bar with playback controls + File path + Loop mode toggle
 - [ ] Timeline with waveform view
 - [ ] Click to skip inside timeline
 - [ ] Simple MP4 Export pipeline to combine audio + generated motion

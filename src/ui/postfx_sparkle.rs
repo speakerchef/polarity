@@ -50,7 +50,7 @@ pub fn spawn_sparkle_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBloc
                 1 => {
                     let (min, max, step, def) = (0.0, 100.0, 0.1, 0.0);
                     parent
-                        .spawn(menu_row_container(JustifyContent::Default))
+                        .spawn(menu_row_container(JustifyContent::Default, None))
                         .with_children(|parent| {
                             spawn_slider_row(
                                 parent,

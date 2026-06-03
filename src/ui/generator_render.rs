@@ -35,7 +35,7 @@ pub fn spawn_render_mode_submenu(parent: &mut ChildSpawnerCommands, fonts: &Font
         ))
         .with_children(|parent| {
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
                 .with_children(|parent| {
                     spawn_dropdown_row(
                         parent,

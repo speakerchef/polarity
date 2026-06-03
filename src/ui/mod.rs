@@ -18,6 +18,7 @@ pub mod generator_render;
 pub mod generator_visual;
 pub mod interactions;
 pub mod postfx_sparkle;
+pub mod timeline;
 
 // From bevy examples
 const LINE_HEIGHT: f32 = 21.0;
@@ -108,11 +109,11 @@ pub fn spawn_body_text(
 ) {
     parent.spawn((
         cmp.clone(),
-        Text::new(text),
+        Text::new(text.to_uppercase()),
         TextFont {
             font: font.text.clone(),
-            font_size: FontSize::Px(palette::font_size::BODY),
-            weight: FontWeight(palette::font_weight::MED),
+            font_size: FontSize::Px(palette::font_size::META),
+            weight: FontWeight(palette::font_weight::BODY),
             ..Default::default()
         },
         TextLayout::no_wrap().with_justify(Justify::Left),
@@ -185,7 +186,7 @@ pub fn horizontal_slider(
             // slider track
             Spawn((
                 Node {
-                    height: px(6),
+                    height: px(16),
                     border: UiRect::all(px(1)),
                     ..default()
                 },
@@ -211,8 +212,8 @@ pub fn horizontal_slider(
                     Node {
                         display: Display::Flex,
                         border: UiRect::all(px(1)),
-                        width: px(16),
-                        height: px(16),
+                        width: px(12),
+                        height: px(20),
                         position_type: PositionType::Absolute,
                         left: percent(0),
                         ..default()
@@ -281,7 +282,7 @@ pub fn spawn_textbox<'a, T: Component>(
     parent_spawner
 }
 
-pub fn menu_row_container(justify_content: JustifyContent) -> impl Bundle {
+pub fn menu_row_container(justify_content: JustifyContent, bg: Option<Color>) -> impl Bundle {
     (
         Node {
             display: Display::Flex,
@@ -290,10 +291,15 @@ pub fn menu_row_container(justify_content: JustifyContent) -> impl Bundle {
             height: px(palette::height::MENU_ITEM),
             width: percent(100.),
             padding: UiRect::horizontal(px(10)),
-            border: UiRect::bottom(px(1)),
+            border: UiRect::horizontal(px(1)).with_bottom(px(1)),
             ..Default::default()
         },
         BorderColor::all(palette::BORDER),
+        if let Some(bg) = bg {
+            BackgroundColor(bg)
+        } else {
+            BackgroundColor::default()
+        },
     )
 }
 
@@ -309,7 +315,7 @@ where
     S: Component + Clone,
     D: Component,
 {
-    spawn_body_text(parent, label_text, NullComponent, fonts);
+    spawn_body_text(parent, &label_text.to_uppercase(), NullComponent, fonts);
     let mut parent_spawner = spawn_selector_with_size(
         parent,
         palette::width::LARGE_SELECTOR_MENU,
@@ -355,10 +361,12 @@ pub fn spawn_slider_row<S, T, A>(
         .spawn((Node {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::FlexStart,
-            width: px(100),
+            width: px(120),
             ..Default::default()
         },))
-        .with_children(|parent| spawn_body_text(parent, label_text, NullComponent, fonts));
+        .with_children(|parent| {
+            spawn_body_text(parent, &label_text.to_uppercase(), NullComponent, fonts)
+        });
     let (min, max, step, def, slider_marker, thumb_marker) = slider;
     parent
         .spawn(Node {

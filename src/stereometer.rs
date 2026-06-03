@@ -1,7 +1,7 @@
 use crate::{
     AudioFileContents, CustomMaterial, DrawableCursor, FilteringMode, LiveDensity, LiveMesh,
-    MAX_WINDOW_SIZE, NUM_VERTICES, PlayingAudio, PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity,
-    TraceMesh,
+    MAX_WINDOW_SIZE, NUM_VERTICES, PreviewCanvas, RADIAL_SCALE_FACTOR, TraceDensity, TraceMesh,
+    ui::timeline::PlayingAudio,
 };
 use bevy::{asset::RenderAssetUsages, math::ops::sqrt, prelude::*, sprite_render::AlphaMode2d};
 use biquad::*;
@@ -241,7 +241,7 @@ pub fn update(
         return;
     };
 
-    let pos = playing_audio.position().as_secs_f64() % audio.duration;
+    let pos = playing_audio.position().as_secs_f64();
     let mut last_idx = meter.last_sample_idx;
     let cur_idx = (audio.sample_rate as f64 * pos) as usize;
 

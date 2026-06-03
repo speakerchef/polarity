@@ -1,24 +1,24 @@
 use bevy::prelude::Color;
 
-pub const VOID: Color = Color::srgb_u8(0, 0, 0);
-pub const BG: Color = Color::srgb_u8(0x0d, 0x0d, 0x0d);
-pub const BG_MED: Color = Color::srgb_u8(0x0c, 0x0c, 0x0c);
-pub const BG_DARK: Color = Color::srgb_u8(0x0a, 0x0a, 0x0a);
-pub const SURFACE: Color = Color::srgb_u8(0x17, 0x17, 0x17);
-pub const SURFACE_HOVER: Color = Color::srgb_u8(0x1c, 0x1c, 0x1c);
-pub const BORDER: Color = Color::srgb_u8(0x3a, 0x3a, 0x3a);
-pub const TRACK: Color = Color::srgb_u8(0x1A, 0x1A, 0x1A);
+pub const VOID: Color = Color::srgb_u8(0, 0, 0); // #
+pub const BG: Color = Color::srgb_u8(0x0d, 0x0d, 0x0d); // #0d0d0d
+pub const BG_MED: Color = Color::srgb_u8(0x0c, 0x0c, 0x0c); // #0c0c0c
+pub const BG_DARK: Color = Color::srgb_u8(0x0a, 0x0a, 0x0a); // #0a0a0a
+pub const SURFACE: Color = Color::srgb_u8(0x15, 0x15, 0x15); // #151515
+pub const SURFACE_HOVER: Color = Color::srgb_u8(0x1c, 0x1c, 0x1c); // #1c1c1c
+pub const BORDER: Color = Color::srgb_u8(0x3a, 0x3a, 0x3a); // #3a3a3a
+pub const TRACK: Color = Color::srgb_u8(0x1A, 0x1A, 0x1A); // #1a1a1a
 
-pub const DIM: Color = Color::srgb_u8(0x8a, 0x8a, 0x8a);
-pub const TEXT: Color = Color::srgb_u8(0xCC, 0xCC, 0xCC);
-pub const BRIGHT: Color = Color::srgb_u8(0xE8, 0xE8, 0xE8);
+pub const DIM: Color = Color::srgb_u8(0x8a, 0x8a, 0x8a); // #8a8a8a
+pub const TEXT: Color = Color::srgb_u8(0xCC, 0xCC, 0xCC); //#cccccc
+pub const BRIGHT: Color = Color::srgb_u8(0xE8, 0xE8, 0xE8); //#e8e8e8
 
-pub const LIVE: Color = Color::srgb_u8(0x5E, 0xC5, 0x7b);
-pub const DANGER: Color = Color::srgb_u8(0xD9, 0x34, 0x2A);
-pub const WARN: Color = Color::srgb_u8(0xFF, 0x8A, 0x4C);
+pub const LIVE: Color = Color::srgb_u8(0x5E, 0xC5, 0x7b); // #5ec57b
+pub const DANGER: Color = Color::srgb_u8(0xD9, 0x34, 0x2A); // #d9342a
+pub const WARN: Color = Color::srgb_u8(0xFF, 0x8A, 0x4C); // #ff8a4c
 
 /// Text-on-`TEXT` (e.g. active rowhead inverts to TEXT bg with this fg).
-pub const INK: Color = Color::srgb_u8(0x11, 0x11, 0x11);
+pub const INK: Color = Color::srgb_u8(0x11, 0x11, 0x11); // #111111
 
 pub mod font_size {
     pub const TINY: f32 = 10.0;
@@ -58,7 +58,7 @@ pub mod width {
     pub const LARGE_SELECTOR_MENU: f32 = 120.0;
     pub const XLARGE_SELECTOR_MENU: f32 = 180.0;
 
-    pub const SLIDER: f32 = 200.0;
+    pub const SLIDER: f32 = 160.0;
 }
 
 pub mod height {

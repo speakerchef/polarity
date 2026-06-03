@@ -131,7 +131,7 @@ fn spawn_hsl_sliders<HS, HT, HA, SS, ST, SA, LS, LT, LA>(
     LA: Component,
 {
     parent
-        .spawn(menu_row_container(JustifyContent::SpaceBetween))
+        .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
         .with_children(|parent| {
             spawn_slider_row(
                 parent,
@@ -154,7 +154,7 @@ fn spawn_hsl_sliders<HS, HT, HA, SS, ST, SA, LS, LT, LA>(
             );
         });
     parent
-        .spawn(menu_row_container(JustifyContent::SpaceBetween))
+        .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
         .with_children(|parent| {
             spawn_slider_row(
                 parent,
@@ -165,7 +165,7 @@ fn spawn_hsl_sliders<HS, HT, HA, SS, ST, SA, LS, LT, LA>(
             );
         });
     parent
-        .spawn(menu_row_container(JustifyContent::SpaceBetween))
+        .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
         .with_children(|parent| {
             spawn_slider_row(
                 parent,
@@ -220,7 +220,10 @@ pub fn spawn_color_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
         ))
         .with_children(|parent| {
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(
+                    JustifyContent::SpaceBetween,
+                    Some(palette::SURFACE),
+                ))
                 .with_children(|parent| spawn_body_text(parent, "LOW BAND", NullComponent, fonts));
             spawn_hsl_sliders(
                 parent,
@@ -231,7 +234,10 @@ pub fn spawn_color_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                 ColorBand::Low,
             );
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(
+                    JustifyContent::SpaceBetween,
+                    Some(palette::SURFACE),
+                ))
                 .with_children(|parent| spawn_body_text(parent, "MID BAND", NullComponent, fonts));
             spawn_hsl_sliders(
                 parent,
@@ -242,7 +248,10 @@ pub fn spawn_color_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock)
                 ColorBand::Mid,
             );
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(
+                    JustifyContent::SpaceBetween,
+                    Some(palette::SURFACE),
+                ))
                 .with_children(|parent| spawn_body_text(parent, "HIGH BAND", NullComponent, fonts));
             spawn_hsl_sliders(
                 parent,
@@ -304,7 +313,7 @@ enum HslaField {
     Lum,
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn local_slider_update<S, A, T>(
     sliders: Query<
         (Entity, &SliderValue, &SliderRange),

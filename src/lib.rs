@@ -2,6 +2,8 @@ pub mod palette;
 pub mod stereometer;
 pub mod ui;
 
+use std::path::PathBuf;
+
 use bevy::{
     prelude::*,
     render::render_resource::AsBindGroup,
@@ -25,9 +27,9 @@ pub const HISTORY_MAGENTA: LinearRgba = LinearRgba {
     alpha: 0.0,
 };
 pub const CRT_P1: LinearRgba = LinearRgba {
-    red: 0.40,
-    green: 2.00,
-    blue: 0.40,
+    red: 0.20,
+    green: 1.00,
+    blue: 0.20,
     alpha: 3.0,
 };
 pub const CRT_P7: LinearRgba = LinearRgba {
@@ -45,15 +47,6 @@ pub struct FontBlock {
 pub struct NullComponent;
 
 #[derive(Component)]
-pub struct DurationText;
-
-#[derive(Component)]
-pub struct PlayingAudio;
-
-#[derive(Component)]
-pub struct TimelineScrubber(pub Option<std::time::Duration>);
-
-#[derive(Component)]
 pub struct DrawableCursor;
 
 #[derive(Component)]
@@ -65,12 +58,21 @@ pub struct LiveMesh;
 #[derive(Component)]
 pub struct TraceMesh;
 
-#[derive(Component, Debug)]
+#[derive(Resource, Default, Debug, Hash, Eq, PartialEq, Clone)]
+pub enum UserPlaybackMode {
+    #[default]
+    Once,
+    Loop,
+}
+
+#[derive(Component, Debug, Clone)]
 pub struct AudioFileContents {
-    pub duration: f64,
+    pub path: PathBuf,
+    pub duration: std::time::Duration,
     pub sample_rate: u32,
     pub num_channels: usize,
     pub samples: Vec<f32>,
+    pub group_id: Entity,
 }
 
 #[derive(Component, Default, Debug, Hash, Eq, PartialEq, Clone)]

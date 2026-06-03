@@ -46,7 +46,7 @@ pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBl
         ))
         .with_children(|parent| {
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
                 .with_children(|parent| {
                     spawn_dropdown_row(
                         parent,
@@ -62,7 +62,7 @@ pub fn spawn_filtering_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBl
             // Freq slider
             let (min, max, step, def) = (20.0, 20000.0, 1.0, 20.0);
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
                 .with_children(|parent| {
                     spawn_slider_row(
                         parent,

@@ -203,7 +203,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
         ))
         .with_children(|parent| {
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
                 .with_children(|parent| {
                     spawn_dropdown_row(
                         parent,
@@ -219,7 +219,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                     .observe(visual_density_on_click);
                 });
             parent
-                .spawn(menu_row_container(JustifyContent::SpaceBetween))
+                .spawn(menu_row_container(JustifyContent::SpaceBetween, None))
                 .with_children(|parent| {
                     spawn_dropdown_row(
                         parent,
@@ -235,7 +235,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                     .observe(visual_trace_on_click);
                 });
             parent
-                .spawn(menu_row_container(JustifyContent::Default))
+                .spawn(menu_row_container(JustifyContent::Default, None))
                 .with_children(|parent| {
                     spawn_slider_row(
                         parent,
@@ -253,7 +253,7 @@ pub fn spawn_visual_submenu(parent: &mut ChildSpawnerCommands, fonts: &FontBlock
                     )
                 });
             parent
-                .spawn(menu_row_container(JustifyContent::Default))
+                .spawn(menu_row_container(JustifyContent::Default, None))
                 .with_children(|parent| {
                     spawn_slider_row(
                         parent,
