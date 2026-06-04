@@ -2,17 +2,12 @@
 name = "polarity"
 version = "0.1.0"
 edition = "2024"
-[dependencies]
-bevy = { git = "https://github.com/speakerchef/bevy", branch = "release-0.19.0", features = [
-    "wav",
-    "mp3",
-    "vorbis",
-    "flac",
-    "bevy_dev_tools",
-] }
 
-bevy_file_dialog = { git = "https://github.com/speakerchef/bevy_file_dialog" }
-biquad = "0.6.0"
+[dependencies]
+eframe = { version = "0.34.3" }
+egui = "0.34"
+env_logger = "0.11"
+wgpu = { version = "*", features = ["dx12", "metal"] }
 
 [profile.dev]
 opt-level = 1
@@ -21,23 +16,8 @@ opt-level = 1
 opt-level = 3
 
 # From docs:
-# Enable more optimization in the release profile at the cost of compile time.
 [profile.release]
-# Compile the entire crate as one unit.
-# Slows compile times, marginal improvements.
-codegen-units = 1
-# Do a second optimization pass over the entire program, including dependencies.
-# Slows compile times, marginal improvements.
 lto = "thin"
-
-# Optimize for size in the wasm-release profile to reduce load times and bandwidth usage on web.
-[profile.wasm-release]
-# Default to release profile values.
-inherits = "release"
-# Optimize with size in mind (also try "z", sometimes it is better).
-# Slightly slows compile times, great improvements to file size and runtime performance.
 opt-level = "z"
-# Strip all debugging information from the binary to slightly reduce file size.
-# strip = "debuginfo"
 strip = true
 panic = "abort"
