@@ -35,4 +35,14 @@ impl eframe::App for PolarityApp {
             StrokeKind::Inside,
         );
     }
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.state.import_open {
+            self.state.file_dialog.pick_file();
+            self.state.import_open = false;
+        }
+
+        if let Some(path) = self.state.file_dialog.update(ctx).picked() {
+            self.state.file_path = path.into();
+        }
+    }
 }

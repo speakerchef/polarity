@@ -1,4 +1,9 @@
 #![allow(unused_variables, dead_code)]
+use std::path::{Path, PathBuf};
+
+use egui::{Align2, vec2};
+use egui_file_dialog::{self as fd, FileDialog, FileDialogConfig};
+
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
         #[derive(Clone, Copy, PartialEq, Eq)]
@@ -55,9 +60,12 @@ impl Labeled for crate::state::StereometerKind {
 pub type Hsl = (f32, f32, f32);
 
 pub struct PanelState {
+    pub file_dialog: FileDialog,
     pub render_mode: RenderMode,
     pub filter_mode: FilterMode,
     pub stereo_kind: StereometerKind,
+
+    pub import_open: bool,
 
     pub gen_open: bool,
     pub render_open: bool,
@@ -75,15 +83,33 @@ pub struct PanelState {
     pub filter_freq: f32,
     pub hsl_color_bands: [Hsl; 3],
     pub bloom: f32,
-    pub file_name: String,
+    pub file_path: PathBuf,
 }
 
 impl Default for PanelState {
     fn default() -> Self {
+        let config = FileDialogConfig {
+            file_filters: vec![],
+            ..Default::default()
+        };
         Self {
+            file_dialog: FileDialog::new()
+                .add_file_filter(
+                    "Audio",
+                    fd::Filter::new(|path: &Path| {
+                        path.extension().unwrap_or_default() == "wav"
+                            || path.extension().unwrap_or_default() == "mp3"
+                    }),
+                )
+                .default_file_filter("Audio")
+                .allow_file_overwrite(true)
+                .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
             render_mode: RenderMode::default(),
             filter_mode: FilterMode::default(),
             stereo_kind: StereometerKind::default(),
+
+            import_open: false,
+
             gen_open: false,
             render_open: false,
             render_mode_options_open: false,
@@ -99,7 +125,7 @@ impl Default for PanelState {
             filter_freq: 1.0,
             hsl_color_bands: [(0.0, 1.0, 0.50), (120.0, 1.0, 0.50), (240.0, 1.0, 0.50)],
             bloom: 0.4,
-            file_name: "—".into(),
+            file_path: PathBuf::default(),
         }
     }
 }

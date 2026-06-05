@@ -13,11 +13,10 @@ pub fn draw(ui: &mut egui::Ui, st: &mut PanelState) {
             ui.horizontal(|ui| {
                 let half = ui.available_width() / 2.0;
                 if project_handler_button(ui, ICON_IMPORT, "IMPORT", half).clicked() {
-                    st.file_name = "demo_track.wav".into();
+                    println!("Import clicked");
+                    st.import_open = true;
                 }
-                if project_handler_button(ui, ICON_EXPORT, "EXPORT", half).clicked() {
-                    st.file_name = "export.wav".into();
-                }
+                if project_handler_button(ui, ICON_EXPORT, "EXPORT", half).clicked() {}
             });
 
             ui.vertical_centered(|ui| {
