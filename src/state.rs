@@ -1,7 +1,11 @@
 #![allow(unused_variables, dead_code)]
-use std::path::{Path, PathBuf};
+use std::{
+    default,
+    path::{Path, PathBuf},
+    sync::mpsc::{Receiver, Sender},
+};
 
-use egui::{Align2, vec2};
+use egui::{Align2, Key, vec2};
 use egui_file_dialog::{self as fd, FileDialog, FileDialogConfig};
 
 macro_rules! labeled_enum {
@@ -59,13 +63,80 @@ impl Labeled for crate::state::StereometerKind {
 }
 pub type Hsl = (f32, f32, f32);
 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum PlaybackState {
+    #[default]
+    Pause,
+    Play,
+    Stop,
+}
+
+pub struct AudioPlayer {
+    tx: Sender<PlaybackState>,
+    end_rx: Receiver<bool>,
+    playback_state: PlaybackState,
+    pub metadata_rx: Receiver<AudioFileContents>,
+    pub handle: std::thread::JoinHandle<()>,
+}
+
+impl AudioPlayer {
+    pub fn new(
+        tx: Sender<PlaybackState>,
+        end_rx: Receiver<bool>,
+        metadata_rx: Receiver<AudioFileContents>,
+        handle: std::thread::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            tx,
+            end_rx,
+            playback_state: PlaybackState::Pause,
+            metadata_rx,
+            handle,
+        }
+    }
+
+    pub fn play(&mut self) {
+        self.playback_state = PlaybackState::Play;
+        self.tx.send(PlaybackState::Play).unwrap();
+    }
+    pub fn pause(&mut self) {
+        self.playback_state = PlaybackState::Pause;
+        self.tx.send(PlaybackState::Pause).unwrap();
+    }
+    pub fn stop(&mut self) {
+        self.playback_state = PlaybackState::Stop;
+        self.tx.send(PlaybackState::Stop).unwrap();
+    }
+    pub fn is_paused(&self) -> bool {
+        matches!(self.playback_state, PlaybackState::Pause)
+    }
+    pub fn ended(&self) -> bool {
+        let Ok(ended) = self.end_rx.try_recv() else {
+            return false;
+        };
+        ended
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AudioFileContents {
+    pub path: Option<PathBuf>,
+    pub duration: std::time::Duration,
+    pub sample_rate: u32,
+    pub num_channels: u16,
+    pub samples: Vec<f32>,
+}
+
 pub struct PanelState {
     pub file_dialog: FileDialog,
     pub render_mode: RenderMode,
     pub filter_mode: FilterMode,
     pub stereo_kind: StereometerKind,
 
+    pub playback_state: PlaybackState,
+
     pub import_open: bool,
+    pub file_loaded: bool,
 
     pub gen_open: bool,
     pub render_open: bool,
@@ -83,17 +154,20 @@ pub struct PanelState {
     pub filter_freq: f32,
     pub hsl_color_bands: [Hsl; 3],
     pub bloom: f32,
-    pub file_path: PathBuf,
 }
 
 impl Default for PanelState {
     fn default() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
         let config = FileDialogConfig {
             file_filters: vec![],
             ..Default::default()
         };
         Self {
             file_dialog: FileDialog::new()
+                .opening_mode(egui_file_dialog::OpeningMode::LastVisitedDir)
+                .show_left_panel(true)
+                .show_pinned_folders(true)
                 .add_file_filter(
                     "Audio",
                     fd::Filter::new(|path: &Path| {
@@ -107,8 +181,10 @@ impl Default for PanelState {
             render_mode: RenderMode::default(),
             filter_mode: FilterMode::default(),
             stereo_kind: StereometerKind::default(),
+            playback_state: PlaybackState::default(),
 
             import_open: false,
+            file_loaded: false,
 
             gen_open: false,
             render_open: false,
@@ -125,7 +201,6 @@ impl Default for PanelState {
             filter_freq: 1.0,
             hsl_color_bands: [(0.0, 1.0, 0.50), (120.0, 1.0, 0.50), (240.0, 1.0, 0.50)],
             bloom: 0.4,
-            file_path: PathBuf::default(),
         }
     }
 }

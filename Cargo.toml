@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 egui-file-dialog = "0.13.0"
 eframe = { version = "0.34.3" }
+rodio = { version = "0.22.2", features = ["playback"] }
 egui = "0.34"
 env_logger = "0.11"
 wgpu = { version = "*", features = ["dx12", "metal"] }
