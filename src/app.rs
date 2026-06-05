@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use crate::{
-    state::AudioPlayer,
+    audio::audio_player::*,
     ui::{canvas, control_panel, timeline},
 };
 use egui::{CornerRadius, Key, Stroke, StrokeKind, emath::GuiRounding};
@@ -36,7 +36,6 @@ impl PolarityApp {
     pub fn spawn_audio_player(&mut self, path: PathBuf) {
         // Clear old player
         if let Some(old) = self.player.take() {
-            println!("OLD");
             old.clear();
         }
         self.player = Some(AudioPlayer::new(path));
@@ -61,9 +60,9 @@ impl PolarityApp {
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let resp = egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.inner_margin(12.0).fill(plt::BG))
+            .frame(egui::Frame::NONE.inner_margin(12.0).fill(plt::VOID))
             .show_inside(ui, |ui| {
-                timeline::draw(ui, &mut self.st);
+                timeline::draw(ui, &mut self.st, &mut self.player);
                 control_panel::draw(ui, &mut self.st);
                 canvas::draw(ui);
             });
@@ -80,6 +79,12 @@ impl eframe::App for PolarityApp {
         );
     }
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(p) = &self.player
+            && !p.is_paused()
+        {
+            ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
+        }
+
         // Open file dialog
         if self.st.import_open {
             self.st.file_dialog.pick_file();
@@ -100,6 +105,9 @@ impl eframe::App for PolarityApp {
         };
 
         self.handle_playback(ctx);
+        if let Some(p) = &self.player {
+            self.st.elapsed_time = p.position();
+        }
 
         // Check if playback has ended
         if let Some(player) = &self.player

@@ -1,24 +1,8 @@
 #![allow(unused_variables, dead_code)]
-use std::{
-    fs,
-    io::{Cursor, Read},
-    path::{Path, PathBuf},
-    sync::mpsc::{Receiver, Sender, channel},
-    time::Duration,
-};
+use std::{path::Path, time::Duration};
 
 use egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog, FileDialogConfig};
-use rodio::Source;
-
-fn file_as_raw_bytes(path: PathBuf) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    fs::File::open(path.clone())
-        .expect("error opening file")
-        .read_to_end(&mut bytes)
-        .expect("error reading file");
-    bytes
-}
 
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
@@ -75,133 +59,11 @@ impl Labeled for crate::state::StereometerKind {
 }
 pub type Hsl = (f32, f32, f32);
 
-#[derive(Clone, Copy, Debug, Default)]
-pub enum PlaybackState {
-    #[default]
-    Pause,
-    Play,
-    Stop,
-}
-
-pub struct AudioPlayer {
-    pub contents: AudioFileContents,
-    handle: std::thread::JoinHandle<()>,
-    playback_tx: Sender<PlaybackState>,
-    end_rx: Receiver<bool>,
-    playback_state: PlaybackState,
-}
-
-impl AudioPlayer {
-    pub fn new(path: PathBuf) -> Self {
-        // channels for state mgmt
-        let (pb_tx, pb_rx) = channel::<PlaybackState>();
-        let (end_tx, end_rx) = channel::<bool>();
-
-        let bytes = file_as_raw_bytes(path.clone());
-        let decoder = AudioPlayer::create_decoder(bytes.clone());
-        let contents = AudioFileContents {
-            path: path.clone(),
-            duration: decoder.total_duration().unwrap(),
-            sample_rate: decoder.sample_rate().into(),
-            num_channels: decoder.channels().into(),
-            samples: AudioPlayer::create_decoder(bytes).collect(),
-        };
-
-        let handle = std::thread::spawn(move || {
-            let mut sink =
-                rodio::DeviceSinkBuilder::open_default_sink().expect("Open default sink");
-            sink.log_on_drop(false);
-            let sink = rodio::Player::connect_new(sink.mixer());
-            sink.append(decoder);
-            sink.pause();
-            loop {
-                if sink.empty() {
-                    end_tx.send(true).unwrap();
-                    break;
-                }
-                if let Ok(cmd) = pb_rx.recv() {
-                    match cmd {
-                        PlaybackState::Play => {
-                            sink.play();
-                        }
-                        PlaybackState::Pause => {
-                            sink.pause();
-                        }
-                        PlaybackState::Stop => break,
-                    }
-                }
-            }
-        });
-
-        println!(
-            "Audio Data: {:?}",
-            AudioFileContents {
-                samples: Vec::new(),
-                path: contents.path.clone(),
-                ..contents
-            }
-        );
-
-        Self {
-            handle,
-            playback_tx: pb_tx,
-            end_rx,
-            playback_state: PlaybackState::default(),
-            contents,
-        }
-    }
-
-    /// Deletes the player & closes audio thread
-    pub fn clear(mut self) {
-        self.stop();
-        self.handle.join().ok();
-    }
-
-    pub fn play(&mut self) {
-        self.playback_state = PlaybackState::Play;
-        self.playback_tx.send(PlaybackState::Play).unwrap();
-    }
-    pub fn pause(&mut self) {
-        self.playback_state = PlaybackState::Pause;
-        self.playback_tx.send(PlaybackState::Pause).unwrap();
-    }
-    pub fn stop(&mut self) {
-        self.playback_state = PlaybackState::Stop;
-        self.playback_tx.send(PlaybackState::Stop).unwrap();
-    }
-    pub fn is_paused(&self) -> bool {
-        matches!(self.playback_state, PlaybackState::Pause)
-    }
-
-    /// Signals that there's no more audio to play
-    pub fn ended(&self) -> bool {
-        let Ok(ended) = self.end_rx.try_recv() else {
-            return false;
-        };
-        ended || matches!(self.playback_state, PlaybackState::Stop)
-    }
-
-    fn create_decoder(bytes: Vec<u8>) -> rodio::Decoder<Cursor<Vec<u8>>> {
-        rodio::Decoder::new(Cursor::new(bytes)).unwrap()
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct AudioFileContents {
-    pub path: PathBuf,
-    pub duration: std::time::Duration,
-    pub sample_rate: u32,
-    pub num_channels: u16,
-    pub samples: Vec<f32>,
-}
-
 pub struct AppState {
     pub file_dialog: FileDialog,
     pub render_mode: RenderMode,
     pub filter_mode: FilterMode,
     pub stereo_kind: StereometerKind,
-
-    pub playback_state: PlaybackState,
 
     pub import_open: bool,
     pub file_loaded: bool,
@@ -252,7 +114,6 @@ impl Default for AppState {
             render_mode: RenderMode::default(),
             filter_mode: FilterMode::default(),
             stereo_kind: StereometerKind::default(),
-            playback_state: PlaybackState::default(),
 
             import_open: false,
             file_loaded: false,

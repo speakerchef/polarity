@@ -1,8 +1,9 @@
+use crate::ui::text;
 use std::ops::RangeInclusive;
 
 use egui::{
-    self, Align, Color32, CornerRadius, DragValue, FontFamily, FontId, Layout, Pos2, Rect,
-    Response, Sense, Stroke, StrokeKind, Vec2, pos2, vec2,
+    self, Align, CornerRadius, DragValue, FontFamily, FontId, Layout, Rect, Response, Sense,
+    Stroke, StrokeKind, Vec2, pos2, vec2,
 };
 
 use crate::{state::Labeled, ui::palette as plt};
@@ -11,34 +12,6 @@ const SHARP: CornerRadius = CornerRadius::ZERO;
 
 fn border() -> Stroke {
     Stroke::new(plt::FRAME_WIDTH, plt::BORDER)
-}
-
-fn text(
-    ui: &mut egui::Ui,
-    text: &str,
-    font_id: FontId,
-    pos: Pos2,
-    extra_letter_spacing: f32,
-    color: Color32,
-    justify: Align,
-) {
-    let mut job = egui::text::LayoutJob {
-        halign: justify,
-        ..Default::default()
-    };
-    job.append(
-        text,
-        0.0,
-        egui::TextFormat {
-            font_id,
-            extra_letter_spacing,
-            line_height: None,
-            color,
-            ..Default::default()
-        },
-    );
-    let galley = ui.painter().layout_job(job);
-    ui.painter().galley(pos, galley, Color32::default());
 }
 
 /// Root control panel headers. eg. "GENERATOR", "POST FX"

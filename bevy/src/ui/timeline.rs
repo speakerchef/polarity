@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-    palette,
+    AudioFileContents, FontBlock, NullComponent, UserPlaybackMode, palette,
     ui::interactions::{on_click_toggle_bright_bg, on_hover_bg, on_leave_bg},
-    AudioFileContents, FontBlock, NullComponent, UserPlaybackMode,
 };
 
 #[derive(Component)]
@@ -104,11 +103,11 @@ pub fn update_playback_indicator(
     mut icon: Single<(&mut Text, &mut TextColor), With<PlayPause>>,
 ) {
     if sink.is_paused() {
-        icon.0 .0 = "\u{e037}".to_string();
-        icon.1 .0 = palette::LIVE;
+        icon.0.0 = "\u{e037}".to_string();
+        icon.1.0 = palette::LIVE;
     } else {
-        icon.0 .0 = "\u{e034}".to_string();
-        icon.1 .0 = palette::WARN;
+        icon.0.0 = "\u{e034}".to_string();
+        icon.1.0 = palette::WARN;
     }
 }
 
