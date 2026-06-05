@@ -4,7 +4,7 @@ use crate::ui::{palette, widgets::*};
 const ICON_IMPORT: &str = "\u{e5db}";
 const ICON_EXPORT: &str = "\u{e5d8}";
 
-pub fn draw(ui: &mut egui::Ui, st: &mut PanelState) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::right("control_panel")
         .exact_size(360.0)
         .resizable(false)
@@ -148,8 +148,4 @@ pub fn draw(ui: &mut egui::Ui, st: &mut PanelState) {
                     });
             })
         });
-
-    egui::CentralPanel::default()
-        .frame(egui::Frame::new().fill(palette::VOID))
-        .show_inside(ui, |_| {});
 }
