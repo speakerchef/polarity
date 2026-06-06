@@ -41,13 +41,20 @@ impl AudioPlayer {
         };
 
         sink.append(decoder);
-        sink.pause();
 
         Ok(Self {
             contents,
             sink,
             _stream: stream,
         })
+    }
+
+    pub fn with_paused(self, paused: bool) -> Self {
+        if paused {
+            self.pause();
+            return self;
+        }
+        self
     }
 
     pub fn play(&self) {

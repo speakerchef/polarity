@@ -87,8 +87,8 @@ impl TraceDensity {
 #[derive(Default)]
 pub enum PlaybackMode {
     #[default]
-    Once,
     Loop,
+    Once,
 }
 
 pub trait Labeled: Copy + PartialEq {

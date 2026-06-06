@@ -38,7 +38,7 @@ pub mod letter_spacing {
 }
 
 pub mod width {
-    pub const SLIDER: f32 = 160.0;
+    pub const SLIDER: f32 = 165.0;
 }
 
 pub mod height {

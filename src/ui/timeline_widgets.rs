@@ -5,7 +5,10 @@ use egui::{
     pos2, vec2,
 };
 
-use crate::ui::{palette as plt, text};
+use crate::{
+    state::PlaybackMode,
+    ui::{palette as plt, text},
+};
 
 pub const SHARP: CornerRadius = CornerRadius::ZERO;
 
@@ -114,5 +117,61 @@ pub fn file_info(ui: &mut egui::Ui, info: &str) {
         plt::letter_spacing::MINIMAL,
         plt::DIM,
         Align::LEFT,
+    );
+}
+
+pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
+    let loop_icon = "\u{e042}";
+    let (rect, resp) = ui.allocate_exact_size(vec2(76.0, 32.0), Sense::click());
+    if resp.clicked() {
+        *mode = match mode {
+            PlaybackMode::Loop => PlaybackMode::Once,
+            _ => PlaybackMode::Loop,
+        }
+    }
+    let (bg, fg) = if matches!(mode, PlaybackMode::Loop) {
+        (plt::TEXT, plt::INK)
+    } else {
+        (plt::VOID, plt::BRIGHT)
+    };
+    let bg = if resp.hovered() {
+        if bg == plt::TEXT {
+            bg
+        } else {
+            plt::SURFACE_HOVER
+        }
+    } else {
+        bg
+    };
+    ui.painter().rect_filled(rect, SHARP, bg);
+    ui.painter()
+        .line_segment([rect.left_bottom(), rect.left_top()], border());
+    ui.painter()
+        .line_segment([rect.right_bottom(), rect.right_top()], border());
+    let font_text = FontId {
+        size: plt::font_size::MED,
+        family: FontFamily::Name("inter_regular".into()),
+    };
+    let font_icon = FontId {
+        size: plt::font_size::BIG,
+        family: FontFamily::Name("icons".into()),
+    };
+    text(
+        ui,
+        loop_icon,
+        font_icon,
+        pos2(rect.center().x + 14.0, rect.bottom() - 24.),
+        plt::letter_spacing::BASE,
+        fg,
+        Align::LEFT,
+    );
+    text(
+        ui,
+        "LOOP",
+        font_text,
+        pos2(rect.center().x + 10.0, rect.bottom() - 23.5),
+        plt::letter_spacing::BASE,
+        fg,
+        Align::RIGHT,
     );
 }

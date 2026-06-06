@@ -3,7 +3,7 @@ use std::{path::PathBuf, time::Duration};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
-    state::FilterMode,
+    state::{FilterMode, PlaybackMode},
     ui::{canvas, control_panel, timeline},
 };
 use egui::{CornerRadius, Key, Stroke, StrokeKind, emath::GuiRounding};
@@ -27,21 +27,22 @@ impl PolarityApp {
         if let Some(old_player) = &self.player {
             if *old_player.contents.path != path {
                 println!("Diff");
-                self.spawn_audio_player(path);
+                self.spawn_audio_player(path, true);
             }
         } else {
-            self.spawn_audio_player(path);
+            self.spawn_audio_player(path, true);
         }
     }
 
-    pub fn spawn_audio_player(&mut self, path: PathBuf) {
+    pub fn spawn_audio_player(&mut self, path: PathBuf, paused: bool) {
         // Clear old player
         self.player.take();
 
-        self.player = AudioPlayer::new(path)
-            .inspect_err(|err| println!("{err}"))
-            .ok();
-        println!("Spawned audio player");
+        self.player = if let Ok(p) = AudioPlayer::new(path) {
+            Some(p.with_paused(paused))
+        } else {
+            None
+        };
     }
 
     pub fn handle_playback(&mut self, ctx: &egui::Context) {
@@ -183,7 +184,8 @@ impl eframe::App for PolarityApp {
             && player.ended()
         {
             println!("Respawning player");
-            self.spawn_audio_player(player.contents.path.to_path_buf());
+            let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
+            self.spawn_audio_player(player.contents.path.to_path_buf(), paused);
         }
     }
 }

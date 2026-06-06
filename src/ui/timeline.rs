@@ -6,7 +6,7 @@ use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
 use crate::ui::{palette as plt, timeline_widgets::*};
 
-pub fn draw(ui: &mut egui::Ui, _st: &mut AppState, pl: &mut Option<AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) {
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)
@@ -75,6 +75,7 @@ pub fn draw(ui: &mut egui::Ui, _st: &mut AppState, pl: &mut Option<AudioPlayer>)
 
                         timecode(ui, &elap, &dur);
                         ui.add_space(16.0);
+
                         file_info(ui, &fname);
                         ui.add_space(6.0);
                         file_info(
@@ -86,6 +87,10 @@ pub fn draw(ui: &mut egui::Ui, _st: &mut AppState, pl: &mut Option<AudioPlayer>)
                                 "".to_string()
                             },
                         );
+                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                            ui.add_space(16.0);
+                            loop_button(ui, &mut st.playback_mode);
+                        })
                     },
                 )
                 .response
