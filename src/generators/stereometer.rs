@@ -23,14 +23,17 @@ pub struct Stereometer {
     pub last_freq: f32,
     pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
     pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    pub live_mb_filters: Option<[(StereoFilter, StereoFilter, StereoFilter); 3]>,
-    pub trace_mb_filters: Option<[(StereoFilter, StereoFilter, StereoFilter); 3]>,
+    pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 
     pub fs_color: Rgba,
     pub mb_color: [Rgba; 3],
 
     pub last_sample_idx: usize,
     pub trace_buffer: VecDeque<Pos2>,
+    pub trace_low_buffer: VecDeque<Pos2>,
+    pub trace_mid_buffer: VecDeque<Pos2>,
+    pub trace_high_buffer: VecDeque<Pos2>,
 
     pub scale_factor: f32,
     pub point_size: f32,
@@ -57,6 +60,38 @@ fn filter_fs(st: &mut Stereometer, is_live: bool, l: f32, r: f32) -> (f32, f32) 
                 FilterMode::Hpf => trace_fs.2.run(l, r),
             }
         } else {
+            (l, r)
+        }
+    }
+}
+
+enum FilterBand {
+    Low,
+    Mid,
+    High,
+}
+
+fn filter_mb(st: &mut Stereometer, is_live: bool, band: FilterBand, l: f32, r: f32) -> (f32, f32) {
+    if is_live {
+        if let Some(live) = &mut st.live_mb_filters {
+            match band {
+                FilterBand::Low => live.0.run(l, r),
+                FilterBand::Mid => live.1.run(l, r),
+                FilterBand::High => live.2.run(l, r),
+            }
+        } else {
+            println!("NO FILTER");
+            (l, r)
+        }
+    } else {
+        if let Some(trace) = &mut st.trace_mb_filters {
+            match band {
+                FilterBand::Low => trace.0.run(l, r),
+                FilterBand::Mid => trace.1.run(l, r),
+                FilterBand::High => trace.2.run(l, r),
+            }
+        } else {
+            println!("NO FILTER");
             (l, r)
         }
     }
@@ -89,7 +124,14 @@ pub fn draw(p: &AudioPlayer, st: &mut AppState, center: Pos2) -> Mesh {
     let sample_pos = p.position().as_secs_f64();
     let sample_idx = (sample_pos * p.contents.sample_rate as f64) as usize;
     let (fsr, fsg, fsb, _) = st.stereo.fs_color.as_tuple();
+    let (mblowr, mblowg, mblowb, _) = st.stereo.mb_color[0].as_tuple();
+    let (mbmidr, mbmidg, mbmidb, _) = st.stereo.mb_color[1].as_tuple();
+    let (mbhighr, mbhighg, mbhighb, _) = st.stereo.mb_color[2].as_tuple();
     let last_idx = st.stereo.last_sample_idx;
+
+    if sample_idx < last_idx {
+        st.stereo.trace_buffer.clear();
+    }
 
     let trace_window = p
         .contents
@@ -100,28 +142,103 @@ pub fn draw(p: &AudioPlayer, st: &mut AppState, center: Pos2) -> Mesh {
     trace_window.chunks_exact(2).for_each(|s| {
         let l = s.first().unwrap();
         let r = s.last().unwrap_or(l);
-        let (l, r) = filter_fs(&mut st.stereo, false, *l, *r);
-        let (l, r) = get_coord_from_meterkind(st, l, r);
-        let (sl, sr) = (l * st.stereo.scale_factor, r * st.stereo.scale_factor);
-        st.stereo
-            .trace_buffer
-            .push_back(pos2(center.x + sl, center.y + sr.neg()));
+        match st.stereo.render_mode {
+            RenderMode::FullSpectrum => {
+                let (l, r) = filter_fs(&mut st.stereo, false, *l, *r);
+                let (l, r) = get_coord_from_meterkind(st, l, r);
+                let (sl, sr) = (l * st.stereo.scale_factor, r * st.stereo.scale_factor);
+                let pos = pos2(center.x + sl, center.y + sr.neg());
+                st.stereo.trace_buffer.push_back(pos);
+            }
+            RenderMode::MultiBand => {
+                let (lowl, lowr) = filter_mb(&mut st.stereo, false, FilterBand::Low, *l, *r);
+                let (midl, midr) = filter_mb(&mut st.stereo, false, FilterBand::Mid, *l, *r);
+                let (highl, highr) = filter_mb(&mut st.stereo, false, FilterBand::High, *l, *r);
+                let (lowl, lowr) = get_coord_from_meterkind(st, lowl, lowr);
+                let (midl, midr) = get_coord_from_meterkind(st, midl, midr);
+                let (highl, highr) = get_coord_from_meterkind(st, highl, highr);
+                let (lowl, lowr) = (lowl * st.stereo.scale_factor, lowr * st.stereo.scale_factor);
+                let (midl, midr) = (midl * st.stereo.scale_factor, midr * st.stereo.scale_factor);
+                let (highl, highr) = (
+                    highl * st.stereo.scale_factor,
+                    highr * st.stereo.scale_factor,
+                );
+                let posl = pos2(center.x + lowl, center.y + lowr.neg());
+                let posm = pos2(center.x + midl, center.y + midr.neg());
+                let posh = pos2(center.x + highl, center.y + highr.neg());
+                st.stereo.trace_low_buffer.push_back(posl);
+                st.stereo.trace_mid_buffer.push_back(posm);
+                st.stereo.trace_high_buffer.push_back(posh);
+            }
+        }
     });
     st.stereo.last_sample_idx = sample_idx;
     while st.stereo.trace_buffer.len() > st.stereo.trace_density.count() {
         st.stereo.trace_buffer.pop_front();
     }
-    st.stereo
-        .trace_buffer
-        .iter()
-        .enumerate()
-        .for_each(|(i, &pos)| {
-            let alpha = ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
-            trace_mesh.add_colored_rect(
-                Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
-                Color32::from_rgba_unmultiplied(fsr, fsg, fsb, alpha),
-            );
-        });
+    while st.stereo.trace_low_buffer.len() > st.stereo.trace_density.count() {
+        st.stereo.trace_low_buffer.pop_front();
+    }
+    while st.stereo.trace_mid_buffer.len() > st.stereo.trace_density.count() {
+        st.stereo.trace_mid_buffer.pop_front();
+    }
+    while st.stereo.trace_high_buffer.len() > st.stereo.trace_density.count() {
+        st.stereo.trace_high_buffer.pop_front();
+    }
+    match st.stereo.render_mode {
+        RenderMode::FullSpectrum => {
+            st.stereo
+                .trace_buffer
+                .iter()
+                .enumerate()
+                .for_each(|(i, &pos)| {
+                    let alpha =
+                        ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
+                    trace_mesh.add_colored_rect(
+                        Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
+                        Color32::from_rgba_unmultiplied(fsr, fsg, fsb, alpha),
+                    );
+                });
+        }
+        RenderMode::MultiBand => {
+            st.stereo
+                .trace_low_buffer
+                .iter()
+                .enumerate()
+                .for_each(|(i, &pos)| {
+                    let alpha =
+                        ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
+                    trace_mesh.add_colored_rect(
+                        Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
+                        Color32::from_rgba_unmultiplied(mblowr, mblowg, mblowb, alpha),
+                    );
+                });
+            st.stereo
+                .trace_mid_buffer
+                .iter()
+                .enumerate()
+                .for_each(|(i, &pos)| {
+                    let alpha =
+                        ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
+                    trace_mesh.add_colored_rect(
+                        Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
+                        Color32::from_rgba_unmultiplied(mbmidr, mbmidg, mbmidb, alpha),
+                    );
+                });
+            st.stereo
+                .trace_high_buffer
+                .iter()
+                .enumerate()
+                .for_each(|(i, &pos)| {
+                    let alpha =
+                        ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
+                    trace_mesh.add_colored_rect(
+                        Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
+                        Color32::from_rgba_unmultiplied(mbhighr, mbhighg, mbhighb, alpha),
+                    );
+                });
+        }
+    }
 
     let live_window = p
         .contents
@@ -129,20 +246,60 @@ pub fn draw(p: &AudioPlayer, st: &mut AppState, center: Pos2) -> Mesh {
         .get(sample_idx * num_channels..sample_idx * num_channels + st.stereo.live_density.count())
         .unwrap_or_default();
 
-    live_window.chunks_exact(2).for_each(|s| {
-        let l = s.first().unwrap();
-        let r = s.last().unwrap_or(l);
-        let (l, r) = filter_fs(&mut st.stereo, true, *l, *r);
-        let (l, r) = get_coord_from_meterkind(st, l, r);
-        let (sl, sr) = (l * st.stereo.scale_factor, r * st.stereo.scale_factor);
-        live_mesh.add_colored_rect(
-            Rect::from_min_size(
-                pos2(center.x + sl, center.y + sr.neg()),
-                vec2(st.stereo.point_size, st.stereo.point_size),
-            ),
-            Color32::from_rgb(fsr, fsg, fsb),
-        );
-    });
+    match st.stereo.render_mode {
+        RenderMode::FullSpectrum => {
+            live_window.chunks_exact(2).for_each(|s| {
+                let l = s.first().unwrap();
+                let r = s.last().unwrap_or(l);
+                let (l, r) = filter_fs(&mut st.stereo, true, *l, *r);
+                let (l, r) = get_coord_from_meterkind(st, l, r);
+                let (sl, sr) = (l * st.stereo.scale_factor, r * st.stereo.scale_factor);
+                let pos = pos2(center.x + sl, center.y + sr.neg());
+                live_mesh.add_colored_rect(
+                    Rect::from_min_size(pos, vec2(st.stereo.point_size, st.stereo.point_size)),
+                    Color32::from_rgb(fsr, fsg, fsb),
+                );
+            });
+        }
+        RenderMode::MultiBand => {
+            live_window.chunks_exact(2).for_each(|s| {
+                let l = s.first().unwrap();
+                let r = s.last().unwrap_or(l);
+
+                let (lowl, lowr) = filter_mb(&mut st.stereo, true, FilterBand::Low, *l, *r);
+                let (midl, midr) = filter_mb(&mut st.stereo, true, FilterBand::Mid, *l, *r);
+                let (highl, highr) = filter_mb(&mut st.stereo, true, FilterBand::High, *l, *r);
+
+                let (lowl, lowr) = get_coord_from_meterkind(st, lowl, lowr);
+                let (midl, midr) = get_coord_from_meterkind(st, midl, midr);
+                let (highl, highr) = get_coord_from_meterkind(st, highl, highr);
+
+                let (lowl, lowr) = (lowl * st.stereo.scale_factor, lowr * st.stereo.scale_factor);
+                let (midl, midr) = (midl * st.stereo.scale_factor, midr * st.stereo.scale_factor);
+                let (highl, highr) = (
+                    highl * st.stereo.scale_factor,
+                    highr * st.stereo.scale_factor,
+                );
+                let posl = pos2(center.x + lowl, center.y + lowr.neg());
+                let posm = pos2(center.x + midl, center.y + midr.neg());
+                let posh = pos2(center.x + highl, center.y + highr.neg());
+
+                live_mesh.add_colored_rect(
+                    Rect::from_min_size(posl, vec2(st.stereo.point_size, st.stereo.point_size)),
+                    Color32::from_rgb(mblowr, mblowg, mblowb),
+                );
+                live_mesh.add_colored_rect(
+                    Rect::from_min_size(posm, vec2(st.stereo.point_size, st.stereo.point_size)),
+                    Color32::from_rgb(mbmidr, mbmidg, mbmidb),
+                );
+                live_mesh.add_colored_rect(
+                    Rect::from_min_size(posh, vec2(st.stereo.point_size, st.stereo.point_size)),
+                    Color32::from_rgb(mbhighr, mbhighg, mbhighb),
+                );
+            });
+        }
+    }
+
     live_mesh.append(trace_mesh);
     live_mesh
 }

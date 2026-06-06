@@ -1,9 +1,8 @@
 #![allow(dead_code)]
-use crate::{audio::StereoFilter, generators::stereometer::Stereometer};
-use biquad::*;
-use std::{collections::VecDeque, path::Path};
+use crate::generators::stereometer::Stereometer;
+use std::path::Path;
 
-use egui::{Align2, Pos2, Vec2, vec2};
+use egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::Rgba;
@@ -34,7 +33,7 @@ labeled_enum!(StereometerKind {
 labeled_enum!(RenderMode {
     FullSpectrum => "Full Spectrum",
     MultiBand    => "Multi-Band",
-}, FullSpectrum);
+}, MultiBand);
 
 labeled_enum!(FilterMode {
     Off => "Off",

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use biquad::*;
 use std::{fs, io::Read, path::PathBuf};
 

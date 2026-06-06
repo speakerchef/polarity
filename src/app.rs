@@ -60,7 +60,7 @@ impl PolarityApp {
         {
             self.st.set_default_freqs = true;
             let st = &mut self.st.stereo;
-            st.live_fs_filters = Some((
+            let filters = Some((
                 StereoFilter::from_coeffs_butterworth(Type::LowPass, 200., p.contents.sample_rate),
                 StereoFilter::from_coeffs_butterworth(
                     Type::BandPass,
@@ -73,19 +73,10 @@ impl PolarityApp {
                     p.contents.sample_rate,
                 ),
             ));
-            st.trace_fs_filters = Some((
-                StereoFilter::from_coeffs_butterworth(Type::LowPass, 200., p.contents.sample_rate),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::BandPass,
-                    1000.,
-                    p.contents.sample_rate,
-                ),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::HighPass,
-                    5000.,
-                    p.contents.sample_rate,
-                ),
-            ));
+            st.live_fs_filters = filters.clone();
+            st.trace_fs_filters = filters.clone();
+            st.live_mb_filters = filters.clone();
+            st.trace_mb_filters = filters;
         }
 
         if self.st.stereo.live_fs_filters.is_some()

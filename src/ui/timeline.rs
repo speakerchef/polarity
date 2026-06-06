@@ -6,7 +6,7 @@ use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
 use crate::ui::{palette as plt, timeline_widgets::*};
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, _st: &mut AppState, pl: &mut Option<AudioPlayer>) {
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)
