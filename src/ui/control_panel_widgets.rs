@@ -359,7 +359,7 @@ pub fn slider_row(
             Layout::left_to_right(Align::Center),
             |ui| {
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
-                ui.add_space(10.0);
+                ui.add_space(12.0);
                 label_text(ui, label, 90.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
                 ui.add_space(8.0);

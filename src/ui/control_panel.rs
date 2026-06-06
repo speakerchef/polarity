@@ -48,7 +48,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                     ui,
                                                     "render_mode",
                                                     "MODE",
-                                                    &mut st.render_mode,
+                                                    &mut st.stereo.render_mode,
                                                     RenderMode::ALL,
                                                     &mut st.render_mode_options_open,
                                                 );
@@ -56,7 +56,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                     ui,
                                                     "render_style",
                                                     "STYLE",
-                                                    &mut st.stereo_kind,
+                                                    &mut st.stereo.kind,
                                                     StereometerKind::ALL,
                                                     &mut st.stereo_kind_options_open,
                                                 );
@@ -71,14 +71,24 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                     ui,
                                                     "filter_mode",
                                                     "FILTER",
-                                                    &mut st.filter_mode,
+                                                    &mut st.stereo.filter_mode,
                                                     FilterMode::ALL,
                                                     &mut st.filter_mode_options_open,
                                                 );
+                                                if st.set_default_freqs {
+                                                    let f = match st.stereo.filter_mode {
+                                                        FilterMode::Off => 1.0,
+                                                        FilterMode::Lpf => 200.,
+                                                        FilterMode::Bpf => 1000.,
+                                                        FilterMode::Hpf => 5000.,
+                                                    };
+                                                    st.stereo.filter_freq = f;
+                                                    st.stereo.last_freq = f;
+                                                }
                                                 slider_row(
                                                     ui,
                                                     "FREQUENCY",
-                                                    &mut st.filter_freq,
+                                                    &mut st.stereo.filter_freq,
                                                     1.0,
                                                     20000.0,
                                                     0,
@@ -87,31 +97,31 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
 
                                             section_header_submenu(ui, "COLOR", &mut st.color_open);
                                             if st.color_open {
-                                                match st.render_mode {
+                                                match st.stereo.render_mode {
                                                     RenderMode::FullSpectrum => {
                                                         slider_row(
                                                             ui,
-                                                            "HUE",
-                                                            &mut st.hsl_color_bands[1].0,
+                                                            "RED",
+                                                            &mut st.stereo.fs_color.r,
                                                             0.0,
-                                                            360.0,
-                                                            1,
+                                                            255.0,
+                                                            0,
                                                         );
                                                         slider_row(
                                                             ui,
-                                                            "SATURATION",
-                                                            &mut st.hsl_color_bands[1].1,
+                                                            "GREEN",
+                                                            &mut st.stereo.fs_color.g,
                                                             0.0,
-                                                            1.0,
-                                                            2,
+                                                            255.0,
+                                                            0,
                                                         );
                                                         slider_row(
                                                             ui,
-                                                            "LUMINANCE",
-                                                            &mut st.hsl_color_bands[1].2,
+                                                            "BLUE",
+                                                            &mut st.stereo.fs_color.b,
                                                             0.0,
-                                                            1.0,
-                                                            2,
+                                                            255.0,
+                                                            0,
                                                         );
                                                     }
                                                     RenderMode::MultiBand => {
@@ -123,27 +133,27 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                             static_label(ui, name);
                                                             slider_row(
                                                                 ui,
-                                                                "HUE",
-                                                                &mut st.hsl_color_bands[band].0,
+                                                                "RED",
+                                                                &mut st.stereo.mb_color[band].r,
                                                                 0.0,
-                                                                360.0,
-                                                                1,
+                                                                255.0,
+                                                                0,
                                                             );
                                                             slider_row(
                                                                 ui,
-                                                                "SATURATION",
-                                                                &mut st.hsl_color_bands[band].1,
+                                                                "GREEN",
+                                                                &mut st.stereo.mb_color[band].g,
                                                                 0.0,
-                                                                1.0,
-                                                                2,
+                                                                255.0,
+                                                                0,
                                                             );
                                                             slider_row(
                                                                 ui,
-                                                                "LUMINANCE",
-                                                                &mut st.hsl_color_bands[band].2,
+                                                                "BLUE",
+                                                                &mut st.stereo.mb_color[band].b,
                                                                 0.0,
-                                                                1.0,
-                                                                2,
+                                                                255.0,
+                                                                0,
                                                             );
                                                         }
                                                     }
@@ -155,6 +165,40 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                 "VISUAL",
                                                 &mut st.visual_open,
                                             );
+                                            if st.visual_open {
+                                                dropdown_row(
+                                                    ui,
+                                                    "live_density",
+                                                    "DENSITY",
+                                                    &mut st.stereo.live_density,
+                                                    LiveDensity::ALL,
+                                                    &mut st.density_open,
+                                                );
+                                                dropdown_row(
+                                                    ui,
+                                                    "trace_density",
+                                                    "TRACE",
+                                                    &mut st.stereo.trace_density,
+                                                    TraceDensity::ALL,
+                                                    &mut st.trace_open,
+                                                );
+                                                slider_row(
+                                                    ui,
+                                                    "POINT SIZE",
+                                                    &mut st.stereo.point_size,
+                                                    0.2,
+                                                    4.0,
+                                                    2,
+                                                );
+                                                slider_row(
+                                                    ui,
+                                                    "SCALE (%)",
+                                                    &mut st.stereo.scale_factor,
+                                                    100.0,
+                                                    500.0,
+                                                    0,
+                                                );
+                                            }
                                         }
 
                                         section_header(ui, 2, "POST FX", &mut st.postfx_open);

@@ -1,7 +1,9 @@
+use biquad::*;
 use std::{path::PathBuf, time::Duration};
 
 use crate::{
-    audio::audio_player::*,
+    audio::{StereoFilter, audio_player::*},
+    state::FilterMode,
     ui::{canvas, control_panel, timeline},
 };
 use egui::{CornerRadius, Key, Stroke, StrokeKind, emath::GuiRounding};
@@ -25,7 +27,6 @@ impl PolarityApp {
         if let Some(old_player) = &self.player {
             if *old_player.contents.path != path {
                 println!("Diff");
-                self.st.file_loaded = false;
                 self.spawn_audio_player(path);
             }
         } else {
@@ -52,6 +53,91 @@ impl PolarityApp {
             }
         }
     }
+
+    pub fn update_filters(&mut self) {
+        if self.st.stereo.live_fs_filters.is_none()
+            && let Some(p) = &self.player
+        {
+            self.st.set_default_freqs = true;
+            let st = &mut self.st.stereo;
+            st.live_fs_filters = Some((
+                StereoFilter::from_coeffs_butterworth(Type::LowPass, 200., p.contents.sample_rate),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::BandPass,
+                    1000.,
+                    p.contents.sample_rate,
+                ),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::HighPass,
+                    5000.,
+                    p.contents.sample_rate,
+                ),
+            ));
+            st.trace_fs_filters = Some((
+                StereoFilter::from_coeffs_butterworth(Type::LowPass, 200., p.contents.sample_rate),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::BandPass,
+                    1000.,
+                    p.contents.sample_rate,
+                ),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::HighPass,
+                    5000.,
+                    p.contents.sample_rate,
+                ),
+            ));
+        }
+
+        if self.st.stereo.live_fs_filters.is_some()
+            && let Some(p) = &self.player
+            && self.st.stereo.last_freq != self.st.stereo.filter_freq
+        {
+            self.st.set_default_freqs = false;
+            let st = &mut self.st.stereo;
+            st.last_freq = st.filter_freq;
+            let livefs = st.live_fs_filters.as_mut().unwrap();
+            let tracefs = st.trace_fs_filters.as_mut().unwrap();
+            match st.filter_mode {
+                FilterMode::Off => (),
+                FilterMode::Lpf => {
+                    livefs.0 = StereoFilter::from_coeffs_butterworth(
+                        Type::LowPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.0 = StereoFilter::from_coeffs_butterworth(
+                        Type::LowPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+                FilterMode::Bpf => {
+                    livefs.1 = StereoFilter::from_coeffs_butterworth(
+                        Type::BandPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.1 = StereoFilter::from_coeffs_butterworth(
+                        Type::BandPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+                FilterMode::Hpf => {
+                    livefs.2 = StereoFilter::from_coeffs_butterworth(
+                        Type::HighPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.2 = StereoFilter::from_coeffs_butterworth(
+                        Type::HighPass,
+                        st.filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for PolarityApp {
@@ -61,7 +147,7 @@ impl eframe::App for PolarityApp {
             .show_inside(ui, |ui| {
                 timeline::draw(ui, &mut self.st, &mut self.player);
                 control_panel::draw(ui, &mut self.st);
-                canvas::draw(ui);
+                canvas::draw(ui, &mut self.st, &self.player);
             });
 
         let border_rect = resp.response.rect.shrink(12.0).round_ui();
@@ -95,12 +181,10 @@ impl eframe::App for PolarityApp {
             .update(ctx)
             .picked()
             .map(|p| p.to_path_buf())
-            && !self.st.file_loaded
         {
             self.load_file(path);
-            self.st.file_loaded = true;
         };
-
+        self.update_filters();
         self.handle_playback(ctx);
 
         // Check if playback has ended

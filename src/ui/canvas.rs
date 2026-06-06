@@ -1,20 +1,21 @@
-use crate::ui::palette as plt;
-use egui::{Mesh, Rect, pos2, vec2};
+use crate::generators::stereometer;
+use crate::{audio::audio_player::AudioPlayer, state::AppState};
+use egui::pos2;
 
 use crate::ui::palette;
 
-pub fn draw(ui: &mut egui::Ui) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(palette::VOID))
         .show_inside(ui, |ui| {
-            let mut mesh = Mesh::default();
-            mesh.add_colored_rect(
-                Rect::from_min_size(
-                    pos2(ui.available_width() / 2.0, ui.available_height() / 2.0),
-                    vec2(100.0, 100.0),
-                ),
-                plt::DANGER,
+            let Some(p) = pl else {
+                return;
+            };
+            let stereo_mesh = stereometer::draw(
+                p,
+                st,
+                pos2(ui.available_width() / 2.0, ui.available_height() / 2.0),
             );
-            ui.painter().add(egui::Shape::mesh(mesh));
+            ui.painter().add(stereo_mesh);
         });
 }
