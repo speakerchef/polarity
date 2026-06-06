@@ -1,5 +1,5 @@
 #![allow(unused_variables, dead_code)]
-use std::{path::Path, time::Duration};
+use std::{default, path::Path};
 
 use egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog, FileDialogConfig};
@@ -39,6 +39,13 @@ labeled_enum!(FilterMode {
     Hpf => "Hpf",
 }, Off);
 
+#[derive(Default)]
+pub enum PlaybackMode {
+    #[default]
+    Once,
+    Loop,
+}
+
 pub trait Labeled: Copy + PartialEq {
     fn text(self) -> &'static str;
 }
@@ -64,6 +71,7 @@ pub struct AppState {
     pub render_mode: RenderMode,
     pub filter_mode: FilterMode,
     pub stereo_kind: StereometerKind,
+    pub playback_mode: PlaybackMode,
 
     pub import_open: bool,
     pub file_loaded: bool,
@@ -84,9 +92,6 @@ pub struct AppState {
     pub filter_freq: f32,
     pub hsl_color_bands: [Hsl; 3],
     pub bloom: f32,
-
-    //Timeline
-    pub elapsed_time: Duration,
 }
 
 impl Default for AppState {
@@ -114,6 +119,7 @@ impl Default for AppState {
             render_mode: RenderMode::default(),
             filter_mode: FilterMode::default(),
             stereo_kind: StereometerKind::default(),
+            playback_mode: PlaybackMode::default(),
 
             import_open: false,
             file_loaded: false,
@@ -133,8 +139,6 @@ impl Default for AppState {
             filter_freq: 1.0,
             hsl_color_bands: [(0.0, 1.0, 0.50), (120.0, 1.0, 0.50), (240.0, 1.0, 0.50)],
             bloom: 0.4,
-
-            elapsed_time: Duration::default(),
         }
     }
 }

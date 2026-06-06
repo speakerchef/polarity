@@ -1,19 +1,11 @@
-use std::{
-    io::Cursor,
-    path::PathBuf,
-    sync::{
-        Arc, Mutex,
-        mpsc::{Receiver, Sender, channel},
-    },
-    time::Duration,
-};
+#![allow(dead_code)]
+use std::{io::Cursor, path::PathBuf, time::Duration};
 
 use rodio::{Source, source::SeekError};
 
 use crate::audio::file_as_raw_bytes;
 
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct AudioFileContents {
     pub path: PathBuf,
     pub duration: std::time::Duration,
@@ -21,134 +13,74 @@ pub struct AudioFileContents {
     pub num_channels: u16,
     pub samples: Vec<f32>,
 }
-#[derive(Clone, Copy, Debug, Default)]
-pub enum PlaybackState {
-    #[default]
-    Pause,
-    Play,
-    Stop,
-}
-
 pub struct AudioPlayer {
     pub contents: AudioFileContents,
-    pos: Arc<Mutex<Duration>>,
-    handle: std::thread::JoinHandle<()>,
-    playback_tx: Sender<PlaybackState>,
-    end_rx: Receiver<bool>,
-    seekreq_tx: Sender<Duration>,
-    seekresp_rx: Receiver<Result<(), SeekError>>,
-    playback_state: PlaybackState,
+    sink: rodio::Player,
+
+    // internal to keep the sink alive
+    _stream: rodio::MixerDeviceSink,
 }
 
+#[allow(dead_code)]
 impl AudioPlayer {
-    pub fn new(path: PathBuf) -> Self {
-        // channels for state mgmt
-        let (pb_tx, pb_rx) = channel::<PlaybackState>();
-        let (end_tx, end_rx) = channel::<bool>();
-        let (seekreq_tx, seekreq_rx) = channel::<Duration>();
-        let (seekresp_tx, seekresp_rx) = channel::<Result<(), SeekError>>();
+    pub fn new(path: PathBuf) -> Result<Self, String> {
+        let Ok(mut stream) = rodio::DeviceSinkBuilder::open_default_sink() else {
+            return Err("No output device found!".to_string());
+        };
+        stream.log_on_drop(false);
 
+        let sink = rodio::Player::connect_new(stream.mixer());
         let bytes = file_as_raw_bytes(path.clone());
-        let decoder = AudioPlayer::create_decoder(bytes.clone());
+        let decoder = Self::create_decoder(bytes.clone());
         let contents = AudioFileContents {
             path: path.clone(),
             duration: decoder.total_duration().unwrap(),
             sample_rate: decoder.sample_rate().into(),
             num_channels: decoder.channels().into(),
-            samples: AudioPlayer::create_decoder(bytes).collect(),
+            samples: Self::create_decoder(bytes).collect(),
         };
 
-        let pos = Arc::new(Mutex::new(Duration::default()));
-        let cur_pos = Arc::clone(&pos);
-        let handle = std::thread::spawn(move || {
-            let mut sink =
-                rodio::DeviceSinkBuilder::open_default_sink().expect("Open default sink");
-            sink.log_on_drop(false);
-            let sink = rodio::Player::connect_new(sink.mixer());
-            sink.append(decoder);
-            sink.pause();
-            loop {
-                if sink.empty() {
-                    end_tx.send(true).unwrap();
-                    break;
-                }
-                if let Ok(cmd) = pb_rx.try_recv() {
-                    match cmd {
-                        PlaybackState::Play => {
-                            sink.play();
-                        }
-                        PlaybackState::Pause => {
-                            sink.pause();
-                        }
-                        PlaybackState::Stop => break,
-                    }
-                }
-                if let Ok(seekamt) = seekreq_rx.try_recv() {
-                    let res = sink.try_seek(seekamt);
-                    seekresp_tx.send(res).unwrap();
-                }
-                *cur_pos.lock().unwrap() = sink.get_pos();
-            }
-        });
+        sink.append(decoder);
+        sink.pause();
 
-        println!(
-            "Audio Data: {:?}",
-            AudioFileContents {
-                samples: Vec::new(),
-                path: contents.path.clone(),
-                ..contents
-            }
-        );
-
-        Self {
-            pos,
-            handle,
-            playback_tx: pb_tx,
-            end_rx,
-            seekreq_tx,
-            seekresp_rx,
-            playback_state: PlaybackState::default(),
+        Ok(Self {
             contents,
+            sink,
+            _stream: stream,
+        })
+    }
+
+    pub fn play(&self) {
+        self.sink.play();
+    }
+    pub fn pause(&self) {
+        self.sink.pause();
+    }
+    pub fn toggle_playback(&self) {
+        if self.sink.is_paused() {
+            self.sink.play();
+        } else {
+            self.sink.pause();
         }
     }
-
-    /// Deletes the player & closes audio thread
-    pub fn clear(mut self) {
-        self.stop();
-        self.handle.join().ok();
-    }
-
-    pub fn play(&mut self) {
-        self.playback_state = PlaybackState::Play;
-        self.playback_tx.send(PlaybackState::Play).unwrap();
-    }
-    pub fn pause(&mut self) {
-        self.playback_state = PlaybackState::Pause;
-        self.playback_tx.send(PlaybackState::Pause).unwrap();
-    }
-    pub fn stop(&mut self) {
-        self.playback_state = PlaybackState::Stop;
-        self.playback_tx.send(PlaybackState::Stop).unwrap();
+    pub fn stop(&self) {
+        self.sink.stop();
     }
     pub fn is_paused(&self) -> bool {
-        matches!(self.playback_state, PlaybackState::Pause)
+        self.sink.is_paused()
     }
 
     pub fn position(&self) -> Duration {
-        *self.pos.lock().unwrap()
+        self.sink.get_pos()
     }
 
-    pub fn try_seek(&mut self, d: Duration) -> Result<(), SeekError> {
-        self.seekreq_tx.send(d).unwrap();
-        self.seekresp_rx.recv().unwrap_or(Ok(()))
+    pub fn try_seek(&self, pos: Duration) -> Result<(), SeekError> {
+        self.sink.try_seek(pos)
     }
 
     /// Signals that there's no more audio to play
     pub fn ended(&self) -> bool {
-        let Ok(ended) = self.end_rx.try_recv() else {
-            return false;
-        };
-        ended || matches!(self.playback_state, PlaybackState::Stop)
+        self.sink.empty()
     }
 
     fn create_decoder(bytes: Vec<u8>) -> rodio::Decoder<Cursor<Vec<u8>>> {

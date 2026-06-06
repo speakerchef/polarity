@@ -35,21 +35,18 @@ impl PolarityApp {
 
     pub fn spawn_audio_player(&mut self, path: PathBuf) {
         // Clear old player
-        if let Some(old) = self.player.take() {
-            old.clear();
-        }
-        self.player = Some(AudioPlayer::new(path));
+        self.player.take();
+
+        self.player = AudioPlayer::new(path)
+            .inspect_err(|err| println!("{err}"))
+            .ok();
         println!("Spawned audio player");
     }
 
     pub fn handle_playback(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(Key::Space)) {
             if let Some(player) = &mut self.player {
-                if player.is_paused() {
-                    player.play();
-                } else {
-                    player.pause();
-                }
+                player.toggle_playback();
             } else {
                 println!("No audio player loaded");
             }
@@ -105,9 +102,6 @@ impl eframe::App for PolarityApp {
         };
 
         self.handle_playback(ctx);
-        if let Some(p) = &self.player {
-            self.st.elapsed_time = p.position();
-        }
 
         // Check if playback has ended
         if let Some(player) = &self.player

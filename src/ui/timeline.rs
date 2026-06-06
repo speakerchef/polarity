@@ -6,7 +6,7 @@ use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
 use crate::ui::{palette as plt, timeline_widgets::*};
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) {
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)
@@ -25,12 +25,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlaye
                         const SKIP_END: &str = "\u{e044}";
                         ui.add_space(16.0);
 
-                        if transport_button(ui, SKIP_START, plt::DIM, false).clicked()
-                            && let Some(p) = &mut pl
-                        {
-                            p.try_seek(Duration::from_secs(0))
-                                .expect("could not seek to start");
-                        }
+                        let skip_start_resp = transport_button(ui, SKIP_START, plt::DIM, false);
                         ui.add_space(12.0);
 
                         let (icn, col) = if let Some(p) = pl
@@ -40,37 +35,25 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlaye
                         } else {
                             (PLAY, plt::LIVE)
                         };
-                        if transport_button(ui, icn, col, true).clicked()
-                            && let Some(p) = &mut pl
-                        {
-                            match p.is_paused() {
-                                true => p.play(),
-                                _ => p.pause(),
-                            }
-                        };
+                        let playback_resp = transport_button(ui, icn, col, true);
                         ui.add_space(12.0);
 
-                        if transport_button(ui, SKIP_END, plt::DIM, false).clicked()
-                            && let Some(p) = &mut pl
-                        {
-                            p.try_seek(p.contents.duration)
-                                .expect("could not seek to end");
-                        };
+                        let skip_end_resp = transport_button(ui, SKIP_END, plt::DIM, false);
                         ui.add_space(16.0);
 
-                        timecode(
-                            ui,
-                            &st.elapsed_time,
-                            &if let Some(pl) = pl {
-                                pl.contents.duration
-                            } else {
-                                Duration::from_secs(0)
-                            },
-                        );
-                        ui.add_space(16.0);
-
-                        let (fname, sr) = if let Some(p) = pl {
+                        let (elap, dur, fname, sr) = if let Some(p) = pl {
+                            if skip_start_resp.clicked() {
+                                p.try_seek(Duration::from_secs(0)).unwrap_or_default();
+                            }
+                            if playback_resp.clicked() {
+                                p.toggle_playback();
+                            }
+                            if skip_end_resp.clicked() {
+                                p.try_seek(p.contents.duration).unwrap_or_default();
+                            }
                             (
+                                p.position(),
+                                p.contents.duration,
                                 p.contents
                                     .path
                                     .clone()
@@ -82,8 +65,16 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlaye
                                 Some(p.contents.sample_rate),
                             )
                         } else {
-                            ("".to_string(), None)
+                            (
+                                Duration::default(),
+                                Duration::default(),
+                                "".to_string(),
+                                None,
+                            )
                         };
+
+                        timecode(ui, &elap, &dur);
+                        ui.add_space(16.0);
                         file_info(ui, &fname);
                         ui.add_space(6.0);
                         file_info(
@@ -99,6 +90,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlaye
                 )
                 .response
                 .rect;
+
             let bgr = egui::Shape::rect_filled(
                 egui::Rect::from_min_size(inner_rect.left_top(), vec2(ui.available_width(), H)),
                 SHARP,
@@ -108,6 +100,5 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, mut pl: &mut Option<AudioPlaye
             ui.painter().set(bg, bgr);
             ui.painter()
                 .line_segment([rect.left_bottom(), rect.right_bottom()], border())
-            // ui.label(format!("{:?}", st.elapsed_time));
         });
 }
