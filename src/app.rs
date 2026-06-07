@@ -38,11 +38,9 @@ impl PolarityApp {
         // Clear old player
         self.player.take();
 
-        self.player = if let Ok(p) = AudioPlayer::new(path) {
-            Some(p.with_paused(paused))
-        } else {
-            None
-        };
+        self.player = AudioPlayer::new(path, paused)
+            .inspect_err(|err| println!("{}", err))
+            .ok();
     }
 
     pub fn handle_playback(&mut self, ctx: &egui::Context) {
