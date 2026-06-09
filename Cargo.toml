@@ -11,6 +11,7 @@ egui = "0.34"
 env_logger = "0.11"
 wgpu = { version = "*", features = ["dx12", "metal"] }
 biquad = "0.6.0"
+bytemuck = "1.25.0"
 
 [profile.dev]
 opt-level = 1

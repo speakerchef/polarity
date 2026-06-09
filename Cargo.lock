@@ -2813,6 +2813,7 @@ name = "polarity"
 version = "0.1.0"
 dependencies = [
  "biquad",
+ "bytemuck",
  "eframe",
  "egui",
  "egui-file-dialog",

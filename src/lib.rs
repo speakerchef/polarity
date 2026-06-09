@@ -8,12 +8,23 @@ mod ui;
 
 pub use app::PolarityApp;
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct LinearRgba {
     pub r: f32,
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+
+impl From<Rgba> for LinearRgba {
+    fn from(value: Rgba) -> Self {
+        LinearRgba {
+            r: value.r / u8::MAX as f32,
+            g: value.g / u8::MAX as f32,
+            b: value.b / u8::MAX as f32,
+            a: value.a / u8::MAX as f32,
+        }
+    }
 }
 
 impl LinearRgba {
@@ -40,7 +51,7 @@ impl LinearRgba {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct Rgba {
     pub r: f32,
     pub g: f32,

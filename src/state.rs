@@ -28,12 +28,12 @@ labeled_enum!(StereometerKind {
     ScaledBipolar  => "Scaled Bipolar",
     LinearLissajous => "Linear Lissajous",
     ScaledLissajous => "Scaled Lissajous",
-}, ScaledLissajous);
+}, LinearLissajous);
 
 labeled_enum!(RenderMode {
     FullSpectrum => "Full Spectrum",
     MultiBand    => "Multi-Band",
-}, MultiBand);
+}, FullSpectrum);
 
 labeled_enum!(FilterMode {
     Off => "Off",
@@ -126,6 +126,7 @@ pub struct AppState {
     pub file_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
     pub stereo: Stereometer,
+    pub pos: [f32; 2],
 
     pub import_open: bool,
 
@@ -181,6 +182,7 @@ impl Default for AppState {
                 point_size: 1.5,
                 ..Default::default()
             },
+            pos: [0.0; 2],
 
             import_open: false,
 
