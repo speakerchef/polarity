@@ -1,10 +1,13 @@
-use crate::{Rgba, audio::StereoFilter, state::*};
+use crate::{LinearRgba, Rgba, audio::StereoFilter, state::*};
+use eframe::egui_wgpu;
 use egui::{Color32, Mesh, Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::VecDeque;
 
 use crate::{audio::audio_player::AudioPlayer, state::TraceDensity};
 
 pub const MAX_LIVE_POINT_DENSITY: usize = 16384;
+pub const MAX_TRACE_POINT_DENSITY: usize = 32768;
+pub const VERTICES_PER_QUAD: usize = 6;
 const SQRT_3: f32 = 1.7320508;
 const LINEAR_BIPOLAR_SF: f32 = 0.5;
 
@@ -41,6 +44,85 @@ pub struct Stereometer {
     pub scale_factor: f32,
     pub point_size: f32,
 }
+
+pub struct StereometerRenderResources {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind_group: wgpu::BindGroup,
+    pub vertex_buffer: wgpu::Buffer,
+    pub params_buffer: wgpu::Buffer,
+    pub alpha_buffer: wgpu::Buffer,
+}
+impl StereometerRenderResources {
+    fn prepare(
+        &self,
+        _device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pos: Vec<Pos2>,
+        color: LinearRgba,
+        live_len: u32,
+        trace_len: u32,
+    ) {
+        let alphas: Vec<f32> = (0..trace_len)
+            .map(|i| i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32)
+            .collect();
+
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[live_len]));
+        queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[trace_len]));
+        queue.write_buffer(
+            &self.params_buffer,
+            32,
+            bytemuck::cast_slice(&[color.r, color.g, color.b, color.a]),
+        );
+        queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&pos));
+    }
+
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[0]);
+        render_pass.draw(0..num_points, 0..1);
+    }
+}
+pub struct CustomStereometerCallback {
+    pub live_pos: Vec<Pos2>,
+    pub trace_pos: Vec<Pos2>,
+    pub color: LinearRgba,
+}
+impl egui_wgpu::CallbackTrait for CustomStereometerCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _egui_encoder: &mut wgpu::CommandEncoder,
+        resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        let resources: &StereometerRenderResources = resources.get().unwrap();
+        let mut pos = self.live_pos.clone();
+        pos.extend(&self.trace_pos);
+        resources.prepare(
+            device,
+            queue,
+            pos,
+            self.color,
+            self.live_pos.len() as u32,
+            self.trace_pos.len() as u32,
+        );
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        render_pass: &mut wgpu::RenderPass<'static>,
+        resources: &egui_wgpu::CallbackResources,
+    ) {
+        let resources: &StereometerRenderResources = resources.get().unwrap();
+        let n = (self.live_pos.len() + self.trace_pos.len()) as u32;
+        resources.paint(render_pass, n);
+    }
+}
+
 enum FilterBand {
     Low,
     Mid,
@@ -290,16 +372,19 @@ impl Stereometer {
     }
 
     fn limit_trace_buffers(&mut self) {
-        while self.trace_buffer.len() > self.trace_density.count() {
+        // trace buffers hold VERTICES_PER_QUAD vertices per sample, so the
+        // sample-count density must be scaled to vertices.
+        let cap = self.trace_density.count() * VERTICES_PER_QUAD;
+        while self.trace_buffer.len() > cap {
             self.trace_buffer.pop_front();
         }
-        while self.trace_low_buffer.len() > self.trace_density.count() {
+        while self.trace_low_buffer.len() > cap {
             self.trace_low_buffer.pop_front();
         }
-        while self.trace_mid_buffer.len() > self.trace_density.count() {
+        while self.trace_mid_buffer.len() > cap {
             self.trace_mid_buffer.pop_front();
         }
-        while self.trace_high_buffer.len() > self.trace_density.count() {
+        while self.trace_high_buffer.len() > cap {
             self.trace_high_buffer.pop_front();
         }
     }
@@ -311,10 +396,8 @@ impl Stereometer {
         self.live_high_buffer.clear();
     }
 
-    pub fn draw(&mut self, p: &AudioPlayer, size: Vec2) -> Vec<Pos2> {
+    pub fn draw(&mut self, p: &AudioPlayer, size: Vec2) -> (Vec<Pos2>, Vec<Pos2>) {
         let num_channels = p.contents.num_channels as usize;
-        // let mut live_mesh = Mesh::default();
-        let mut trace_mesh = Mesh::default();
 
         let sample_pos = p.position().as_secs_f64();
         let sample_idx = (sample_pos * p.contents.sample_rate as f64) as usize;
@@ -336,7 +419,6 @@ impl Stereometer {
             self.set_positions(is_live, *l, *r);
         });
         self.limit_trace_buffers();
-        self.set_mesh(&mut trace_mesh, is_live);
         self.last_sample_idx = sample_idx;
 
         is_live = true;
@@ -352,6 +434,6 @@ impl Stereometer {
             let r = s.last().unwrap_or(l);
             self.set_positions(is_live, *l, *r);
         });
-        self.live_buffer.clone()
+        (self.live_buffer.clone(), self.trace_buffer.clone().into())
     }
 }
