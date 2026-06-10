@@ -1,27 +1,33 @@
 #![allow(dead_code, unused)]
 use eframe::egui_wgpu;
-use egui::pos2;
+use egui::{Color32, pos2, vec2};
 
 use crate::generators::stereometer::CustomStereometerCallback;
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::palette;
 
-fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &AudioPlayer) {
-    let mut canvas = ui.available_size();
-    let min = canvas.x.min(canvas.y);
-    let center = pos2(ui.available_width() / 2.0, ui.available_height() / 2.0);
-    canvas.x = canvas.x.clamp(0.0, 0.9 * min);
-    canvas.y = canvas.y.clamp(0.0, 0.9 * min);
+fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
+    let (h, w) = (ui.available_height(), ui.available_width());
+    let l = h.min(w);
+    let canvas = vec2(l, l);
+
+    let center = ui.max_rect().center();
+    let top_left = pos2(center.x - l / 2.0, center.y - l / 2.0);
     let rect = ui
         .allocate_rect(
-            egui::Rect::from_min_size(
-                pos2(center.x - canvas.x / 2.2, center.y - canvas.y / 2.2),
-                canvas,
-            ),
+            egui::Rect::from_min_size(top_left, canvas),
             egui::Sense::click(),
         )
         .rect;
+    ui.painter().rect_filled(
+        rect,
+        egui::CornerRadius::ZERO,
+        Color32::from_rgba_unmultiplied(6, 10, 10, 255),
+    );
+    let Some(pl) = pl else {
+        return;
+    };
 
     let (live_pos, trace_pos) = st.stereo.draw(pl, canvas);
 
@@ -37,11 +43,13 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &AudioPlayer) {
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     egui::CentralPanel::default()
-        .frame(egui::Frame::new().fill(palette::VOID))
+        .frame(
+            egui::Frame::new()
+                .fill(palette::VOID)
+                .inner_margin(0.0)
+                .outer_margin(0.0),
+        )
         .show_inside(ui, |ui| {
-            let Some(p) = pl else {
-                return;
-            };
-            custom_painting(ui, st, p);
+            custom_painting(ui, st, pl);
         });
 }
