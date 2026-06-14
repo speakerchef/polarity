@@ -1,16 +1,13 @@
 use biquad::*;
-use eframe::egui_wgpu::wgpu;
+use eframe::egui_wgpu::{self, wgpu};
 use std::{num::NonZeroU64, path::PathBuf, time::Duration};
-use wgpu::{
-    rwh::{HasDisplayHandle, HasWindowHandle},
-    util::{DeviceExt, TextureFormatExt},
-};
+use wgpu::{Device, util::DeviceExt};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
     generators::stereometer::{
-        BloomRenderResources, FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY,
-        StereometerRenderResources, VERTICES_PER_QUAD,
+        BlitRenderResources, BloomRenderResources, FilterMode, MAX_LIVE_POINT_DENSITY,
+        MAX_TRACE_POINT_DENSITY, StereometerRenderResources, VERTICES_PER_QUAD,
     },
     state::PlaybackMode,
     ui::{canvas, control_panel, timeline},
@@ -25,57 +22,52 @@ pub struct PolarityApp {
     player: Option<AudioPlayer>,
 }
 
-fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
-    let wgpu_render_state = cc
-        .wgpu_render_state
-        .as_ref()
-        .expect("not using wgpu backend");
-    let device = &wgpu_render_state.device;
-
+fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("stereometer"),
         source: wgpu::ShaderSource::Wgsl(include_str!("./stereometer_shader.wgsl").into()),
     });
 
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("stereometer"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
+    let stereometer_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("stereometer"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(16),
+                    },
+                    count: None,
                 },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: NonZeroU64::new(48),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: NonZeroU64::new(48),
+                    },
+                    count: None,
                 },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(16),
+                    },
+                    count: None,
                 },
-                count: None,
-            },
-        ],
-    });
+            ],
+        });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("stereometer"),
-        bind_group_layouts: &[Some(&bind_group_layout)],
+        bind_group_layouts: &[Some(&stereometer_bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -123,9 +115,9 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
 
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let stereometer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("stereometer"),
-        layout: &bind_group_layout,
+        layout: &stereometer_bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -149,53 +141,134 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         .insert(StereometerRenderResources {
             target_format: wgpu_render_state.target_format,
             pipeline,
-            bind_group,
+            bind_group: stereometer_bind_group,
             vertex_buffer,
             params_buffer,
             alpha_buffer,
             tex: None,
         });
+}
+fn init_blit_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("blit"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("./blit_shader.wgsl").into()),
+    });
 
+    let blit_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("blit"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("blit"),
+        bind_group_layouts: &[Some(&blit_bind_group_layout)],
+        immediate_size: 0,
+    });
+
+    let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("blit"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: None,
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let blit_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("blit sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    });
+
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(BlitRenderResources {
+            pipeline: blit_pipeline,
+            bind_group_layout: blit_bind_group_layout,
+            sampler: blit_sampler,
+        });
+}
+fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("bloom"),
         source: wgpu::ShaderSource::Wgsl(include_str!("./bloom_shader.wgsl").into()),
     });
 
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("bloom"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
+    let bloom_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bloom"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
                 },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
                 },
-                count: None,
-            },
-        ],
-    });
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(16),
+                    },
+                    count: None,
+                },
+            ],
+        });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("bloom"),
-        bind_group_layouts: &[Some(&bind_group_layout)],
+        bind_group_layouts: &[Some(&bloom_bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -225,7 +298,13 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         cache: None,
     });
 
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+    let bloom_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("bloom sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    });
     let top_left = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("top_left"),
         contents: bytemuck::cast_slice(&[0u32; 4]), // 16 bytes aligned
@@ -238,11 +317,23 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         .callback_resources
         .insert(BloomRenderResources {
             pipeline,
-            bind_group_layout,
-            sampler,
+            bind_group_layout: bloom_bind_group_layout,
+            sampler: bloom_sampler,
             bind_group: None,
             top_left,
         });
+}
+
+fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
+    let wgpu_render_state = cc
+        .wgpu_render_state
+        .as_ref()
+        .expect("not using wgpu backend");
+    let device = &wgpu_render_state.device;
+
+    init_stereometer_render_resources(device, wgpu_render_state);
+    init_blit_render_resources(device, wgpu_render_state);
+    init_bloom_render_resources(device, wgpu_render_state);
 }
 
 impl PolarityApp {

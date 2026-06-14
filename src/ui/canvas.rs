@@ -10,13 +10,13 @@ use crate::ui::palette;
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
     let l = h.min(w);
-    let canvas = vec2(l, l);
+    let canvas_size = vec2(l, l);
 
     let center = ui.max_rect().center();
     let top_left = pos2(center.x - l / 2.0, center.y - l / 2.0);
     let rect = ui
         .allocate_rect(
-            egui::Rect::from_min_size(top_left, canvas),
+            egui::Rect::from_min_size(top_left, canvas_size),
             egui::Sense::click(),
         )
         .rect;
@@ -29,15 +29,15 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         return;
     };
 
-    let (live_pos, trace_pos) = st.stereo.draw(pl, canvas);
+    st.stereo.draw(pl);
 
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         RendererCallback {
-            live_pos,
-            trace_pos,
+            live_pos: std::mem::take(&mut st.stereo.live_buffer),
+            trace_pos: std::mem::take(&mut st.stereo.trace_buffer).into(),
             color: st.stereo.fs_color.into(),
-            canvas_size: canvas,
+            canvas_size,
         },
     ));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(

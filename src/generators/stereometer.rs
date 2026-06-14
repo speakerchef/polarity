@@ -1,11 +1,22 @@
 use crate::{LinearRgba, Rgba, audio::StereoFilter, labeled_enum, state::Labeled};
 use eframe::egui_wgpu;
 use egui::{Color32, Mesh, Pos2, Rect, Vec2, pos2, vec2};
-use rodio::queue;
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
 
+// const CANVAS_BG: wgpu::Color = wgpu::Color {
+//     r: 0.000262,
+//     g: 0.000805,
+//     b: 0.000805,
+//     a: 1.0,
+// };
+const CANVAS_BG: wgpu::Color = wgpu::Color {
+    r: 6. / 255.,
+    g: 10. / 255.,
+    b: 10. / 255.,
+    a: 1.0,
+};
 labeled_enum!(StereometerKind {
     LinearBipolar  => "Linear Bipolar",
     ScaledBipolar  => "Scaled Bipolar",
@@ -179,6 +190,7 @@ pub struct RendererCallback {
     // Stereometer fields
     pub live_pos: Vec<Pos2>,
     pub trace_pos: Vec<Pos2>,
+
     pub color: LinearRgba,
     pub canvas_size: Vec2,
 }
@@ -214,36 +226,49 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             .map(|t| t.width() != w || t.height() != h)
             .unwrap_or(true);
         if resized {
-            let tex_desc = wgpu::TextureDescriptor {
-                label: Some("stereometer texture"),
+            // mip mapping
+            // Here we compute the number of mip levels using the smaller of width and height
+            let mip_level_count = w.min(h).ilog2() + 1;
+
+            // Now we create the texture
+            let diffuse_blit_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("blit texture"),
                 size: wgpu::Extent3d {
                     width: w,
                     height: h,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
+                mip_level_count, // This is the important bit
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: meter_res.target_format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
-            };
-            meter_res.tex = Some(device.create_texture(&tex_desc));
+            });
+            meter_res.tex = Some(diffuse_blit_texture);
         }
+        let src_view = meter_res
+            .tex
+            .as_ref()
+            .unwrap()
+            .create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                ..Default::default()
+            });
 
         let mut stereometer_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("stereometer pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &meter_res
-                    .tex
-                    .as_ref()
-                    .unwrap()
-                    .create_view(&wgpu::TextureViewDescriptor::default()),
+                view: &src_view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(CANVAS_BG),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -267,6 +292,11 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
     }
 }
 
+pub struct BlitRenderResources {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub sampler: wgpu::Sampler,
+}
 pub struct BloomRenderResources {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -295,24 +325,33 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         screen_descriptor: &egui_wgpu::ScreenDescriptor,
-        _command_encoder: &mut wgpu::CommandEncoder,
+        command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         let meter_res: &StereometerRenderResources = resources.get().unwrap();
+        let blit_res: &BlitRenderResources = resources.get().unwrap();
         let bloom_res: &BloomRenderResources = resources.get().unwrap();
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+
+        let tex = meter_res.tex.as_ref().unwrap();
+        let full_mip_view = tex.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            base_mip_level: 0,
+            mip_level_count: None,
+            ..Default::default()
+        });
+        let mut src_view = tex.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            base_mip_level: 0,
+            mip_level_count: Some(1),
+            ..Default::default()
+        });
+        let bloom_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bloom"),
             layout: &bloom_res.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(
-                        &meter_res
-                            .tex
-                            .as_ref()
-                            .unwrap()
-                            .create_view(&wgpu::TextureViewDescriptor::default()),
-                    ),
+                    resource: wgpu::BindingResource::TextureView(&full_mip_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -324,8 +363,56 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
                 },
             ],
         });
+
+        for mip in 1..tex.mip_level_count() {
+            let dst_view = tex.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(meter_res.target_format),
+                base_mip_level: mip,
+                mip_level_count: Some(1),
+                ..Default::default()
+            });
+
+            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &blit_res.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&src_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&blit_res.sampler),
+                    },
+                ],
+            });
+
+            let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &dst_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&blit_res.pipeline);
+            pass.set_bind_group(0, &texture_bind_group, &[]);
+            pass.draw(0..6, 0..1);
+
+            // make sure that current mip is src in next iteration.
+            src_view = dst_view;
+        }
+
         let bloom_res = resources.get_mut::<BloomRenderResources>().unwrap();
-        bloom_res.bind_group = Some(bind_group);
+        bloom_res.bind_group = Some(bloom_bind_group);
         bloom_res.prepare(
             device,
             queue,
@@ -399,7 +486,6 @@ impl Stereometer {
                     FilterBand::High => live.2.run(l, r),
                 }
             } else {
-                println!("NO FILTER");
                 (l, r)
             }
         } else {
@@ -410,7 +496,6 @@ impl Stereometer {
                     FilterBand::High => trace.2.run(l, r),
                 }
             } else {
-                println!("NO FILTER");
                 (l, r)
             }
         }
@@ -459,144 +544,23 @@ impl Stereometer {
                 let (lowl, lowr) = self.get_coord_from_meterkind(lowl, lowr);
                 let (midl, midr) = self.get_coord_from_meterkind(midl, midr);
                 let (highl, highr) = self.get_coord_from_meterkind(highl, highr);
-                let (lowl, lowr) = (lowl * self.scale_factor, lowr * self.scale_factor);
-                let (midl, midr) = (midl * self.scale_factor, midr * self.scale_factor);
-                let (highl, highr) = (highl * self.scale_factor, highr * self.scale_factor);
-                // let posl = pos2(center.x + lowl, center.y + lowr.neg());
-                // let posm = pos2(center.x + midl, center.y + midr.neg());
-                // let posh = pos2(center.x + highl, center.y + highr.neg());
-                // if is_live {
-                //     self.live_low_buffer.push(posl);
-                //     self.live_mid_buffer.push(posm);
-                //     self.live_high_buffer.push(posh);
-                // } else {
-                //     self.trace_low_buffer.push_back(posl);
-                //     self.trace_mid_buffer.push_back(posm);
-                //     self.trace_high_buffer.push_back(posh);
-                // }
-            }
-        }
-    }
-
-    fn set_mesh(&mut self, mesh: &mut Mesh, is_live: bool) {
-        match self.render_mode {
-            RenderMode::FullSpectrum => {
+                let posl = self.points_to_quad_vertices(lowl, lowr);
+                let posm = self.points_to_quad_vertices(midl, midr);
+                let posh = self.points_to_quad_vertices(highl, highr);
                 if is_live {
-                    self.live_buffer.iter().for_each(|&pos| {
-                        mesh.add_colored_rect(
-                            Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                            Color32::from_rgb(
-                                self.fs_color.r as u8,
-                                self.fs_color.g as u8,
-                                self.fs_color.b as u8,
-                            ),
-                        );
-                    });
+                    self.live_low_buffer.extend(posl);
+                    self.live_mid_buffer.extend(posm);
+                    self.live_high_buffer.extend(posh);
                 } else {
-                    self.trace_buffer.iter().enumerate().for_each(|(i, &pos)| {
-                        let alpha =
-                            ((i as f32 / TraceDensity::Max.count() as f32) * u8::MAX as f32) as u8;
-                        mesh.add_colored_rect(
-                            Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                            Color32::from_rgba_unmultiplied(
-                                self.fs_color.r as u8,
-                                self.fs_color.g as u8,
-                                self.fs_color.b as u8,
-                                alpha,
-                            ),
-                        );
-                    });
-                }
-            }
-            RenderMode::MultiBand => {
-                if is_live {
-                    self.live_low_buffer.iter().for_each(|&pos| {
-                        mesh.add_colored_rect(
-                            Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                            Color32::from_rgb(
-                                self.mb_color[0].r as u8,
-                                self.mb_color[0].g as u8,
-                                self.mb_color[0].b as u8,
-                            ),
-                        );
-                    });
-                    self.live_mid_buffer.iter().for_each(|&pos| {
-                        mesh.add_colored_rect(
-                            Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                            Color32::from_rgb(
-                                self.mb_color[1].r as u8,
-                                self.mb_color[1].g as u8,
-                                self.mb_color[1].b as u8,
-                            ),
-                        );
-                    });
-                    self.live_high_buffer.iter().for_each(|&pos| {
-                        mesh.add_colored_rect(
-                            Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                            Color32::from_rgb(
-                                self.mb_color[2].r as u8,
-                                self.mb_color[2].g as u8,
-                                self.mb_color[2].b as u8,
-                            ),
-                        );
-                    });
-                } else {
-                    self.trace_low_buffer
-                        .iter()
-                        .enumerate()
-                        .for_each(|(i, &pos)| {
-                            let alpha = ((i as f32 / TraceDensity::Max.count() as f32)
-                                * u8::MAX as f32) as u8;
-                            mesh.add_colored_rect(
-                                Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                                Color32::from_rgba_unmultiplied(
-                                    self.mb_color[0].r as u8,
-                                    self.mb_color[0].g as u8,
-                                    self.mb_color[0].b as u8,
-                                    alpha,
-                                ),
-                            );
-                        });
-                    self.trace_mid_buffer
-                        .iter()
-                        .enumerate()
-                        .for_each(|(i, &pos)| {
-                            let alpha = ((i as f32 / TraceDensity::Max.count() as f32)
-                                * u8::MAX as f32) as u8;
-                            mesh.add_colored_rect(
-                                Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                                Color32::from_rgba_unmultiplied(
-                                    self.mb_color[1].r as u8,
-                                    self.mb_color[1].g as u8,
-                                    self.mb_color[1].b as u8,
-                                    alpha,
-                                ),
-                            );
-                        });
-                    self.trace_high_buffer
-                        .iter()
-                        .enumerate()
-                        .for_each(|(i, &pos)| {
-                            let alpha = ((i as f32 / TraceDensity::Max.count() as f32)
-                                * u8::MAX as f32) as u8;
-                            mesh.add_colored_rect(
-                                Rect::from_min_size(pos, vec2(self.point_size, self.point_size)),
-                                Color32::from_rgba_unmultiplied(
-                                    self.mb_color[2].r as u8,
-                                    self.mb_color[2].g as u8,
-                                    self.mb_color[2].b as u8,
-                                    alpha,
-                                ),
-                            );
-                        });
+                    self.trace_low_buffer.extend(posl);
+                    self.trace_mid_buffer.extend(posm);
+                    self.trace_high_buffer.extend(posh);
                 }
             }
         }
     }
 
     fn limit_trace_buffers(&mut self) {
-        // trace buffers hold VERTICES_PER_QUAD vertices per sample, so the
-        // sample-count density must be scaled to vertices.
         let cap = self.trace_density.count() * VERTICES_PER_QUAD;
         while self.trace_buffer.len() > cap {
             self.trace_buffer.pop_front();
@@ -619,7 +583,7 @@ impl Stereometer {
         self.live_high_buffer.clear();
     }
 
-    pub fn draw(&mut self, p: &AudioPlayer, size: Vec2) -> (Vec<Pos2>, Vec<Pos2>) {
+    pub fn draw(&mut self, p: &AudioPlayer) {
         let num_channels = p.contents.num_channels as usize;
 
         let sample_pos = p.position().as_secs_f64();
@@ -629,7 +593,21 @@ impl Stereometer {
             self.trace_buffer.clear();
         }
 
-        let mut is_live = false;
+        let mut is_live = true;
+        let live_window = p
+            .contents
+            .samples
+            .get(sample_idx * num_channels..sample_idx * num_channels + self.live_density.count())
+            .unwrap_or_default();
+
+        self.clear_live_buffers();
+        live_window.chunks_exact(2).for_each(|s| {
+            let l = s.first().unwrap();
+            let r = s.last().unwrap_or(l);
+            self.set_positions(is_live, *l, *r);
+        });
+
+        is_live = false;
         let trace_window = p
             .contents
             .samples
@@ -643,20 +621,5 @@ impl Stereometer {
         });
         self.limit_trace_buffers();
         self.last_sample_idx = sample_idx;
-
-        is_live = true;
-        let live_window = p
-            .contents
-            .samples
-            .get(sample_idx * num_channels..sample_idx * num_channels + self.live_density.count())
-            .unwrap_or_default();
-
-        self.clear_live_buffers();
-        live_window.chunks_exact(2).for_each(|s| {
-            let l = s.first().unwrap();
-            let r = s.last().unwrap_or(l);
-            self.set_positions(is_live, *l, *r);
-        });
-        (self.live_buffer.clone(), self.trace_buffer.clone().into())
     }
 }
