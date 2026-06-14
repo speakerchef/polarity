@@ -1,5 +1,6 @@
-use egui::Margin;
-
+use crate::generators::stereometer::{
+    FilterMode, LiveDensity, RenderMode, StereometerKind, TraceDensity,
+};
 use crate::state::*;
 use crate::ui::{control_panel_widgets::*, palette};
 

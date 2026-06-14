@@ -1,88 +1,10 @@
 #![allow(dead_code)]
-use crate::generators::stereometer::Stereometer;
 use std::path::Path;
 
 use egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog};
 
-use crate::Rgba;
-
-macro_rules! labeled_enum {
-    ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
-        #[derive(Clone, Copy, PartialEq, Eq)]
-        pub enum $name { $($variant),+ }
-        impl $name {
-            pub const ALL: &'static [$name] = &[$($name::$variant),+];
-            pub fn label(self) -> &'static str {
-                match self { $($name::$variant => $label),+ }
-            }
-        }
-        impl Default for $name {
-            fn default() -> Self { $name::$def }
-        }
-    };
-}
-
-labeled_enum!(StereometerKind {
-    LinearBipolar  => "Linear Bipolar",
-    ScaledBipolar  => "Scaled Bipolar",
-    LinearLissajous => "Linear Lissajous",
-    ScaledLissajous => "Scaled Lissajous",
-}, LinearLissajous);
-
-labeled_enum!(RenderMode {
-    FullSpectrum => "Full Spectrum",
-    MultiBand    => "Multi-Band",
-}, FullSpectrum);
-
-labeled_enum!(FilterMode {
-    Off => "Off",
-    Lpf => "Lpf",
-    Bpf => "Bpf",
-    Hpf => "Hpf",
-}, Off);
-
-labeled_enum!(LiveDensity {
-    Low => "Low",
-    Med => "Med",
-    High => "High",
-    Ultra => "Ultra",
-    Extreme => "Extreme",
-    PleaseDont => "Please Dont",
-}, High);
-
-labeled_enum!(TraceDensity {
-    Off => "Off",
-    Low => "Low",
-    Med => "Med",
-    High => "High",
-    Max => "Max",
-}, Med);
-
-impl LiveDensity {
-    pub fn count(self) -> usize {
-        match self {
-            Self::Low => 512,
-            Self::Med => 1536,
-            Self::High => 2048,
-            Self::Ultra => 4096,
-            Self::Extreme => 8192,
-            Self::PleaseDont => 16384,
-        }
-    }
-}
-
-impl TraceDensity {
-    pub fn count(self) -> usize {
-        match self {
-            Self::Off => 1,
-            Self::Low => 10420,
-            Self::Med => 15696,
-            Self::High => 24576,
-            Self::Max => 32768,
-        }
-    }
-}
+use crate::{Rgba, generators::stereometer::Stereometer};
 
 #[derive(Default)]
 pub enum PlaybackMode {
@@ -93,33 +15,6 @@ pub enum PlaybackMode {
 
 pub trait Labeled: Copy + PartialEq {
     fn text(self) -> &'static str;
-}
-impl Labeled for crate::state::RenderMode {
-    fn text(self) -> &'static str {
-        self.label()
-    }
-}
-impl Labeled for crate::state::FilterMode {
-    fn text(self) -> &'static str {
-        self.label()
-    }
-}
-impl Labeled for crate::state::StereometerKind {
-    fn text(self) -> &'static str {
-        self.label()
-    }
-}
-
-impl Labeled for crate::state::LiveDensity {
-    fn text(self) -> &'static str {
-        self.label()
-    }
-}
-
-impl Labeled for crate::state::TraceDensity {
-    fn text(self) -> &'static str {
-        self.label()
-    }
 }
 
 pub struct AppState {

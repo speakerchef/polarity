@@ -8,6 +8,22 @@ mod ui;
 
 pub use app::PolarityApp;
 
+#[macro_export]
+macro_rules! labeled_enum {
+    ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        pub enum $name { $($variant),+ }
+        impl $name {
+            pub const ALL: &'static [$name] = &[$($name::$variant),+];
+            pub fn label(self) -> &'static str {
+                match self { $($name::$variant => $label),+ }
+            }
+        }
+        impl Default for $name {
+            fn default() -> Self { $name::$def }
+        }
+    };
+}
 #[derive(Default, Clone, Copy)]
 pub struct LinearRgba {
     pub r: f32,

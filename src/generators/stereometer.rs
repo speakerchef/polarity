@@ -1,9 +1,99 @@
-use crate::{LinearRgba, Rgba, audio::StereoFilter, state::*};
+use crate::{LinearRgba, Rgba, audio::StereoFilter, labeled_enum, state::Labeled};
 use eframe::egui_wgpu;
 use egui::{Color32, Mesh, Pos2, Rect, Vec2, pos2, vec2};
+use rodio::queue;
 use std::collections::VecDeque;
 
-use crate::{audio::audio_player::AudioPlayer, state::TraceDensity};
+use crate::audio::audio_player::AudioPlayer;
+
+labeled_enum!(StereometerKind {
+    LinearBipolar  => "Linear Bipolar",
+    ScaledBipolar  => "Scaled Bipolar",
+    LinearLissajous => "Linear Lissajous",
+    ScaledLissajous => "Scaled Lissajous",
+}, LinearLissajous);
+
+labeled_enum!(RenderMode {
+    FullSpectrum => "Full Spectrum",
+    MultiBand    => "Multi-Band",
+}, FullSpectrum);
+
+labeled_enum!(FilterMode {
+    Off => "Off",
+    Lpf => "Lpf",
+    Bpf => "Bpf",
+    Hpf => "Hpf",
+}, Off);
+
+labeled_enum!(LiveDensity {
+    Low => "Low",
+    Med => "Med",
+    High => "High",
+    Ultra => "Ultra",
+    Extreme => "Extreme",
+    PleaseDont => "Please Dont",
+}, High);
+
+labeled_enum!(TraceDensity {
+    Off => "Off",
+    Low => "Low",
+    Med => "Med",
+    High => "High",
+    Max => "Max",
+}, Med);
+
+impl LiveDensity {
+    pub fn count(self) -> usize {
+        match self {
+            Self::Low => 512,
+            Self::Med => 1536,
+            Self::High => 2048,
+            Self::Ultra => 4096,
+            Self::Extreme => 8192,
+            Self::PleaseDont => 16384,
+        }
+    }
+}
+
+impl TraceDensity {
+    pub fn count(self) -> usize {
+        match self {
+            Self::Off => 1,
+            Self::Low => 10420,
+            Self::Med => 15696,
+            Self::High => 24576,
+            Self::Max => 32768,
+        }
+    }
+}
+
+impl Labeled for RenderMode {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+impl Labeled for FilterMode {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+impl Labeled for StereometerKind {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+impl Labeled for LiveDensity {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+impl Labeled for TraceDensity {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
 
 pub const MAX_LIVE_POINT_DENSITY: usize = 16384;
 pub const MAX_TRACE_POINT_DENSITY: usize = 32768;
@@ -46,11 +136,13 @@ pub struct Stereometer {
 }
 
 pub struct StereometerRenderResources {
+    pub target_format: wgpu::TextureFormat,
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
     pub alpha_buffer: wgpu::Buffer,
+    pub tex: Option<wgpu::Texture>,
 }
 impl StereometerRenderResources {
     fn prepare(
@@ -83,24 +175,26 @@ impl StereometerRenderResources {
         render_pass.draw(0..num_points, 0..1);
     }
 }
-pub struct CustomStereometerCallback {
+pub struct RendererCallback {
+    // Stereometer fields
     pub live_pos: Vec<Pos2>,
     pub trace_pos: Vec<Pos2>,
     pub color: LinearRgba,
+    pub canvas_size: Vec2,
 }
-impl egui_wgpu::CallbackTrait for CustomStereometerCallback {
+impl egui_wgpu::CallbackTrait for RendererCallback {
     fn prepare(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
-        _egui_encoder: &mut wgpu::CommandEncoder,
+        screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        let resources: &StereometerRenderResources = resources.get().unwrap();
+        let meter_res: &mut StereometerRenderResources = resources.get_mut().unwrap();
         let mut pos = self.live_pos.clone();
         pos.extend(&self.trace_pos);
-        resources.prepare(
+        meter_res.prepare(
             device,
             queue,
             pos,
@@ -108,6 +202,136 @@ impl egui_wgpu::CallbackTrait for CustomStereometerCallback {
             self.live_pos.len() as u32,
             self.trace_pos.len() as u32,
         );
+
+        let ppp = screen_descriptor.pixels_per_point;
+        let (w, h) = (
+            (self.canvas_size.x * ppp) as u32,
+            (self.canvas_size.y * ppp) as u32,
+        );
+        let resized = meter_res
+            .tex
+            .as_ref()
+            .map(|t| t.width() != w || t.height() != h)
+            .unwrap_or(true);
+        if resized {
+            let tex_desc = wgpu::TextureDescriptor {
+                label: Some("stereometer texture"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: meter_res.target_format,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            };
+            meter_res.tex = Some(device.create_texture(&tex_desc));
+        }
+
+        let mut stereometer_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("stereometer pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &meter_res
+                    .tex
+                    .as_ref()
+                    .unwrap()
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        let n = (self.live_pos.len() + self.trace_pos.len()) as u32;
+        meter_res.paint(&mut stereometer_pass, n);
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        _render_pass: &mut wgpu::RenderPass<'static>,
+        _resources: &egui_wgpu::CallbackResources,
+    ) {
+    }
+}
+
+pub struct BloomRenderResources {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub sampler: wgpu::Sampler,
+    pub bind_group: Option<wgpu::BindGroup>,
+    pub top_left: wgpu::Buffer,
+}
+impl BloomRenderResources {
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, top_left: Pos2) {
+        queue.write_buffer(&self.top_left, 0, bytemuck::cast_slice(&[top_left]));
+    }
+
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.draw(0..6, 0..1);
+    }
+}
+
+pub struct EffectsCallback {
+    pub top_left: Pos2,
+}
+impl egui_wgpu::CallbackTrait for EffectsCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _command_encoder: &mut wgpu::CommandEncoder,
+        resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        let meter_res: &StereometerRenderResources = resources.get().unwrap();
+        let bloom_res: &BloomRenderResources = resources.get().unwrap();
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bloom"),
+            layout: &bloom_res.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &meter_res
+                            .tex
+                            .as_ref()
+                            .unwrap()
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&bloom_res.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: bloom_res.top_left.as_entire_binding(),
+                },
+            ],
+        });
+        let bloom_res = resources.get_mut::<BloomRenderResources>().unwrap();
+        bloom_res.bind_group = Some(bind_group);
+        bloom_res.prepare(
+            device,
+            queue,
+            self.top_left * screen_descriptor.pixels_per_point,
+        );
+
         Vec::new()
     }
 
@@ -117,9 +341,8 @@ impl egui_wgpu::CallbackTrait for CustomStereometerCallback {
         render_pass: &mut wgpu::RenderPass<'static>,
         resources: &egui_wgpu::CallbackResources,
     ) {
-        let resources: &StereometerRenderResources = resources.get().unwrap();
-        let n = (self.live_pos.len() + self.trace_pos.len()) as u32;
-        resources.paint(render_pass, n);
+        let resources: &BloomRenderResources = resources.get().unwrap();
+        resources.paint(render_pass);
     }
 }
 

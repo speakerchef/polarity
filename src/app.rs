@@ -1,15 +1,18 @@
 use biquad::*;
 use eframe::egui_wgpu::wgpu;
 use std::{num::NonZeroU64, path::PathBuf, time::Duration};
-use wgpu::util::DeviceExt;
+use wgpu::{
+    rwh::{HasDisplayHandle, HasWindowHandle},
+    util::{DeviceExt, TextureFormatExt},
+};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
     generators::stereometer::{
-        MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, StereometerRenderResources,
-        VERTICES_PER_QUAD,
+        BloomRenderResources, FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY,
+        StereometerRenderResources, VERTICES_PER_QUAD,
     },
-    state::{FilterMode, PlaybackMode},
+    state::PlaybackMode,
     ui::{canvas, control_panel, timeline},
 };
 use egui::{CornerRadius, Key, Stroke, StrokeKind, emath::GuiRounding};
@@ -27,7 +30,6 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         .wgpu_render_state
         .as_ref()
         .expect("not using wgpu backend");
-
     let device = &wgpu_render_state.device;
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -145,11 +147,101 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
         .write()
         .callback_resources
         .insert(StereometerRenderResources {
+            target_format: wgpu_render_state.target_format,
             pipeline,
             bind_group,
             vertex_buffer,
             params_buffer,
             alpha_buffer,
+            tex: None,
+        });
+
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("bloom"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("./bloom_shader.wgsl").into()),
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("bloom"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("bloom"),
+        bind_group_layouts: &[Some(&bind_group_layout)],
+        immediate_size: 0,
+    });
+
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("bloom"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: None,
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+    let top_left = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("top_left"),
+        contents: bytemuck::cast_slice(&[0u32; 4]), // 16 bytes aligned
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+    });
+
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(BloomRenderResources {
+            pipeline,
+            bind_group_layout,
+            sampler,
+            bind_group: None,
+            top_left,
         });
 }
 

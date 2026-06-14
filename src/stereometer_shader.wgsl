@@ -21,7 +21,8 @@ const NUM_VERTICES: u32 = 6;
 @vertex
 fn vs_main(@builtin(vertex_index) v_idx: u32) -> Vertex {
     var vertex: Vertex;
-    vertex.position = vec4f(sample_positions[v_idx], 0.0, 1.0);
+    let pos = sample_positions[v_idx];
+    vertex.position = vec4f(pos, 0.0, 1.0);
     vertex.color = params.color;
 
     // Use decaying alpha values when rendering trace buffer only

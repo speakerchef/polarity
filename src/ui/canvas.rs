@@ -2,7 +2,7 @@
 use eframe::egui_wgpu;
 use egui::{Color32, pos2, vec2};
 
-use crate::generators::stereometer::CustomStereometerCallback;
+use crate::generators::stereometer::{EffectsCallback, RendererCallback};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::palette;
@@ -33,10 +33,17 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
 
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
-        CustomStereometerCallback {
+        RendererCallback {
             live_pos,
             trace_pos,
             color: st.stereo.fs_color.into(),
+            canvas_size: canvas,
+        },
+    ));
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        EffectsCallback {
+            top_left: rect.left_top(),
         },
     ));
 }
