@@ -1,33 +1,28 @@
 use crate::{LinearRgba, Rgba, audio::StereoFilter, labeled_enum, state::Labeled};
 use eframe::egui_wgpu;
-use egui::{Color32, Mesh, Pos2, Rect, Vec2, pos2, vec2};
+use egui::{Pos2, Vec2, pos2};
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
 
 // const CANVAS_BG: wgpu::Color = wgpu::Color {
-//     r: 0.000262,
-//     g: 0.000805,
-//     b: 0.000805,
+//     r: 6. / 255.,
+//     g: 10. / 255.,
+//     b: 10. / 255.,
 //     a: 1.0,
 // };
-const CANVAS_BG: wgpu::Color = wgpu::Color {
-    r: 6. / 255.,
-    g: 10. / 255.,
-    b: 10. / 255.,
-    a: 1.0,
-};
+const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
 labeled_enum!(StereometerKind {
     LinearBipolar  => "Linear Bipolar",
     ScaledBipolar  => "Scaled Bipolar",
     LinearLissajous => "Linear Lissajous",
     ScaledLissajous => "Scaled Lissajous",
-}, LinearLissajous);
+}, ScaledLissajous);
 
 labeled_enum!(RenderMode {
     FullSpectrum => "Full Spectrum",
     MultiBand    => "Multi-Band",
-}, FullSpectrum);
+}, MultiBand);
 
 labeled_enum!(FilterMode {
     Off => "Off",
@@ -43,7 +38,7 @@ labeled_enum!(LiveDensity {
     Ultra => "Ultra",
     Extreme => "Extreme",
     PleaseDont => "Please Dont",
-}, High);
+}, Ultra);
 
 labeled_enum!(TraceDensity {
     Off => "Off",
@@ -142,7 +137,6 @@ pub struct Stereometer {
     pub trace_mid_buffer: VecDeque<Pos2>,
     pub trace_high_buffer: VecDeque<Pos2>,
 
-    pub scale_factor: f32,
     pub point_size: f32,
 }
 
@@ -155,27 +149,71 @@ pub struct StereometerRenderResources {
     pub alpha_buffer: wgpu::Buffer,
     pub tex: Option<wgpu::Texture>,
 }
+#[allow(clippy::too_many_arguments)]
 impl StereometerRenderResources {
     fn prepare(
         &self,
         _device: &wgpu::Device,
         queue: &wgpu::Queue,
         pos: Vec<Pos2>,
-        color: LinearRgba,
+        fs_color: LinearRgba,
+        lb_color: LinearRgba,
+        mb_color: LinearRgba,
+        hb_color: LinearRgba,
+        is_mb: bool,
         live_len: u32,
         trace_len: u32,
+        live_mb_len: u32,
+        trace_mb_len: u32,
     ) {
-        let alphas: Vec<f32> = (0..trace_len)
-            .map(|i| i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32)
-            .collect();
+        let alphas: Vec<f32> = if is_mb {
+            (0..trace_mb_len)
+                .map(|i| {
+                    (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
+                })
+                .collect()
+        } else {
+            (0..trace_len)
+                .map(|i| {
+                    (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
+                })
+                .collect()
+        };
 
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[live_len]));
         queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[trace_len]));
         queue.write_buffer(
             &self.params_buffer,
             32,
-            bytemuck::cast_slice(&[color.r, color.g, color.b, color.a]),
+            bytemuck::cast_slice(&[live_mb_len]),
         );
+        queue.write_buffer(
+            &self.params_buffer,
+            48,
+            bytemuck::cast_slice(&[trace_mb_len]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            64,
+            bytemuck::cast_slice(&[fs_color.r, fs_color.g, fs_color.b, fs_color.a]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            80,
+            bytemuck::cast_slice(&[lb_color.r, lb_color.g, lb_color.b, lb_color.a]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            96,
+            bytemuck::cast_slice(&[mb_color.r, mb_color.g, mb_color.b, mb_color.a]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            112,
+            bytemuck::cast_slice(&[hb_color.r, hb_color.g, hb_color.b, hb_color.a]),
+        );
+        queue.write_buffer(&self.params_buffer, 128, &[is_mb as u8, 0, 0, 0]);
+
         queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&pos));
     }
@@ -188,10 +226,21 @@ impl StereometerRenderResources {
 }
 pub struct RendererCallback {
     // Stereometer fields
+    pub render_mode: RenderMode,
     pub live_pos: Vec<Pos2>,
     pub trace_pos: Vec<Pos2>,
 
-    pub color: LinearRgba,
+    pub live_low_pos: Vec<Pos2>,
+    pub live_mid_pos: Vec<Pos2>,
+    pub live_high_pos: Vec<Pos2>,
+    pub trace_low_pos: Vec<Pos2>,
+    pub trace_mid_pos: Vec<Pos2>,
+    pub trace_high_pos: Vec<Pos2>,
+
+    pub fs_color: LinearRgba,
+    pub lb_color: LinearRgba,
+    pub mb_color: LinearRgba,
+    pub hb_color: LinearRgba,
     pub canvas_size: Vec2,
 }
 impl egui_wgpu::CallbackTrait for RendererCallback {
@@ -204,15 +253,37 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         let meter_res: &mut StereometerRenderResources = resources.get_mut().unwrap();
-        let mut pos = self.live_pos.clone();
-        pos.extend(&self.trace_pos);
+        let pos = match self.render_mode {
+            RenderMode::FullSpectrum => {
+                let mut pos = self.live_pos.clone();
+                pos.extend(&self.trace_pos);
+                pos
+            }
+            RenderMode::MultiBand => {
+                let mut pos = self.live_low_pos.clone();
+                pos.extend(&self.live_mid_pos);
+                pos.extend(&self.live_high_pos);
+                pos.extend(&self.trace_low_pos);
+                pos.extend(&self.trace_mid_pos);
+                pos.extend(&self.trace_high_pos);
+                pos
+            }
+        };
+        let (live_len, trace_len) = (self.live_pos.len(), self.trace_pos.len());
+        let (live_mb_len, trace_mb_len) = (self.live_low_pos.len(), self.trace_low_pos.len());
         meter_res.prepare(
             device,
             queue,
             pos,
-            self.color,
-            self.live_pos.len() as u32,
-            self.trace_pos.len() as u32,
+            self.fs_color,
+            self.lb_color,
+            self.mb_color,
+            self.hb_color,
+            matches!(self.render_mode, RenderMode::MultiBand),
+            live_len as u32,
+            trace_len as u32,
+            live_mb_len as u32,
+            trace_mb_len as u32,
         );
 
         let ppp = screen_descriptor.pixels_per_point;
@@ -278,7 +349,16 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             multiview_mask: None,
         });
 
-        let n = (self.live_pos.len() + self.trace_pos.len()) as u32;
+        let n = match self.render_mode {
+            RenderMode::FullSpectrum => (self.live_pos.len() + self.trace_pos.len()) as u32,
+            RenderMode::MultiBand => {
+                let live =
+                    self.live_low_pos.len() + self.live_mid_pos.len() + self.live_high_pos.len();
+                let trace =
+                    self.trace_low_pos.len() + self.trace_mid_pos.len() + self.trace_high_pos.len();
+                (live + trace) as u32
+            }
+        };
         meter_res.paint(&mut stereometer_pass, n);
         Vec::new()
     }
@@ -441,7 +521,9 @@ enum FilterBand {
 
 impl Stereometer {
     fn points_to_quad_vertices(&self, l: f32, r: f32) -> [Pos2; 6] {
-        let s = 0.003;
+        // let s = 0.003;
+        let s = self.point_size;
+        //TODO: Point size
         [
             pos2(l + s, r + s),
             pos2(l + s, r - s),

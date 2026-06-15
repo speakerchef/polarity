@@ -22,7 +22,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4<f32> {
     let num_levels = textureNumLevels(tex);
-    let cur_level = 2;
+    let cur_level = 0;
     let sf = pow(2, f32(cur_level));
     let coord: vec2f = pos.xy;
     let size = textureDimensions(tex) * u32(sf);

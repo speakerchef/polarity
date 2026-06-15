@@ -167,17 +167,9 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                             ui,
                                             "POINT SIZE",
                                             &mut st.stereo.point_size,
-                                            0.2,
-                                            4.0,
-                                            2,
-                                        );
-                                        slider_row(
-                                            ui,
-                                            "SCALE (%)",
-                                            &mut st.stereo.scale_factor,
-                                            100.0,
-                                            500.0,
-                                            0,
+                                            0.0005,
+                                            0.01,
+                                            4,
                                         );
                                     }
                                 }

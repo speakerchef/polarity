@@ -73,8 +73,7 @@ impl Default for AppState {
                     Rgba::new(0, 255, 0, 255),
                     Rgba::new(0, 0, 255, 255),
                 ],
-                scale_factor: 290.0,
-                point_size: 1.5,
+                point_size: 0.0025,
                 ..Default::default()
             },
             pos: [0.0; 2],

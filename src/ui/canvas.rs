@@ -34,9 +34,21 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         RendererCallback {
+            render_mode: st.stereo.render_mode,
             live_pos: std::mem::take(&mut st.stereo.live_buffer),
-            trace_pos: std::mem::take(&mut st.stereo.trace_buffer).into(),
-            color: st.stereo.fs_color.into(),
+            trace_pos: st.stereo.trace_buffer.clone().into(),
+
+            live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
+            live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
+            live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
+            trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
+            trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
+            trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
+
+            fs_color: st.stereo.fs_color.into(),
+            lb_color: st.stereo.mb_color[0].into(),
+            mb_color: st.stereo.mb_color[1].into(),
+            hb_color: st.stereo.mb_color[2].into(),
             canvas_size,
         },
     ));

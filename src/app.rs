@@ -48,7 +48,7 @@ fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_w
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: NonZeroU64::new(48),
+                        min_binding_size: NonZeroU64::new(144),
                     },
                     count: None,
                 },
@@ -100,7 +100,8 @@ fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_w
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("live buffer"),
         contents: bytemuck::cast_slice(
-            &[[0f32; 2]; (MAX_LIVE_POINT_DENSITY + MAX_TRACE_POINT_DENSITY) * VERTICES_PER_QUAD],
+            &[[0f32; 2];
+                (MAX_LIVE_POINT_DENSITY + MAX_TRACE_POINT_DENSITY) * VERTICES_PER_QUAD * 3],
         ),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
     });
@@ -111,7 +112,7 @@ fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_w
     });
     let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0u32; 12]), // 48 bytes aligned
+        contents: bytemuck::cast_slice(&[0f32; 36]), // 144 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
 
