@@ -40,7 +40,7 @@ pub struct AppState {
     pub set_default_freqs: bool,
 
     pub postfx_open: bool,
-    pub sparkle_open: bool,
+    pub bloom_open: bool,
 
     pub bloom: f32,
 }
@@ -69,9 +69,9 @@ impl Default for AppState {
                 last_freq: 1.0,
                 fs_color: Rgba::new(0, 255, 0, 255),
                 mb_color: [
-                    Rgba::new(255, 0, 0, 255),
-                    Rgba::new(0, 255, 0, 255),
-                    Rgba::new(0, 0, 255, 255),
+                    Rgba::new(100, 0, 255, 255),
+                    Rgba::new(255, 102, 0, 255),
+                    Rgba::new(180, 255, 0, 255),
                 ],
                 point_size: 0.0025,
                 ..Default::default()
@@ -95,8 +95,8 @@ impl Default for AppState {
             set_default_freqs: true,
 
             postfx_open: false,
-            sparkle_open: false,
-            bloom: 0.4,
+            bloom_open: false,
+            bloom: 2.0,
         }
     }
 }

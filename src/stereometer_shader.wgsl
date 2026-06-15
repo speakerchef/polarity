@@ -12,7 +12,7 @@ struct StereometerParams {
     @size(16) lb_color: vec4<f32>,
     @size(16) mb_color: vec4<f32>,
     @size(16) hb_color: vec4<f32>,
-    @size(16) is_mb: u32, // true = !0, yes = 0
+    @size(16) is_mb: u32, // true = !0, false = 0
 };
 
 @group(0) @binding(0)
@@ -21,8 +21,6 @@ var<storage, read> sample_positions: array<vec2<f32>>;
 var<uniform> params: StereometerParams;
 @group(0) @binding(2)
 var<storage, read> alphas: array<f32>;
-
-const NUM_VERTICES: u32 = 6;
 
 @vertex
 fn vs_main(@builtin(vertex_index) v_idx: u32) -> Vertex {

@@ -175,12 +175,12 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                 }
 
                                 section_header(ui, 2, "POST FX", &mut st.postfx_open);
-                                // if st.postfx_open {
-                                //     sub_header(ui, "SPARKLE", &mut st.sparkle_open);
-                                //     if st.sparkle_open {
-                                //         hsl_row(ui, "BLOOM", &mut st.bloom, 0.0, 1.0, 2);
-                                //     }
-                                // }
+                                if st.postfx_open {
+                                    section_header_submenu(ui, "BLOOM", &mut st.bloom_open);
+                                    if st.bloom_open {
+                                        slider_row(ui, "AMOUNT", &mut st.bloom, 0.0, 10.0, 1);
+                                    }
+                                }
                             })
                         });
                     });

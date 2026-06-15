@@ -382,11 +382,12 @@ pub struct BloomRenderResources {
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub bind_group: Option<wgpu::BindGroup>,
-    pub top_left: wgpu::Buffer,
+    pub params_buffer: wgpu::Buffer,
 }
 impl BloomRenderResources {
-    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, top_left: Pos2) {
-        queue.write_buffer(&self.top_left, 0, bytemuck::cast_slice(&[top_left]));
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, top_left: Pos2, bloom_amt: f32) {
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
+        queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[bloom_amt]));
     }
 
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
@@ -398,6 +399,7 @@ impl BloomRenderResources {
 
 pub struct EffectsCallback {
     pub top_left: Pos2,
+    pub bloom_amt: f32,
 }
 impl egui_wgpu::CallbackTrait for EffectsCallback {
     fn prepare(
@@ -439,7 +441,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: bloom_res.top_left.as_entire_binding(),
+                    resource: bloom_res.params_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -497,6 +499,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
             device,
             queue,
             self.top_left * screen_descriptor.pixels_per_point,
+            self.bloom_amt,
         );
 
         Vec::new()

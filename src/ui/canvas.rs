@@ -56,6 +56,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
+            bloom_amt: st.bloom,
         },
     ));
 }

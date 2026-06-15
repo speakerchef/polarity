@@ -20,7 +20,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4<f32> {
     let coord: vec2f = pos.xy;
-    let size = textureDimensions(tex, 2);
+    let size = textureDimensions(tex);
     let uv = pos.xy / vec2f(size);
 
     var sample = textureSample(tex, tex_sampler, uv);

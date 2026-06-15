@@ -24,7 +24,7 @@
   - [x] Editable point size
   - [x] Tunable animation scale-factor
 - [ ] Primitive Rack of Post FX modules
-  - [ ] Bloom / Sparkle
+  - [x] Bloom / Sparkle
   - [ ] Chromatic aberration
   - [ ] Phosphor
 - [x] Transport bar with playback controls + File path + Loop mode toggle

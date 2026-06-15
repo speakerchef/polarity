@@ -260,7 +260,7 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
+                        min_binding_size: NonZeroU64::new(32),
                     },
                     count: None,
                 },
@@ -306,9 +306,9 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
         mipmap_filter: wgpu::MipmapFilterMode::Linear,
         ..Default::default()
     });
-    let top_left = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("top_left"),
-        contents: bytemuck::cast_slice(&[0u32; 4]), // 16 bytes aligned
+    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("uniform buffer"),
+        contents: bytemuck::cast_slice(&[0f32; 8]), // 32 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
 
@@ -321,7 +321,7 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
             bind_group_layout: bloom_bind_group_layout,
             sampler: bloom_sampler,
             bind_group: None,
-            top_left,
+            params_buffer,
         });
 }
 
