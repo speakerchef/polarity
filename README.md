@@ -28,6 +28,8 @@
   - [ ] Chromatic aberration
   - [ ] Phosphor
 - [x] Transport bar with playback controls + File path + Loop mode toggle
+- [x] Fullscreen mode
+- [ ] Live/RT mode
 - [ ] Timeline with waveform view
 - [ ] Click to skip inside timeline
 - [ ] Simple MP4 Export pipeline to combine audio + generated motion

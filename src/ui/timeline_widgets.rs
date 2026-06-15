@@ -122,7 +122,7 @@ pub fn file_info(ui: &mut egui::Ui, info: &str) {
 
 pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
     let loop_icon = "\u{e042}";
-    let (rect, resp) = ui.allocate_exact_size(vec2(76.0, 32.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 32.0), Sense::click());
     if resp.clicked() {
         *mode = match mode {
             PlaybackMode::Loop => PlaybackMode::Once,
@@ -130,12 +130,12 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         }
     }
     let (bg, fg) = if matches!(mode, PlaybackMode::Loop) {
-        (plt::TEXT, plt::INK)
+        (plt::YELLO, plt::INK)
     } else {
         (plt::VOID, plt::BRIGHT)
     };
     let bg = if resp.hovered() {
-        if bg == plt::TEXT {
+        if bg == plt::YELLO {
             bg
         } else {
             plt::SURFACE_HOVER
@@ -149,18 +149,18 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
     ui.painter()
         .line_segment([rect.right_bottom(), rect.right_top()], border());
     let font_text = FontId {
-        size: plt::font_size::MED,
-        family: FontFamily::Name("inter_regular".into()),
+        size: plt::font_size::BODY,
+        family: FontFamily::Name("inter_medium".into()),
     };
     let font_icon = FontId {
-        size: plt::font_size::BIG,
+        size: plt::font_size::MED,
         family: FontFamily::Name("icons".into()),
     };
     text(
         ui,
         loop_icon,
         font_icon,
-        pos2(rect.center().x + 14.0, rect.bottom() - 24.),
+        pos2(rect.center().x + 14.0, rect.bottom() - 23.5),
         plt::letter_spacing::BASE,
         fg,
         Align::LEFT,
@@ -169,7 +169,7 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         ui,
         "LOOP",
         font_text,
-        pos2(rect.center().x + 10.0, rect.bottom() - 23.5),
+        pos2(rect.center().x + 10.0, rect.bottom() - 23.),
         plt::letter_spacing::BASE,
         fg,
         Align::RIGHT,

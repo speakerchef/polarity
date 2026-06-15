@@ -1,11 +1,12 @@
 #![allow(dead_code, unused)]
 use eframe::egui_wgpu;
-use egui::{Color32, pos2, vec2};
+use egui::{Align, Color32, FontId, pos2, vec2};
 
 use crate::generators::stereometer::{EffectsCallback, RendererCallback};
+use crate::ui::timeline_widgets::{SHARP, border};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
-use crate::ui::palette;
+use crate::ui::{palette, text};
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
@@ -23,7 +24,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     ui.painter().rect_filled(
         rect,
         egui::CornerRadius::ZERO,
-        Color32::from_rgba_unmultiplied(6, 10, 10, 255),
+        Color32::BLACK,
+        // Color32::from_rgba_unmultiplied(6, 10, 10, 255),
     );
     let Some(pl) = pl else {
         return;
@@ -70,6 +72,44 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
                 .outer_margin(0.0),
         )
         .show_inside(ui, |ui| {
+            let area = egui::Area::new("fullscreen_button".into())
+                .order(egui::Order::Middle)
+                .show(ui.ctx(), |ui| {
+                    let resp = ui.allocate_rect(
+                        egui::Rect::from_min_size(
+                            pos2(
+                                ui.min_rect().left_top().x + 2.0,
+                                ui.min_rect().left_top().y + 2.0,
+                            ),
+                            vec2(24., 24.),
+                        ),
+                        egui::Sense::click(),
+                    );
+                    // ui.painter()
+                    //     .rect_stroke(resp.rect, SHARP, border(), egui::StrokeKind::Inside);
+                    text(
+                        ui,
+                        "\u{e5d0}",
+                        FontId {
+                            size: palette::font_size::ICON + 10.0,
+                            family: egui::FontFamily::Name("icons".into()),
+                        },
+                        pos2(
+                            (resp.rect.center_top().x / 1.5) - 3.,
+                            (resp.rect.left_center().y / 1.5) - 5.5,
+                        ),
+                        palette::letter_spacing::BASE,
+                        if resp.hovered() {
+                            palette::YELLO
+                        } else {
+                            palette::BORDER
+                        },
+                        Align::LEFT,
+                    );
+                    if resp.clicked() {
+                        st.fullscreen = !st.fullscreen
+                    }
+                });
             custom_painting(ui, st, pl);
         });
 }

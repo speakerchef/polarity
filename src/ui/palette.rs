@@ -15,6 +15,8 @@ pub const TEXT: Color32 = Color32::from_rgb(0xcc, 0xcc, 0xcc);
 pub const BRIGHT: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xe8);
 
 pub const LIVE: Color32 = Color32::from_rgb(0x5e, 0xc5, 0x7b);
+pub const GREEN: Color32 = Color32::from_rgb(72, 173, 102);
+pub const YELLO: Color32 = Color32::from_rgb(237, 174, 95);
 pub const DANGER: Color32 = Color32::from_rgb(0xd9, 0x34, 0x2a);
 pub const WARN: Color32 = Color32::from_rgb(0xff, 0x8a, 0x4c);
 
@@ -38,7 +40,7 @@ pub mod letter_spacing {
 }
 
 pub mod width {
-    pub const SLIDER: f32 = 165.0;
+    pub const SLIDER: f32 = 140.0;
 }
 
 pub mod height {

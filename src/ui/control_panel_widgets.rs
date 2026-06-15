@@ -288,13 +288,13 @@ fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
     }
     let t = ((*value - min) / (max - min)).clamp(0.0, 1.0);
     let p = ui.painter();
-    p.rect_filled(rect, SHARP, plt::VOID);
-    p.rect_stroke(rect, SHARP, border(), StrokeKind::Inside);
+    p.rect_filled(rect, CornerRadius::from(2), plt::VOID);
+    p.rect_stroke(rect, CornerRadius::from(2), border(), StrokeKind::Inside);
     let tw = 10.0;
     let x = rect.left() + t * (rect.width() - tw);
     let thumb = Rect::from_min_size(pos2(x, rect.top() - 6.0), vec2(tw, rect.height() + 12.0));
-    p.rect_filled(thumb, SHARP, plt::TEXT);
-    p.rect_stroke(thumb, SHARP, border(), StrokeKind::Inside);
+    p.rect_filled(thumb, CornerRadius::from(2), plt::TEXT);
+    p.rect_stroke(thumb, CornerRadius::from(2), border(), StrokeKind::Inside);
 }
 
 fn value_box(
@@ -360,9 +360,9 @@ pub fn slider_row(
             |ui| {
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
                 ui.add_space(12.0);
-                label_text(ui, label, 79.0);
+                label_text(ui, label, 65.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
-                ui.add_space(8.0);
+                ui.add_space(13.0);
                 value_box(ui, value, decimals, min..=max, 54.0);
             },
         )
@@ -416,7 +416,7 @@ pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width:
             family: FontFamily::Name("icons".into()),
         },
         FontId {
-            size: plt::font_size::MED,
+            size: plt::font_size::BODY,
             family: FontFamily::Name("inter_medium".into()),
         },
     );
@@ -424,7 +424,7 @@ pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width:
         ui,
         icon,
         fonts.0.clone(),
-        pos2(rect.left_center().x + 52.0, rect.left_center().y - 9.5),
+        pos2(rect.left_center().x + 42.0, rect.left_center().y - 9.5),
         plt::letter_spacing::BASE,
         fg,
         Align::LEFT,
@@ -435,7 +435,7 @@ pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width:
         fonts.1.clone(),
         pos2(
             rect.right_center().x - rect.width() / 1.65,
-            rect.left_center().y - 8.0,
+            rect.left_center().y - 7.0,
         ),
         plt::letter_spacing::BASE,
         fg,

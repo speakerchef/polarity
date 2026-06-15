@@ -9,7 +9,7 @@ const ICON_EXPORT: &str = "\u{e5d8}";
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::right("control_panel")
-        .exact_size(360.0)
+        .exact_size(320.0)
         .resizable(false)
         .frame(egui::Frame::NONE.fill(palette::BG))
         .show_inside(ui, |ui| {
@@ -72,7 +72,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                         }
                                         slider_row(
                                             ui,
-                                            "FREQUENCY",
+                                            "FREQ",
                                             &mut st.stereo.filter_freq,
                                             1.0,
                                             20000.0,
@@ -165,7 +165,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                         );
                                         slider_row(
                                             ui,
-                                            "POINT SIZE",
+                                            "POINT",
                                             &mut st.stereo.point_size,
                                             0.0005,
                                             0.01,

@@ -587,7 +587,7 @@ impl Stereometer {
     }
 
     fn radial_scale(x: f32, y: f32) -> f32 {
-        let sf = 0.3;
+        let sf = 0.25;
         let mag = (x * x + y * y).sqrt();
         let scaled = mag.powf(sf);
         if mag > 1e-6 { scaled / mag } else { 0.0 }
@@ -604,7 +604,7 @@ impl Stereometer {
             }
             StereometerKind::LinearLissajous => (l, r),
             StereometerKind::ScaledLissajous => {
-                let rscale = Self::radial_scale(l, r);
+                let rscale = Self::radial_scale(l, r) * 1.18;
                 (l * rscale, r * rscale)
             }
         }

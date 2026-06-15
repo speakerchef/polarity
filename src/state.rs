@@ -23,6 +23,7 @@ pub struct AppState {
     pub stereo: Stereometer,
     pub pos: [f32; 2],
 
+    pub fullscreen: bool,
     pub import_open: bool,
 
     pub gen_open: bool,
@@ -68,16 +69,27 @@ impl Default for AppState {
                 filter_freq: 1.0,
                 last_freq: 1.0,
                 fs_color: Rgba::new(0, 255, 0, 255),
+                // mb_color: [
+                //     Rgba::new(100, 0, 255, 255),
+                //     Rgba::new(255, 102, 0, 255),
+                //     Rgba::new(180, 255, 0, 255),
+                // ],
+                // mb_color: [
+                //     Rgba::new(255, 0, 60, 255),
+                //     Rgba::new(40, 90, 255, 255),
+                //     Rgba::new(0, 255, 165, 255),
+                // ],
                 mb_color: [
-                    Rgba::new(100, 0, 255, 255),
-                    Rgba::new(255, 102, 0, 255),
-                    Rgba::new(180, 255, 0, 255),
+                    Rgba::new(110, 0, 255, 255),
+                    Rgba::new(0, 155, 255, 255),
+                    Rgba::new(230, 0, 140, 255),
                 ],
-                point_size: 0.0025,
+                point_size: 0.002,
                 ..Default::default()
             },
             pos: [0.0; 2],
 
+            fullscreen: false,
             import_open: false,
 
             gen_open: false,
@@ -96,7 +108,8 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
-            bloom: 2.0,
+            // bloom: 2.0,
+            bloom: 4.5,
         }
     }
 }

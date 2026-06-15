@@ -453,25 +453,45 @@ impl PolarityApp {
 }
 
 impl eframe::App for PolarityApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let resp = egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.inner_margin(12.0).fill(plt::VOID))
+            .frame(
+                egui::Frame::NONE
+                    .inner_margin(if !self.st.fullscreen { 12.0 } else { 0.0 })
+                    .fill(plt::VOID),
+            )
             .show_inside(ui, |ui| {
-                timeline::draw(ui, &mut self.st, &mut self.player);
-                control_panel::draw(ui, &mut self.st);
+                if !self.st.fullscreen {
+                    timeline::draw(ui, &mut self.st, &mut self.player);
+                    control_panel::draw(ui, &mut self.st);
+                    frame.winit_window().unwrap().set_decorations(true);
+                } else {
+                    // remove titlebar and corners
+                    frame.winit_window().unwrap().set_decorations(false);
+                }
                 canvas::draw(ui, &mut self.st, &self.player);
             });
 
-        let border_rect = resp.response.rect.shrink(12.0).round_ui();
-        ui.painter().rect_stroke(
-            border_rect,
-            CornerRadius::ZERO,
-            Stroke {
-                width: 1.0,
-                color: plt::BORDER,
-            },
-            StrokeKind::Inside,
-        );
+        let border_rect = resp
+            .response
+            .rect
+            .shrink(if !self.st.fullscreen { 12.0 } else { 0.0 })
+            .round_ui();
+        if !self.st.fullscreen {
+            ui.painter().rect_stroke(
+                border_rect,
+                if !self.st.fullscreen {
+                    CornerRadius::ZERO
+                } else {
+                    CornerRadius::from(12)
+                },
+                Stroke {
+                    width: 1.0,
+                    color: plt::BORDER,
+                },
+                StrokeKind::Inside,
+            );
+        }
     }
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(p) = &self.player
