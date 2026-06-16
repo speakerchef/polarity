@@ -2817,6 +2817,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui-file-dialog",
+ "egui-winit",
  "env_logger",
  "rodio",
  "wgpu",

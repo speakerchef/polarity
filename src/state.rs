@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
 use egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog};
@@ -25,6 +25,9 @@ pub struct AppState {
 
     pub fullscreen: bool,
     pub import_open: bool,
+    pub window_drag_tooltip_modal_deadline: Option<Instant>,
+    pub window_drag_tooltip_modal_open: bool,
+    pub show_fullscreen_button: bool,
 
     pub gen_open: bool,
     pub render_open: bool,
@@ -64,6 +67,8 @@ impl Default for AppState {
                 .allow_file_overwrite(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
+            show_fullscreen_button: true,
+
             playback_mode: PlaybackMode::default(),
             stereo: Stereometer {
                 filter_freq: 1.0,
@@ -75,22 +80,29 @@ impl Default for AppState {
                 //     Rgba::new(180, 255, 0, 255),
                 // ],
                 // mb_color: [
-                //     Rgba::new(255, 0, 60, 255),
-                //     Rgba::new(40, 90, 255, 255),
-                //     Rgba::new(0, 255, 165, 255),
+                //     Rgba::new(255, 0, 64, 255),
+                //     Rgba::new(0, 51, 235, 255),
+                //     Rgba::new(0, 225, 215, 255),
+                // ],
+                // mb_color: [
+                //     Rgba::new(110, 0, 255, 255),
+                //     Rgba::new(0, 155, 255, 255),
+                //     Rgba::new(230, 0, 140, 255),
                 // ],
                 mb_color: [
-                    Rgba::new(110, 0, 255, 255),
-                    Rgba::new(0, 155, 255, 255),
-                    Rgba::new(230, 0, 140, 255),
+                    Rgba::new(116, 0, 184, 255),
+                    Rgba::new(83, 89, 255, 255),
+                    Rgba::new(128, 88, 255, 255),
                 ],
-                point_size: 0.002,
+                point_size: 0.0040,
                 ..Default::default()
             },
             pos: [0.0; 2],
 
             fullscreen: false,
             import_open: false,
+            window_drag_tooltip_modal_deadline: None,
+            window_drag_tooltip_modal_open: false,
 
             gen_open: false,
             render_open: false,
@@ -108,8 +120,7 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
-            // bloom: 2.0,
-            bloom: 4.5,
+            bloom: 2.0,
         }
     }
 }

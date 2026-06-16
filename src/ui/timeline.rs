@@ -76,16 +76,18 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                         timecode(ui, &elap, &dur);
                         ui.add_space(16.0);
 
-                        file_info(ui, &fname);
-                        ui.add_space(6.0);
                         file_info(
                             ui,
-                            &if let Some(sr) = sr {
-                                let sr = sr as f64 / 1000.0;
-                                format!("• {:.1}kHz", sr)
-                            } else {
-                                "".to_string()
-                            },
+                            &format!(
+                                "{} • {}",
+                                fname,
+                                &if let Some(sr) = sr {
+                                    let sr = sr as f64 / 1000.0;
+                                    format!("{:.1}kHz", sr)
+                                } else {
+                                    "".to_string()
+                                }
+                            ),
                         );
                         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                             ui.add_space(16.0);

@@ -16,11 +16,10 @@ pub const BRIGHT: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xe8);
 
 pub const LIVE: Color32 = Color32::from_rgb(0x5e, 0xc5, 0x7b);
 pub const GREEN: Color32 = Color32::from_rgb(72, 173, 102);
-pub const YELLO: Color32 = Color32::from_rgb(237, 174, 95);
+pub const YELLO: Color32 = Color32::from_rgb(210, 140, 60);
 pub const DANGER: Color32 = Color32::from_rgb(0xd9, 0x34, 0x2a);
 pub const WARN: Color32 = Color32::from_rgb(0xff, 0x8a, 0x4c);
 
-/// Text-on-`TEXT` (active rowhead inverts to TEXT bg with this fg).
 pub const INK: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 
 pub mod font_size {

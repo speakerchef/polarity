@@ -403,7 +403,7 @@ pub fn slider_row(
 
 /// import/export
 pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width: f32) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 42.7), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 38.0), Sense::click());
     let bg = if resp.hovered() { plt::TEXT } else { plt::BG };
     let fg = if resp.hovered() { plt::INK } else { plt::DIM };
     let p = ui.painter();

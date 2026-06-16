@@ -1,6 +1,12 @@
 use biquad::*;
 use eframe::egui_wgpu::{self, wgpu};
-use std::{num::NonZeroU64, path::PathBuf, time::Duration};
+use egui_winit::winit::dpi::LogicalSize;
+use std::{
+    num::NonZeroU64,
+    ops::Add,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 use wgpu::{Device, util::DeviceExt};
 
 use crate::{
@@ -10,9 +16,9 @@ use crate::{
         MAX_TRACE_POINT_DENSITY, StereometerRenderResources, VERTICES_PER_QUAD,
     },
     state::PlaybackMode,
-    ui::{canvas, control_panel, timeline},
+    ui::{canvas, control_panel, text, timeline},
 };
-use egui::{CornerRadius, Key, Stroke, StrokeKind, emath::GuiRounding};
+use egui::{Align, CornerRadius, FontId, Key, Stroke, StrokeKind, emath::GuiRounding, pos2, vec2};
 
 use crate::{state::AppState, ui::palette as plt, ui::theme};
 
@@ -450,6 +456,46 @@ impl PolarityApp {
             }
         }
     }
+
+    fn show_window_drag_tooltip_modal(&mut self, ui: &mut egui::Ui) {
+        if self.st.window_drag_tooltip_modal_deadline.is_none() {
+            self.st.window_drag_tooltip_modal_deadline = Some(Instant::now());
+            self.st.window_drag_tooltip_modal_open = true;
+        }
+
+        if self.st.window_drag_tooltip_modal_open {
+            egui::Area::new("window drag tooltip".into()).show(ui.ctx(), |ui| {
+                let resp = ui.allocate_rect(
+                    egui::Rect::from_min_size(
+                        ui.content_rect().left_top().add(vec2(12., 14.)),
+                        vec2(160., 30.),
+                    ),
+                    egui::Sense::click(),
+                );
+                text(
+                    ui,
+                    "Press and Hold any Key to Move the Window",
+                    FontId {
+                        size: plt::font_size::MED,
+                        family: egui::FontFamily::Name("inter_regular".into()),
+                    },
+                    pos2(
+                        resp.rect.center_top().x - 40.0,
+                        resp.rect.left_center().y - 8.,
+                    ),
+                    plt::letter_spacing::BASE,
+                    plt::DIM,
+                    Align::LEFT,
+                );
+            });
+        }
+
+        if let Some(start_time) = self.st.window_drag_tooltip_modal_deadline
+            && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
+        {
+            self.st.window_drag_tooltip_modal_open = false;
+        }
+    }
 }
 
 impl eframe::App for PolarityApp {
@@ -464,10 +510,36 @@ impl eframe::App for PolarityApp {
                 if !self.st.fullscreen {
                     timeline::draw(ui, &mut self.st, &mut self.player);
                     control_panel::draw(ui, &mut self.st);
+
                     frame.winit_window().unwrap().set_decorations(true);
+                    frame
+                        .winit_window()
+                        .unwrap()
+                        .set_min_inner_size(Some(LogicalSize::new(720.0, 480.0)));
                 } else {
+                    ui.request_repaint_after(Duration::from_millis(16));
+                    self.show_window_drag_tooltip_modal(ui);
+
                     // remove titlebar and corners
                     frame.winit_window().unwrap().set_decorations(false);
+                    frame
+                        .winit_window()
+                        .unwrap()
+                        .set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
+
+                    // allow drag anywhere if any key is down
+                    if ui.ctx().input(|i| {
+                        (!i.keys_down.is_empty() && !i.key_down(Key::Space))
+                            || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
+                                || i.modifiers.matches_logically(egui::Modifiers::SHIFT))
+                    }) {
+                        frame
+                            .winit_window()
+                            .unwrap()
+                            .drag_window()
+                            .inspect_err(|e| println!("{e}"))
+                            .unwrap_or_default();
+                    }
                 }
                 canvas::draw(ui, &mut self.st, &self.player);
             });
@@ -480,11 +552,7 @@ impl eframe::App for PolarityApp {
         if !self.st.fullscreen {
             ui.painter().rect_stroke(
                 border_rect,
-                if !self.st.fullscreen {
-                    CornerRadius::ZERO
-                } else {
-                    CornerRadius::from(12)
-                },
+                CornerRadius::ZERO,
                 Stroke {
                     width: 1.0,
                     color: plt::BORDER,

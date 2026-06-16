@@ -1,6 +1,6 @@
 #![allow(dead_code, unused)]
 use eframe::egui_wgpu;
-use egui::{Align, Color32, FontId, pos2, vec2};
+use egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 
 use crate::generators::stereometer::{EffectsCallback, RendererCallback};
 use crate::ui::timeline_widgets::{SHARP, border};
@@ -72,44 +72,48 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
                 .outer_margin(0.0),
         )
         .show_inside(ui, |ui| {
-            let area = egui::Area::new("fullscreen_button".into())
-                .order(egui::Order::Middle)
-                .show(ui.ctx(), |ui| {
-                    let resp = ui.allocate_rect(
-                        egui::Rect::from_min_size(
-                            pos2(
-                                ui.min_rect().left_top().x + 2.0,
-                                ui.min_rect().left_top().y + 2.0,
+            if ui.ctx().input(|i| i.pointer.hover_pos().is_some()) || !st.fullscreen {
+                let area = egui::Area::new("fullscreen_button".into())
+                    .order(egui::Order::Middle)
+                    .movable(false)
+                    .show(ui.ctx(), |ui| {
+                        let resp = ui.allocate_rect(
+                            egui::Rect::from_min_size(
+                                pos2(
+                                    ui.max_rect().left_top().x + 4.,
+                                    ui.max_rect().left_top().y + 4.,
+                                ),
+                                vec2(20., 20.),
                             ),
-                            vec2(24., 24.),
-                        ),
-                        egui::Sense::click(),
-                    );
-                    // ui.painter()
-                    //     .rect_stroke(resp.rect, SHARP, border(), egui::StrokeKind::Inside);
-                    text(
-                        ui,
-                        "\u{e5d0}",
-                        FontId {
-                            size: palette::font_size::ICON + 10.0,
-                            family: egui::FontFamily::Name("icons".into()),
-                        },
-                        pos2(
-                            (resp.rect.center_top().x / 1.5) - 3.,
-                            (resp.rect.left_center().y / 1.5) - 5.5,
-                        ),
-                        palette::letter_spacing::BASE,
-                        if resp.hovered() {
-                            palette::YELLO
-                        } else {
-                            palette::BORDER
-                        },
-                        Align::LEFT,
-                    );
-                    if resp.clicked() {
-                        st.fullscreen = !st.fullscreen
-                    }
-                });
+                            egui::Sense::click(),
+                        );
+                        // ui.painter()
+                        //     .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+                        text(
+                            ui,
+                            "\u{e5d0}",
+                            FontId {
+                                size: palette::font_size::ICON + 6.0,
+                                family: egui::FontFamily::Name("icons".into()),
+                            },
+                            pos2(
+                                (resp.rect.center_top().x / 1.5) - 2.5,
+                                (resp.rect.left_center().y / 1.5) - 5.0,
+                            ),
+                            palette::letter_spacing::BASE,
+                            if resp.hovered() {
+                                palette::YELLO
+                            } else {
+                                palette::BORDER
+                            },
+                            Align::LEFT,
+                        );
+                        if resp.clicked() {
+                            st.fullscreen = !st.fullscreen;
+                            st.window_drag_tooltip_modal_deadline.take();
+                        }
+                    });
+            }
             custom_painting(ui, st, pl);
         });
 }
