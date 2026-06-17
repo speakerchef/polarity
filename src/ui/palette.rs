@@ -7,6 +7,7 @@ pub const BG_MED: Color32 = Color32::from_rgb(0x0c, 0x0c, 0x0c);
 pub const BG_DARK: Color32 = Color32::from_rgb(0x0a, 0x0a, 0x0a);
 pub const SURFACE: Color32 = Color32::from_rgb(0x15, 0x15, 0x15);
 pub const GRAY: Color32 = Color32::from_rgb(0x2a, 0x2a, 0x2a);
+pub const WAVEFORM: Color32 = Color32::from_rgb(0x2c, 0x2c, 0x2c);
 pub const SURFACE_HOVER: Color32 = Color32::from_rgb(0x1c, 0x1c, 0x1c);
 pub const BORDER: Color32 = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 

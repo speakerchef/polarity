@@ -1,4 +1,4 @@
-use crate::ui::text;
+use crate::ui::custom_text;
 use std::ops::RangeInclusive;
 
 use egui::{
@@ -55,7 +55,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
     };
     let lbl_pos = pos2(rect.left() + num_w + 12.0, rect.center().y - 8.0);
     let idx_pos = pos2(rect.left() + num_w / 3.25, rect.center().y - 8.0);
-    text(
+    custom_text(
         ui,
         name,
         fonts.clone(),
@@ -64,7 +64,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
         fg,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         &format!("{index:02}"),
         fonts,
@@ -96,7 +96,7 @@ pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
     };
-    text(
+    custom_text(
         ui,
         name,
         fonts.clone(),
@@ -123,7 +123,7 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
     };
-    text(
+    custom_text(
         ui,
         name,
         fonts.clone(),
@@ -160,7 +160,7 @@ fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
         size: plt::font_size::ICON,
         family: FontFamily::Name("icons".into()),
     };
-    text(
+    custom_text(
         ui,
         &label.to_uppercase(),
         textfont,
@@ -169,7 +169,7 @@ fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
         plt::BRIGHT,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         "\u{e5c5}",
         iconfont,
@@ -203,7 +203,7 @@ fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
         size: plt::font_size::META,
         family: FontFamily::Name("inter_regular".into()),
     };
-    text(
+    custom_text(
         ui,
         &label.to_uppercase(),
         fonts.clone(),
@@ -332,7 +332,7 @@ fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
         size: plt::font_size::META,
         family: FontFamily::Name("inter_medium".into()),
     };
-    text(
+    custom_text(
         ui,
         s,
         fonts.clone(),
@@ -420,7 +420,7 @@ pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width:
             family: FontFamily::Name("inter_medium".into()),
         },
     );
-    text(
+    custom_text(
         ui,
         icon,
         fonts.0.clone(),
@@ -429,7 +429,7 @@ pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width:
         fg,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         label,
         fonts.1.clone(),

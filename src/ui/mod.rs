@@ -8,7 +8,7 @@ pub mod theme;
 pub mod timeline;
 pub mod timeline_widgets;
 
-pub fn text(
+pub fn custom_text(
     ui: &mut egui::Ui,
     text: &str,
     font_id: FontId,

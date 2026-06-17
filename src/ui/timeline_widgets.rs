@@ -7,7 +7,7 @@ use egui::{
 
 use crate::{
     state::PlaybackMode,
-    ui::{palette as plt, text},
+    ui::{custom_text, palette as plt},
 };
 
 pub const SHARP: CornerRadius = CornerRadius::ZERO;
@@ -43,7 +43,7 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
     } else {
         pos2(rect.left() + 6.0, rect.bottom() - 21.0)
     };
-    text(
+    custom_text(
         ui,
         icon,
         font,
@@ -72,7 +72,7 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
     let (dmins, dsecs) = ((dsecs / 60.0) as u64, (dsecs % 60.0) as u64);
     let timeposl = pos2(rect.left() + 7.0, rect.bottom() - 23.);
     let timeposr = pos2(rect.right() - 7.0, rect.bottom() - 23.);
-    text(
+    custom_text(
         ui,
         &format!("{emins:02}:{esecs:02}"),
         font.clone(),
@@ -81,7 +81,7 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
         plt::BRIGHT,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         "/",
         FontId {
@@ -93,7 +93,7 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
         plt::BRIGHT,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         &format!("{dmins:02}:{dsecs:02}"),
         font,
@@ -109,7 +109,7 @@ pub fn file_info(ui: &mut egui::Ui, info: &str) {
         size: plt::font_size::META,
         family: FontFamily::Name("inter_regular".into()),
     };
-    text(
+    custom_text(
         ui,
         info,
         font,
@@ -156,7 +156,7 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         size: plt::font_size::MED,
         family: FontFamily::Name("icons".into()),
     };
-    text(
+    custom_text(
         ui,
         loop_icon,
         font_icon,
@@ -165,7 +165,7 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         fg,
         Align::LEFT,
     );
-    text(
+    custom_text(
         ui,
         "LOOP",
         font_text,

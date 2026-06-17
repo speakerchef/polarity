@@ -6,7 +6,7 @@ use crate::generators::stereometer::{EffectsCallback, RendererCallback};
 use crate::ui::timeline_widgets::{SHARP, border};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
-use crate::ui::{palette, text};
+use crate::ui::{custom_text, palette};
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
@@ -72,7 +72,10 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
                 .outer_margin(0.0),
         )
         .show_inside(ui, |ui| {
-            if ui.ctx().input(|i| i.pointer.hover_pos().is_some()) || !st.fullscreen {
+            if ui.ctx().input(
+                |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
+            ) || !st.fullscreen
+            {
                 let area = egui::Area::new("fullscreen_button".into())
                     .order(egui::Order::Middle)
                     .movable(false)
@@ -87,9 +90,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
                             ),
                             egui::Sense::click(),
                         );
-                        // ui.painter()
-                        //     .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
-                        text(
+                        custom_text(
                             ui,
                             "\u{e5d0}",
                             FontId {
@@ -97,7 +98,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
                                 family: egui::FontFamily::Name("icons".into()),
                             },
                             pos2(
-                                (resp.rect.center_top().x / 1.5) - 2.5,
+                                (resp.rect.center_top().x / 1.5) - 3.0,
                                 (resp.rect.left_center().y / 1.5) - 5.0,
                             ),
                             palette::letter_spacing::BASE,

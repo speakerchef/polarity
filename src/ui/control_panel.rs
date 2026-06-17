@@ -50,34 +50,40 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                             &mut st.stereo_kind_options_open,
                                         );
                                     }
-                                    section_header_submenu(ui, "FILTERING", &mut st.filtering_open);
-                                    if st.filtering_open {
-                                        dropdown_row(
+                                    if matches!(st.stereo.render_mode, RenderMode::FullSpectrum) {
+                                        section_header_submenu(
                                             ui,
-                                            "filter_mode",
-                                            "FILTER",
-                                            &mut st.stereo.filter_mode,
-                                            FilterMode::ALL,
-                                            &mut st.filter_mode_options_open,
+                                            "FILTERING",
+                                            &mut st.filtering_open,
                                         );
-                                        if st.set_default_freqs {
-                                            let f = match st.stereo.filter_mode {
-                                                FilterMode::Off => 1.0,
-                                                FilterMode::Lpf => 200.,
-                                                FilterMode::Bpf => 1000.,
-                                                FilterMode::Hpf => 5000.,
-                                            };
-                                            st.stereo.filter_freq = f;
-                                            st.stereo.last_freq = f;
+                                        if st.filtering_open {
+                                            dropdown_row(
+                                                ui,
+                                                "filter_mode",
+                                                "FILTER",
+                                                &mut st.stereo.filter_mode,
+                                                FilterMode::ALL,
+                                                &mut st.filter_mode_options_open,
+                                            );
+                                            if st.set_default_freqs {
+                                                let f = match st.stereo.filter_mode {
+                                                    FilterMode::Off => 1.0,
+                                                    FilterMode::Lpf => 200.,
+                                                    FilterMode::Bpf => 1000.,
+                                                    FilterMode::Hpf => 5000.,
+                                                };
+                                                st.stereo.filter_freq = f;
+                                                st.stereo.last_freq = f;
+                                            }
+                                            slider_row(
+                                                ui,
+                                                "FREQ",
+                                                &mut st.stereo.filter_freq,
+                                                1.0,
+                                                20000.0,
+                                                0,
+                                            );
                                         }
-                                        slider_row(
-                                            ui,
-                                            "FREQ",
-                                            &mut st.stereo.filter_freq,
-                                            1.0,
-                                            20000.0,
-                                            0,
-                                        );
                                     }
 
                                     section_header_submenu(ui, "COLOR", &mut st.color_open);

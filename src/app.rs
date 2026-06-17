@@ -16,7 +16,7 @@ use crate::{
         MAX_TRACE_POINT_DENSITY, StereometerRenderResources, VERTICES_PER_QUAD,
     },
     state::PlaybackMode,
-    ui::{canvas, control_panel, text, timeline},
+    ui::{canvas, control_panel, custom_text, timeline},
 };
 use egui::{Align, CornerRadius, FontId, Key, Stroke, StrokeKind, emath::GuiRounding, pos2, vec2};
 
@@ -472,7 +472,7 @@ impl PolarityApp {
                     ),
                     egui::Sense::click(),
                 );
-                text(
+                custom_text(
                     ui,
                     "Press and Hold any Key to Move the Window",
                     FontId {
@@ -537,7 +537,6 @@ impl eframe::App for PolarityApp {
                             .winit_window()
                             .unwrap()
                             .drag_window()
-                            .inspect_err(|e| println!("{e}"))
                             .unwrap_or_default();
                     }
                 }
