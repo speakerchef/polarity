@@ -19,7 +19,7 @@ fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
         .collect::<(Vec<f32>, Vec<f32>)>();
 
     let avail_w = rect.width() * 6.0;
-    let avail_h = rect.height();
+    let avail_h = rect.height() - 1.0;
     let step: usize = (left_channel.len() as f32 / avail_w) as usize;
     let mut prev_left_top = pos2(0.0, 0.0);
     (0..avail_w as usize).for_each(|i| {
@@ -28,7 +28,7 @@ fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
             .iter()
             .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
         let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM;
+        let fill_col = plt::WAVEFORM_BG;
         let mut inner = ui.allocate_rect(
             egui::Rect::from_min_size(
                 pos2(
@@ -62,7 +62,7 @@ fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
             .iter()
             .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
         let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM;
+        let fill_col = plt::WAVEFORM_BG;
         let mut inner = ui.allocate_rect(
             egui::Rect::from_min_size(
                 pos2(
@@ -95,7 +95,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
         .resizable(false)
         .frame(egui::Frame::NONE.fill(plt::BG))
         .show_inside(ui, |ui| {
-            const H: f32 = 32.0;
+            const H: f32 = 28.0;
             let bg = ui.painter().add(egui::Shape::Noop);
             let inner_rect = ui
                 .allocate_ui_with_layout(
@@ -156,7 +156,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                             )
                         };
 
-                        timecode(ui, &elap, &dur);
+                        timecode(ui, &elap, &dur, H);
                         ui.add_space(16.0);
 
                         file_info(
@@ -171,10 +171,11 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                                     "".to_string()
                                 }
                             ),
+                            H,
                         );
                         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                             ui.add_space(16.0);
-                            loop_button(ui, &mut st.playback_mode);
+                            loop_button(ui, &mut st.playback_mode, H);
                         })
                     },
                 )
@@ -188,21 +189,26 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
             );
             let transport_rect = bgr.visual_bounding_rect();
             ui.painter().set(bg, bgr);
+            // ui.painter().line_segment(
+            //     [transport_rect.left_bottom(), transport_rect.right_bottom()],
+            //     border(),
+            // );
+
+            let mut avail_size = ui.available_size();
+            avail_size.y -= 1.0;
+            let mut waveform = ui.allocate_rect(
+                egui::Rect::from_min_size(transport_rect.left_bottom(), avail_size),
+                egui::Sense::click(),
+            );
             ui.painter().line_segment(
-                [transport_rect.left_bottom(), transport_rect.right_bottom()],
+                [waveform.rect.left_top(), waveform.rect.right_top()],
                 border(),
             );
 
-            let avail_size = ui.available_size();
-            let waveform = ui
-                .allocate_rect(
-                    egui::Rect::from_min_size(transport_rect.left_bottom(), avail_size),
-                    egui::Sense::click(),
-                )
-                .on_hover_and_drag_cursor(egui::CursorIcon::Text);
             if let Some(p) = pl {
+                waveform = waveform.on_hover_and_drag_cursor(egui::CursorIcon::Text);
                 render_waveform(ui, p, &waveform.rect);
-                let playback_head = ui.allocate_rect(
+                let mut playback_head = ui.allocate_rect(
                     egui::Rect::from_min_size(
                         pos2(
                             transport_rect.left_bottom().x
@@ -214,6 +220,9 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                     ),
                     egui::Sense::click(),
                 );
+                playback_head.interact_rect.set_height(0.0);
+                playback_head.interact_rect.set_width(0.0);
+
                 ui.painter().rect_filled(
                     playback_head.rect,
                     CornerRadius::from(1.),
@@ -237,19 +246,38 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                     });
                 }
             } else {
+                waveform = waveform.on_hover_and_drag_cursor(egui::CursorIcon::Cell);
+                if waveform.clicked() {
+                    st.import_open = true;
+                }
                 custom_text(
                     ui,
-                    "No File Loaded",
+                    "\u{f09b}",
                     egui::FontId {
-                        size: plt::font_size::BIG,
+                        size: plt::font_size::ICON,
+                        family: egui::FontFamily::Name("icons".into()),
+                    },
+                    pos2(
+                        waveform.rect.center_top().x - 64.0,
+                        waveform.rect.left_center().y - 9.5,
+                    ),
+                    plt::letter_spacing::BASE,
+                    plt::DIM,
+                    Align::LEFT,
+                );
+                custom_text(
+                    ui,
+                    "IMPORT AUDIO",
+                    egui::FontId {
+                        size: plt::font_size::BODY,
                         family: egui::FontFamily::Name("inter_regular".into()),
                     },
                     pos2(
-                        waveform.rect.center_top().x - 48.0,
-                        waveform.rect.left_center().y - 8.0,
+                        waveform.rect.center_top().x - 40.0,
+                        waveform.rect.left_center().y - 6.0,
                     ),
                     plt::letter_spacing::BASE,
-                    plt::WAVEFORM,
+                    plt::DIM,
                     Align::LEFT,
                 );
             }

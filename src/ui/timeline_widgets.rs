@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{ops::Sub, time::Duration};
 
 use egui::{
     self, Align, Color32, CornerRadius, FontFamily, FontId, Response, Sense, Stroke, StrokeKind,
@@ -17,7 +17,17 @@ pub fn border() -> Stroke {
 }
 
 pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 24.0), Sense::click());
+    let ui_rect = ui.available_rect_before_wrap();
+    let mut resp = ui.allocate_rect(
+        egui::Rect::from_min_size(
+            pos2(ui_rect.left_top().x, ui_rect.left_top().y + 2.0),
+            vec2(28.0, 24.0),
+        ),
+        egui::Sense::click(),
+    );
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+
+    let rect = resp.rect;
     let (bg, stk) = if resp.hovered() {
         (plt::SURFACE_HOVER, plt::BORDER)
     } else {
@@ -55,8 +65,8 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
     resp
 }
 
-pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
-    let (rect, _) = ui.allocate_exact_size(vec2(96.0, 32.0), Sense::click());
+pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(96.0, h), Sense::click());
     ui.painter().rect_filled(rect, SHARP, plt::VOID);
     ui.painter()
         .line_segment([rect.left_bottom(), rect.left_top()], border());
@@ -70,8 +80,8 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
     let (emins, esecs) = ((esecs / 60.0) as u64, (esecs % 60.0) as u64);
     let dsecs = dur.as_secs_f64();
     let (dmins, dsecs) = ((dsecs / 60.0) as u64, (dsecs % 60.0) as u64);
-    let timeposl = pos2(rect.left() + 7.0, rect.bottom() - 23.);
-    let timeposr = pos2(rect.right() - 7.0, rect.bottom() - 23.);
+    let timeposl = pos2(rect.left() + 7.0, rect.left_center().y - (h / 4.0));
+    let timeposr = pos2(rect.right() - 7.0, rect.left_center().y - (h / 4.0));
     custom_text(
         ui,
         &format!("{emins:02}:{esecs:02}"),
@@ -88,7 +98,7 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
             size: plt::font_size::MED,
             family: FontFamily::Name("inter_regular".into()),
         },
-        pos2(rect.center().x - 2.0, rect.bottom() - 24.),
+        pos2(rect.center().x - 2.0, rect.left_center().y - (h / 3.5)),
         plt::letter_spacing::SPACED,
         plt::BRIGHT,
         Align::LEFT,
@@ -103,8 +113,8 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration) {
         Align::RIGHT,
     );
 }
-pub fn file_info(ui: &mut egui::Ui, info: &str) {
-    let (rect, _) = ui.allocate_exact_size(vec2(info.len() as f32 * 6., 32.0), Sense::click());
+pub fn file_info(ui: &mut egui::Ui, info: &str, h: f32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(info.len() as f32 * 6., h), Sense::click());
     let font = FontId {
         size: plt::font_size::META,
         family: FontFamily::Name("inter_regular".into()),
@@ -113,16 +123,28 @@ pub fn file_info(ui: &mut egui::Ui, info: &str) {
         ui,
         info,
         font,
-        pos2(rect.left() + 1.0, rect.center().y - 7.0),
+        pos2(rect.left() + 1.0, rect.left_center().y - h / 4.0),
         plt::letter_spacing::MINIMAL,
         plt::DIM,
         Align::LEFT,
     );
 }
 
-pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
+pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
     let loop_icon = "\u{e042}";
-    let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 32.0), Sense::click());
+    // let (rect, mut resp) = ui.allocate_exact_size(vec2(72.0, h - 1.0), Sense::click());
+    const W: f32 = 72.0;
+    let mut resp = ui.allocate_rect(
+        egui::Rect::from_min_size(
+            ui.available_rect_before_wrap()
+                .right_top()
+                .sub(pos2(W, 0.0))
+                .to_pos2(),
+            vec2(W, h),
+        ),
+        egui::Sense::click(),
+    );
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     if resp.clicked() {
         *mode = match mode {
             PlaybackMode::Loop => PlaybackMode::Once,
@@ -143,11 +165,11 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
     } else {
         bg
     };
-    ui.painter().rect_filled(rect, SHARP, bg);
+    ui.painter().rect_filled(resp.rect, SHARP, bg);
     ui.painter()
-        .line_segment([rect.left_bottom(), rect.left_top()], border());
+        .line_segment([resp.rect.left_bottom(), resp.rect.left_top()], border());
     ui.painter()
-        .line_segment([rect.right_bottom(), rect.right_top()], border());
+        .line_segment([resp.rect.right_bottom(), resp.rect.right_top()], border());
     let font_text = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
@@ -160,7 +182,10 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         ui,
         loop_icon,
         font_icon,
-        pos2(rect.center().x + 14.0, rect.bottom() - 23.5),
+        pos2(
+            resp.rect.center().x + 14.0,
+            resp.rect.left_center().y - (h / 4.0),
+        ),
         plt::letter_spacing::BASE,
         fg,
         Align::LEFT,
@@ -169,7 +194,10 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode) {
         ui,
         "LOOP",
         font_text,
-        pos2(rect.center().x + 10.0, rect.bottom() - 23.),
+        pos2(
+            resp.rect.center().x + 10.0,
+            resp.rect.left_center().y - (h / 4.0),
+        ),
         plt::letter_spacing::BASE,
         fg,
         Align::RIGHT,

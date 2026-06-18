@@ -17,10 +17,11 @@ fn border() -> Stroke {
 /// Root control panel headers. eg. "GENERATOR", "POST FX"
 pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bool) {
     let w = ui.available_width();
-    let (rect, resp) = ui.allocate_exact_size(
+    let (rect, mut resp) = ui.allocate_exact_size(
         vec2(w, plt::height::ROWHEAD),
         Sense::click().union(Sense::hover()),
     );
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     let (mut bg, fg) = if *open {
         (plt::TEXT, plt::INK)
     } else {
@@ -78,7 +79,9 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
 /// One level below section headers
 pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
     let w = ui.available_width();
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, plt::height::DROPDOWN_ITEM), Sense::click());
+    let (rect, mut resp) =
+        ui.allocate_exact_size(vec2(w, plt::height::DROPDOWN_ITEM), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     let (bg, fg) = if *open {
         (plt::TEXT, plt::INK)
     } else if resp.hovered() {
@@ -135,7 +138,8 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
 }
 
 fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     let border_color = if resp.hovered() {
         plt::TEXT
     } else {
@@ -180,9 +184,90 @@ fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
     );
     resp
 }
+#[allow(clippy::too_many_arguments)]
+pub fn menu_bar_option(
+    ui: &mut egui::Ui,
+    label: &str,
+    width: f32,
+    font: egui::FontId,
+    open: &mut bool,
+    opts: &[&str],
+    states: &mut [&mut bool],
+    h: f32,
+) -> egui::Response {
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, h - 2.0), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+    if resp.clicked() {
+        *open = !*open;
+    }
+    let (bg, fg) = if resp.hovered() {
+        (plt::YELLO, plt::INK)
+    } else {
+        if *open {
+            (plt::YELLO, plt::INK)
+        } else {
+            (plt::SURFACE, plt::TEXT)
+        }
+    };
 
-fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+    let p = ui.painter();
+    p.rect_filled(rect, SHARP, bg);
+    p.rect_stroke(rect, SHARP, border(), StrokeKind::Inside);
+    custom_text(
+        ui,
+        &label.to_uppercase(),
+        font.clone(),
+        pos2(
+            rect.center_top().x,
+            // rect.left_center().y - ((rect.height() / 4.0) + 0.5),
+            rect.left_center().y - ((rect.height() / 4.0) + 1.0),
+        ),
+        plt::letter_spacing::BASE,
+        // plt::BRIGHT,
+        fg,
+        Align::Center,
+    );
+    let mut popup_rect = egui::Rect::NOTHING;
+    if *open {
+        popup_rect = egui::Area::new(egui::Id::new(label).with("popup"))
+            .movable(false)
+            .fixed_pos(resp.rect.left_bottom())
+            .order(egui::Order::Tooltip)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new().show(ui, |ui| {
+                    for (i, label) in opts.iter().enumerate() {
+                        ui.spacing_mut().item_spacing = Vec2::ZERO;
+                        if menu_bar_popup(ui, label, label.len() as f32 * 14.0).clicked() {
+                            *open = false;
+                            if let Some(state) = states.get_mut(i) {
+                                **state = !**state;
+                            }
+                        }
+                    }
+                });
+            })
+            .response
+            .rect;
+    }
+
+    // close dropdown if clicked elsewhere
+    ui.ctx().input(|i| {
+        if i.pointer.primary_clicked()
+            && !resp
+                .interact_rect
+                .contains(i.pointer.interact_pos().unwrap_or_default())
+            && !popup_rect.contains(i.pointer.interact_pos().unwrap_or_default())
+        {
+            *open = false;
+        }
+    });
+
+    resp
+}
+
+pub fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     let bc = if resp.hovered() {
         plt::TEXT
     } else {
@@ -210,6 +295,42 @@ fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
         pos2(rect.left() + 10.0, rect.center().y - 7.0),
         plt::letter_spacing::BASE,
         plt::BRIGHT,
+        Align::LEFT,
+    );
+    resp
+}
+
+pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
+    // let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, 25.0), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+    let (bg, fg) = if resp.hovered() {
+        (plt::YELLO, plt::BG)
+    } else {
+        (plt::BG, plt::TEXT)
+    };
+    let p = ui.painter();
+    p.rect_filled(rect, SHARP, bg);
+    p.rect_stroke(
+        rect,
+        SHARP,
+        Stroke {
+            width: 0.5,
+            color: plt::BORDER,
+        },
+        StrokeKind::Inside,
+    );
+    let fonts = FontId {
+        size: plt::font_size::TINY,
+        family: FontFamily::Name("inter_medium".into()),
+    };
+    custom_text(
+        ui,
+        &label.to_uppercase(),
+        fonts.clone(),
+        pos2(rect.left() + 11.0, rect.center().y - 6.0),
+        plt::letter_spacing::BASE,
+        fg,
         Align::LEFT,
     );
     resp
@@ -251,7 +372,7 @@ pub fn dropdown_row<T: Labeled>(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::BG,
+        plt::SURFACE,
     );
     ui.painter().set(bg, bg_rect.clone());
     let br = bg_rect.visual_bounding_rect();
@@ -278,6 +399,15 @@ pub fn dropdown_row<T: Labeled>(
                 });
             });
     }
+    // close dropdown if clicked elsewhere
+    ui.ctx().input(|i| {
+        if i.pointer.primary_clicked()
+            && !br.contains(i.pointer.interact_pos().unwrap_or_default())
+            && !sel_rect.contains(i.pointer.interact_pos().unwrap_or_default())
+        {
+            *open = false;
+        }
+    });
 }
 
 fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
@@ -287,14 +417,17 @@ fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
         *value = min + t * (max - min);
     }
     let t = ((*value - min) / (max - min)).clamp(0.0, 1.0);
-    let p = ui.painter();
-    p.rect_filled(rect, CornerRadius::from(2), plt::VOID);
-    p.rect_stroke(rect, CornerRadius::from(2), border(), StrokeKind::Inside);
+    ui.painter()
+        .rect_filled(rect, CornerRadius::from(2), plt::VOID);
+    ui.painter()
+        .rect_stroke(rect, CornerRadius::from(2), border(), StrokeKind::Inside);
     let tw = 10.0;
     let x = rect.left() + t * (rect.width() - tw);
     let thumb = Rect::from_min_size(pos2(x, rect.top() - 6.0), vec2(tw, rect.height() + 12.0));
-    p.rect_filled(thumb, CornerRadius::from(2), plt::TEXT);
-    p.rect_stroke(thumb, CornerRadius::from(2), border(), StrokeKind::Inside);
+    ui.painter()
+        .rect_filled(thumb, CornerRadius::from(2), plt::TEXT);
+    ui.painter()
+        .rect_stroke(thumb, CornerRadius::from(2), border(), StrokeKind::Inside);
 }
 
 fn value_box(
@@ -375,7 +508,7 @@ pub fn slider_row(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::BG,
+        plt::SURFACE,
     );
     ui.painter().set(bg, bg_rect.clone());
     ui.painter().line_segment(
@@ -403,7 +536,8 @@ pub fn slider_row(
 
 /// import/export
 pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width: f32) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 38.0), Sense::click());
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, 38.0), Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     let bg = if resp.hovered() { plt::TEXT } else { plt::BG };
     let fg = if resp.hovered() { plt::INK } else { plt::DIM };
     let p = ui.painter();

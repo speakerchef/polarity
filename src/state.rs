@@ -25,6 +25,9 @@ pub struct AppState {
 
     pub fullscreen: bool,
     pub import_open: bool,
+    pub show_window_options: bool,
+    pub window_options_open: bool,
+    pub show_file_options: bool,
     pub window_drag_tooltip_modal_deadline: Option<Instant>,
     pub window_drag_tooltip_modal_open: bool,
     pub show_fullscreen_button: bool,
@@ -101,6 +104,9 @@ impl Default for AppState {
 
             fullscreen: false,
             import_open: false,
+            show_file_options: false,
+            show_window_options: false,
+            window_options_open: false,
             window_drag_tooltip_modal_deadline: None,
             window_drag_tooltip_modal_open: false,
 

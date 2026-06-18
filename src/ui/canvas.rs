@@ -8,9 +8,66 @@ use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
+    egui::CentralPanel::default()
+        .frame(
+            egui::Frame::new()
+                .fill(palette::VOID)
+                .inner_margin(0.0)
+                .outer_margin(0.0),
+        )
+        .show_inside(ui, |ui| {
+            if ui.ctx().input(
+                |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
+            ) || !st.fullscreen
+            {
+                let area = egui::Area::new("fullscreen_button".into())
+                    .movable(false)
+                    .show(ui.ctx(), |ui| {
+                        let resp = ui.allocate_rect(
+                            egui::Rect::from_min_size(
+                                pos2(
+                                    ui.viewport_rect().left_top().x
+                                        + if st.fullscreen { 16.0 } else { 22.0 },
+                                    ui.viewport_rect().left_top().y
+                                        + if st.fullscreen { 17.0 } else { 44.0 },
+                                ),
+                                vec2(20., 20.),
+                            ),
+                            egui::Sense::click(),
+                        );
+                        custom_text(
+                            ui,
+                            "\u{e5d0}",
+                            FontId {
+                                size: palette::font_size::ICON + 6.0,
+                                family: egui::FontFamily::Name("icons".into()),
+                            },
+                            pos2(
+                                resp.rect.left_center().x - 1.0,
+                                resp.rect.center_top().y - 3.5,
+                            ),
+                            palette::letter_spacing::BASE,
+                            if resp.hovered() {
+                                palette::YELLO
+                            } else {
+                                palette::BORDER
+                            },
+                            Align::LEFT,
+                        );
+                        if resp.clicked() {
+                            st.fullscreen = !st.fullscreen;
+                            st.window_drag_tooltip_modal_deadline.take();
+                        }
+                    });
+            }
+            custom_painting(ui, st, pl);
+        });
+}
+
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
-    let l = h.min(w);
+    let l = h.min(w) * 0.99;
     let canvas_size = vec2(l, l);
 
     let center = ui.max_rect().center();
@@ -21,12 +78,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             egui::Sense::click(),
         )
         .rect;
-    ui.painter().rect_filled(
-        rect,
-        egui::CornerRadius::ZERO,
-        Color32::BLACK,
-        // Color32::from_rgba_unmultiplied(6, 10, 10, 255),
-    );
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
     let Some(pl) = pl else {
         return;
     };
@@ -61,60 +114,4 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             bloom_amt: st.bloom,
         },
     ));
-}
-
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
-    egui::CentralPanel::default()
-        .frame(
-            egui::Frame::new()
-                .fill(palette::VOID)
-                .inner_margin(0.0)
-                .outer_margin(0.0),
-        )
-        .show_inside(ui, |ui| {
-            if ui.ctx().input(
-                |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
-            ) || !st.fullscreen
-            {
-                let area = egui::Area::new("fullscreen_button".into())
-                    .order(egui::Order::Middle)
-                    .movable(false)
-                    .show(ui.ctx(), |ui| {
-                        let resp = ui.allocate_rect(
-                            egui::Rect::from_min_size(
-                                pos2(
-                                    ui.max_rect().left_top().x + 4.,
-                                    ui.max_rect().left_top().y + 4.,
-                                ),
-                                vec2(20., 20.),
-                            ),
-                            egui::Sense::click(),
-                        );
-                        custom_text(
-                            ui,
-                            "\u{e5d0}",
-                            FontId {
-                                size: palette::font_size::ICON + 6.0,
-                                family: egui::FontFamily::Name("icons".into()),
-                            },
-                            pos2(
-                                (resp.rect.center_top().x / 1.5) - 3.0,
-                                (resp.rect.left_center().y / 1.5) - 5.0,
-                            ),
-                            palette::letter_spacing::BASE,
-                            if resp.hovered() {
-                                palette::YELLO
-                            } else {
-                                palette::BORDER
-                            },
-                            Align::LEFT,
-                        );
-                        if resp.clicked() {
-                            st.fullscreen = !st.fullscreen;
-                            st.window_drag_tooltip_modal_deadline.take();
-                        }
-                    });
-            }
-            custom_painting(ui, st, pl);
-        });
 }

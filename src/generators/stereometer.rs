@@ -524,9 +524,7 @@ enum FilterBand {
 
 impl Stereometer {
     fn points_to_quad_vertices(&self, l: f32, r: f32) -> [Pos2; 6] {
-        // let s = 0.003;
         let s = self.point_size;
-        //TODO: Point size
         [
             pos2(l + s, r + s),
             pos2(l + s, r - s),
@@ -586,28 +584,37 @@ impl Stereometer {
         }
     }
 
-    fn radial_scale(x: f32, y: f32) -> f32 {
-        let sf = 0.275;
+    fn radial_scale(&self, x: f32, y: f32) -> f32 {
+        let sf = match self.render_mode {
+            RenderMode::FullSpectrum => 0.325,
+            RenderMode::MultiBand => 0.275,
+        };
         let mag = (x * x + y * y).sqrt();
         let scaled = mag.powf(sf);
         if mag > 1e-6 { scaled / mag } else { 0.0 }
     }
 
     fn get_coord_from_meterkind(&self, l: f32, r: f32) -> (f32, f32) {
-        match self.kind {
+        let res = match self.kind {
             StereometerKind::LinearBipolar => {
                 ((l - r) * LINEAR_BIPOLAR_SF, (l + r) * LINEAR_BIPOLAR_SF)
             }
             StereometerKind::ScaledBipolar => {
-                let rscale = Self::radial_scale(l, r);
+                let rscale = self.radial_scale(l, r);
                 ((l - r) * rscale / SQRT_3, (l + r) * rscale / SQRT_3)
             }
             StereometerKind::LinearLissajous => (l, r),
             StereometerKind::ScaledLissajous => {
-                let rscale = Self::radial_scale(l, r) * 1.1;
+                let rscale = self.radial_scale(l, r)
+                    * if self.render_mode == RenderMode::MultiBand {
+                        1.1
+                    } else {
+                        1.0
+                    };
                 (l * rscale, r * rscale)
             }
-        }
+        };
+        (res.0.min(1.0), res.1.min(1.0))
     }
 
     fn set_positions(&mut self, is_live: bool, l: f32, r: f32) {
@@ -661,11 +668,17 @@ impl Stereometer {
         }
     }
 
-    fn clear_live_buffers(&mut self) {
+    pub fn clear_live_buffers(&mut self) {
         self.live_buffer.clear();
         self.live_low_buffer.clear();
         self.live_mid_buffer.clear();
         self.live_high_buffer.clear();
+    }
+    pub fn clear_trace_buffers(&mut self) {
+        self.trace_buffer.clear();
+        self.trace_low_buffer.clear();
+        self.trace_mid_buffer.clear();
+        self.trace_high_buffer.clear();
     }
 
     pub fn draw(&mut self, p: &AudioPlayer) {

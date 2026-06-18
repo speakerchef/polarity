@@ -4,23 +4,12 @@ use crate::generators::stereometer::{
 use crate::state::*;
 use crate::ui::{control_panel_widgets::*, palette};
 
-const ICON_IMPORT: &str = "\u{e5db}";
-const ICON_EXPORT: &str = "\u{e5d8}";
-
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::right("control_panel")
         .exact_size(320.0)
         .resizable(false)
         .frame(egui::Frame::NONE.fill(palette::BG))
         .show_inside(ui, |ui| {
-            ui.horizontal(|ui| {
-                let half = ui.available_width() / 2.0;
-                if project_handler_button(ui, ICON_IMPORT, "IMPORT", half).clicked() {
-                    st.import_open = true;
-                }
-                if project_handler_button(ui, ICON_EXPORT, "EXPORT", half).clicked() {}
-            });
-
             ui.vertical_centered(|ui| {
                 egui::Panel::right("control_panel_inner")
                     .exact_size(ui.available_size().x)

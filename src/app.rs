@@ -16,9 +16,14 @@ use crate::{
         MAX_TRACE_POINT_DENSITY, StereometerRenderResources, VERTICES_PER_QUAD,
     },
     state::PlaybackMode,
-    ui::{canvas, control_panel, custom_text, timeline},
+    ui::{
+        canvas, control_panel,
+        control_panel_widgets::menu_bar_option,
+        custom_text, timeline,
+        timeline_widgets::{SHARP, border},
+    },
 };
-use egui::{Align, CornerRadius, FontId, Key, Stroke, StrokeKind, emath::GuiRounding, pos2, vec2};
+use egui::{Align, FontId, Key, StrokeKind, pos2, vec2};
 
 use crate::{state::AppState, ui::palette as plt, ui::theme};
 
@@ -26,6 +31,172 @@ use crate::{state::AppState, ui::palette as plt, ui::theme};
 pub struct PolarityApp {
     st: AppState,
     player: Option<AudioPlayer>,
+}
+const MB_H: f32 = 22.0;
+const MB_GAP: f32 = 12.0;
+
+impl eframe::App for PolarityApp {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        if !self.st.fullscreen {
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.set_min_height(MB_H + MB_GAP);
+                egui::Area::new("menu_bar".into())
+                    .fixed_pos(ui.viewport_rect().left_top() + vec2(0.0, MB_GAP))
+                    .order(egui::Order::Foreground)
+                    .movable(false)
+                    .show(ui.ctx(), |ui| {
+                        ui.set_max_height(MB_H);
+                        ui.set_width(ui.content_rect().width());
+
+                        ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
+                            let resp = ui.allocate_rect(
+                                egui::Rect::from_min_size(
+                                    pos2(
+                                        ui.content_rect().left_top().x,
+                                        ui.content_rect().left_top().y + 12.0,
+                                    ),
+                                    vec2(ui.available_width(), ui.available_height()),
+                                ),
+                                egui::Sense::focusable_noninteractive(),
+                            );
+                            let mut rect = resp.rect;
+                            rect.min.y -= MB_GAP;
+                            ui.painter().rect_filled(rect, SHARP, plt::BG);
+
+                            ui.set_max_width(ui.available_rect_before_wrap().width());
+                            ui.set_min_width(ui.available_rect_before_wrap().width());
+                            ui.add_space(12.0);
+
+                            menu_bar_option(
+                                ui,
+                                "file",
+                                44.0,
+                                FontId {
+                                    family: egui::FontFamily::Name("inter_medium".into()),
+                                    size: plt::font_size::TINY,
+                                },
+                                &mut self.st.show_file_options,
+                                &["Import", "Export"],
+                                &mut [&mut self.st.import_open, &mut false],
+                                MB_H,
+                            );
+                            ui.add_space(1.0);
+
+                            menu_bar_option(
+                                ui,
+                                "window",
+                                70.0,
+                                FontId {
+                                    family: egui::FontFamily::Name("inter_medium".into()),
+                                    size: plt::font_size::TINY,
+                                },
+                                &mut self.st.show_window_options,
+                                &[""],
+                                &mut [&mut self.st.window_options_open, &mut false],
+                                MB_H,
+                            );
+
+                            ui.add_space(ui.available_width() - 36.0);
+                        });
+                    });
+            });
+        }
+        let mut resp = egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    // .inner_margin(if !self.st.fullscreen { 12.0 } else { 0.0 })
+                    .inner_margin(if !self.st.fullscreen {
+                        egui::Margin {
+                            bottom: 12,
+                            left: 12,
+                            right: 12,
+                            top: 0,
+                        }
+                    } else {
+                        0.into()
+                    })
+                    .fill(plt::BG),
+            )
+            .show_inside(ui, |ui| {
+                if !self.st.fullscreen {
+                    timeline::draw(ui, &mut self.st, &mut self.player);
+                    control_panel::draw(ui, &mut self.st);
+
+                    frame.winit_window().unwrap().set_decorations(true);
+                    frame
+                        .winit_window()
+                        .unwrap()
+                        .set_min_inner_size(Some(LogicalSize::new(720.0, 480.0)));
+                } else {
+                    ui.request_repaint_after(Duration::from_millis(16));
+                    self.show_window_drag_tooltip_modal(ui);
+
+                    // remove titlebar and corners
+                    frame.winit_window().unwrap().set_decorations(false);
+                    frame
+                        .winit_window()
+                        .unwrap()
+                        .set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
+
+                    // allow drag anywhere if any key is down
+                    if ui.ctx().input(|i| {
+                        (!i.keys_down.is_empty() && !i.key_down(Key::Space))
+                            || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
+                                || i.modifiers.matches_logically(egui::Modifiers::SHIFT))
+                    }) {
+                        frame
+                            .winit_window()
+                            .unwrap()
+                            .drag_window()
+                            .unwrap_or_default();
+                    }
+                }
+                canvas::draw(ui, &mut self.st, &self.player);
+            })
+            .response;
+
+        if !self.st.fullscreen {
+            resp.rect = resp.rect.translate(vec2(0., -6.));
+            resp.rect = resp.rect.shrink2(vec2(12.0, 6.0));
+            ui.painter()
+                .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+        }
+    }
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(p) = &self.player
+            && !p.is_paused()
+        {
+            ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
+        }
+
+        // Open file dialog
+        if self.st.import_open {
+            self.st.file_dialog.pick_file();
+            self.st.import_open = false;
+        }
+
+        // Check if user picked a file
+        if let Some(path) = self
+            .st
+            .file_dialog
+            .update(ctx)
+            .picked()
+            .map(|p| p.to_path_buf())
+        {
+            self.load_file(path);
+        };
+        self.update_filters();
+        self.handle_playback(ctx);
+
+        // Check if playback has ended
+        if let Some(player) = &self.player
+            && player.ended()
+        {
+            println!("Respawning player");
+            let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
+            self.spawn_audio_player(player.contents.path.to_path_buf(), paused);
+        }
+    }
 }
 
 fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
@@ -365,6 +536,8 @@ impl PolarityApp {
     pub fn spawn_audio_player(&mut self, path: PathBuf, paused: bool) {
         // Clear old player
         self.player.take();
+        self.st.stereo.clear_live_buffers();
+        self.st.stereo.clear_trace_buffers();
 
         self.player = AudioPlayer::new(path, paused)
             .inspect_err(|err| println!("{}", err))
@@ -388,7 +561,7 @@ impl PolarityApp {
             self.st.set_default_freqs = true;
             let st = &mut self.st.stereo;
             let filters = Some((
-                StereoFilter::from_coeffs_butterworth(Type::LowPass, 200., p.contents.sample_rate),
+                StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., p.contents.sample_rate),
                 StereoFilter::from_coeffs_butterworth(
                     Type::BandPass,
                     1000.,
@@ -396,7 +569,7 @@ impl PolarityApp {
                 ),
                 StereoFilter::from_coeffs_butterworth(
                     Type::HighPass,
-                    5000.,
+                    3000.,
                     p.contents.sample_rate,
                 ),
             ));
@@ -464,135 +637,38 @@ impl PolarityApp {
         }
 
         if self.st.window_drag_tooltip_modal_open {
-            egui::Area::new("window drag tooltip".into()).show(ui.ctx(), |ui| {
-                let resp = ui.allocate_rect(
-                    egui::Rect::from_min_size(
-                        ui.content_rect().left_top().add(vec2(12., 14.)),
-                        vec2(160., 30.),
-                    ),
-                    egui::Sense::click(),
-                );
-                custom_text(
-                    ui,
-                    "Press and Hold any Key to Move the Window",
-                    FontId {
-                        size: plt::font_size::MED,
-                        family: egui::FontFamily::Name("inter_regular".into()),
-                    },
-                    pos2(
-                        resp.rect.center_top().x - 40.0,
-                        resp.rect.left_center().y - 8.,
-                    ),
-                    plt::letter_spacing::BASE,
-                    plt::DIM,
-                    Align::LEFT,
-                );
-            });
+            egui::Area::new("window drag tooltip".into())
+                .order(egui::Order::Background)
+                .show(ui.ctx(), |ui| {
+                    let mut resp = ui.allocate_rect(
+                        egui::Rect::from_min_size(
+                            ui.content_rect().left_top().add(vec2(48., 14.)),
+                            vec2(360., 30.),
+                        ),
+                        egui::Sense::click(),
+                    );
+                    resp.interact_rect.set_height(0.0);
+                    resp.interact_rect.set_width(0.0);
+
+                    custom_text(
+                        ui,
+                        "PRESS AND HOLD ANY KEY TO MOVE THE WINDOW",
+                        FontId {
+                            size: plt::font_size::META,
+                            family: egui::FontFamily::Name("inter_regular".into()),
+                        },
+                        pos2(resp.rect.left(), resp.rect.left_center().y - 9.0),
+                        plt::letter_spacing::BASE,
+                        plt::BORDER,
+                        Align::LEFT,
+                    );
+                });
         }
 
         if let Some(start_time) = self.st.window_drag_tooltip_modal_deadline
             && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
         {
             self.st.window_drag_tooltip_modal_open = false;
-        }
-    }
-}
-
-impl eframe::App for PolarityApp {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let resp = egui::CentralPanel::default()
-            .frame(
-                egui::Frame::NONE
-                    .inner_margin(if !self.st.fullscreen { 12.0 } else { 0.0 })
-                    .fill(plt::VOID),
-            )
-            .show_inside(ui, |ui| {
-                if !self.st.fullscreen {
-                    timeline::draw(ui, &mut self.st, &mut self.player);
-                    control_panel::draw(ui, &mut self.st);
-
-                    frame.winit_window().unwrap().set_decorations(true);
-                    frame
-                        .winit_window()
-                        .unwrap()
-                        .set_min_inner_size(Some(LogicalSize::new(720.0, 480.0)));
-                } else {
-                    ui.request_repaint_after(Duration::from_millis(16));
-                    self.show_window_drag_tooltip_modal(ui);
-
-                    // remove titlebar and corners
-                    frame.winit_window().unwrap().set_decorations(false);
-                    frame
-                        .winit_window()
-                        .unwrap()
-                        .set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
-
-                    // allow drag anywhere if any key is down
-                    if ui.ctx().input(|i| {
-                        (!i.keys_down.is_empty() && !i.key_down(Key::Space))
-                            || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
-                                || i.modifiers.matches_logically(egui::Modifiers::SHIFT))
-                    }) {
-                        frame
-                            .winit_window()
-                            .unwrap()
-                            .drag_window()
-                            .unwrap_or_default();
-                    }
-                }
-                canvas::draw(ui, &mut self.st, &self.player);
-            });
-
-        let border_rect = resp
-            .response
-            .rect
-            .shrink(if !self.st.fullscreen { 12.0 } else { 0.0 })
-            .round_ui();
-        if !self.st.fullscreen {
-            ui.painter().rect_stroke(
-                border_rect,
-                CornerRadius::ZERO,
-                Stroke {
-                    width: 1.0,
-                    color: plt::BORDER,
-                },
-                StrokeKind::Inside,
-            );
-        }
-    }
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Some(p) = &self.player
-            && !p.is_paused()
-        {
-            ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
-        }
-
-        // Open file dialog
-        if self.st.import_open {
-            self.st.file_dialog.pick_file();
-            self.st.import_open = false;
-        }
-
-        // Check if user picked a file
-        if let Some(path) = self
-            .st
-            .file_dialog
-            .update(ctx)
-            .picked()
-            .map(|p| p.to_path_buf())
-        {
-            self.load_file(path);
-        };
-        self.update_filters();
-        self.handle_playback(ctx);
-
-        // Check if playback has ended
-        if let Some(player) = &self.player
-            && player.ended()
-        {
-            println!("Respawning player");
-            let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
-            self.spawn_audio_player(player.contents.path.to_path_buf(), paused);
         }
     }
 }
