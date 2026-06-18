@@ -220,7 +220,7 @@ pub fn menu_bar_option(
         pos2(
             rect.center_top().x,
             // rect.left_center().y - ((rect.height() / 4.0) + 0.5),
-            rect.left_center().y - ((rect.height() / 4.0) + 1.0),
+            rect.left_center().y - ((rect.height() / 4.0) + 2.0),
         ),
         plt::letter_spacing::BASE,
         // plt::BRIGHT,

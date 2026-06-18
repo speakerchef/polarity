@@ -24,7 +24,8 @@ pub const DIM: Color32 = Color32::from_rgb(0x8a, 0x8a, 0x8a);
 pub const TEXT: Color32 = Color32::from_rgb(0xcc, 0xcc, 0xcc);
 pub const BRIGHT: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xe8);
 
-pub const LIVE: Color32 = Color32::from_rgb(0x5e, 0xc5, 0x7b);
+// pub const LIVE: Color32 = Color32::from_rgb(0x5e, 0xc5, 0x7b);
+pub const LIVE: Color32 = Color32::from_rgb(0x4f, 0xda, 0x6e); //#4fda6e
 pub const GREEN: Color32 = Color32::from_rgb(72, 173, 102);
 // pub const YELLO: Color32 = Color32::from_rgb(210, 140, 60);
 pub const YELLO: Color32 = Color32::from_rgb(255, 158, 51);

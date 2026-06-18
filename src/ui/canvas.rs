@@ -2,7 +2,7 @@
 use eframe::egui_wgpu;
 use egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 
-use crate::generators::stereometer::{EffectsCallback, RendererCallback};
+use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::ui::timeline_widgets::{SHARP, border};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
@@ -113,5 +113,9 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             top_left: rect.left_top(),
             bloom_amt: st.bloom,
         },
+    ));
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        OutputCallback,
     ));
 }

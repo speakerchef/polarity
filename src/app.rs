@@ -11,9 +11,11 @@ use wgpu::{Device, util::DeviceExt};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
+    generators::rendering::{
+        BlitRenderResources, BloomRenderResources, OutputResources, StereometerRenderResources,
+    },
     generators::stereometer::{
-        BlitRenderResources, BloomRenderResources, FilterMode, MAX_LIVE_POINT_DENSITY,
-        MAX_TRACE_POINT_DENSITY, StereometerRenderResources, VERTICES_PER_QUAD,
+        FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD,
     },
     state::PlaybackMode,
     ui::{
@@ -32,7 +34,7 @@ pub struct PolarityApp {
     st: AppState,
     player: Option<AudioPlayer>,
 }
-const MB_H: f32 = 22.0;
+const MB_H: f32 = 18.0;
 const MB_GAP: f32 = 12.0;
 
 impl eframe::App for PolarityApp {
@@ -502,6 +504,23 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
         });
 }
 
+fn init_output_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
+    let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("uniform buffer"),
+        contents: bytemuck::cast_slice(&[0u32; 1440 * 1440]), // 32 bytes aligned
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+    });
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(OutputResources {
+            output_buffer,
+            target_format: wgpu_render_state.target_format,
+            tex: None,
+        });
+}
+
 fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
     let wgpu_render_state = cc
         .wgpu_render_state
@@ -512,6 +531,7 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
     init_stereometer_render_resources(device, wgpu_render_state);
     init_blit_render_resources(device, wgpu_render_state);
     init_bloom_render_resources(device, wgpu_render_state);
+    init_output_render_resources(device, wgpu_render_state);
 }
 
 impl PolarityApp {
