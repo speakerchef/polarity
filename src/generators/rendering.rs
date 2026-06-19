@@ -321,20 +321,13 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         let meter_res: &StereometerRenderResources = resources.get().unwrap();
-        let blit_res: &BlitRenderResources = resources.get().unwrap();
         let bloom_res: &BloomRenderResources = resources.get().unwrap();
 
         let tex = meter_res.tex.as_ref().unwrap();
-        let full_mip_view = tex.create_view(&wgpu::TextureViewDescriptor {
+        let src_view = tex.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2),
             base_mip_level: 0,
             mip_level_count: None,
-            ..Default::default()
-        });
-        let mut src_view = tex.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            base_mip_level: 0,
-            mip_level_count: Some(1),
             ..Default::default()
         });
         let bloom_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -343,7 +336,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&full_mip_view),
+                    resource: wgpu::BindingResource::TextureView(&src_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -356,52 +349,6 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
             ],
         });
 
-        for mip in 1..tex.mip_level_count() {
-            let dst_view = tex.create_view(&wgpu::TextureViewDescriptor {
-                format: Some(meter_res.target_format),
-                base_mip_level: mip,
-                mip_level_count: Some(1),
-                ..Default::default()
-            });
-
-            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &blit_res.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&src_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&blit_res.sampler),
-                    },
-                ],
-            });
-
-            let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &dst_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&blit_res.pipeline);
-            pass.set_bind_group(0, &texture_bind_group, &[]);
-            pass.draw(0..6, 0..1);
-
-            // make sure that current mip is src in next iteration.
-            src_view = dst_view;
-        }
         let bloom_res = resources.get_mut::<BloomRenderResources>().unwrap();
         bloom_res.bind_group = Some(bloom_bind_group);
         bloom_res.prepare(
@@ -415,6 +362,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         let (w, h) = (meter_tex.width(), meter_tex.height());
 
         let output_res: &mut OutputResources = resources.get_mut().unwrap();
+
         let resized = output_res
             .tex
             .as_ref()
@@ -440,7 +388,8 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
             });
             output_res.tex = Some(output_texture);
         }
-        let src_view = output_res
+
+        let dst_view = output_res
             .tex
             .as_ref()
             .unwrap()
@@ -454,7 +403,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         let mut output_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("output pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &src_view,
+                view: &dst_view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -468,7 +417,6 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
             multiview_mask: None,
         });
         let bloom_res = resources.get::<BloomRenderResources>().unwrap();
-
         output_pass.set_pipeline(&bloom_res.pipeline);
         output_pass.set_bind_group(0, &bloom_res.bind_group, &[]);
         output_pass.draw(0..6, 0..1);
