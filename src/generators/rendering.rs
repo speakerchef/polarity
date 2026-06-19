@@ -94,10 +94,23 @@ impl StereometerRenderResources {
 }
 pub struct OutputResources {
     pub output_buffer: wgpu::Buffer,
+    pub params_buffer: wgpu::Buffer,
     pub target_format: wgpu::TextureFormat,
-    // pub pipeline: wgpu::RenderPipeline,
-    // pub bind_group: wgpu::BindGroup,
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind_group: Option<wgpu::BindGroup>,
+    pub bind_group_layout: wgpu::BindGroupLayout,
     pub tex: Option<wgpu::Texture>,
+    pub sampler: wgpu::Sampler,
+}
+impl OutputResources {
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, top_left: Pos2) {
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
+    }
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.draw(0..6, 0..1);
+    }
 }
 
 async fn read_output_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::Device, ts: Vec2) {
@@ -282,11 +295,6 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
     }
 }
 
-pub struct BlitRenderResources {
-    pub pipeline: wgpu::RenderPipeline,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub sampler: wgpu::Sampler,
-}
 pub struct BloomRenderResources {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -295,9 +303,8 @@ pub struct BloomRenderResources {
     pub params_buffer: wgpu::Buffer,
 }
 impl BloomRenderResources {
-    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, top_left: Pos2, bloom_amt: f32) {
-        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
-        queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[bloom_amt]));
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, bloom_amt: f32) {
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[bloom_amt]));
     }
 
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
@@ -322,6 +329,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
     ) -> Vec<wgpu::CommandBuffer> {
         let meter_res: &StereometerRenderResources = resources.get().unwrap();
         let bloom_res: &BloomRenderResources = resources.get().unwrap();
+        let out_res: &OutputResources = resources.get().unwrap();
 
         let tex = meter_res.tex.as_ref().unwrap();
         let src_view = tex.create_view(&wgpu::TextureViewDescriptor {
@@ -351,18 +359,13 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
 
         let bloom_res = resources.get_mut::<BloomRenderResources>().unwrap();
         bloom_res.bind_group = Some(bloom_bind_group);
-        bloom_res.prepare(
-            device,
-            queue,
-            self.top_left * screen_descriptor.pixels_per_point,
-            self.bloom_amt,
-        );
+        bloom_res.prepare(device, queue, self.bloom_amt);
+
         let meter_res: &StereometerRenderResources = resources.get().unwrap();
         let meter_tex = meter_res.tex.as_ref().unwrap();
         let (w, h) = (meter_tex.width(), meter_tex.height());
 
         let output_res: &mut OutputResources = resources.get_mut().unwrap();
-
         let resized = output_res
             .tex
             .as_ref()
@@ -399,6 +402,31 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
                 mip_level_count: None,
                 ..Default::default()
             });
+        let out_res = resources.get_mut::<OutputResources>().unwrap();
+        let output_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("output"),
+            layout: &out_res.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&dst_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&out_res.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: out_res.params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        out_res.bind_group = Some(output_bind_group);
+        out_res.prepare(
+            device,
+            queue,
+            self.top_left * screen_descriptor.pixels_per_point,
+        );
 
         let mut output_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("output pass"),
@@ -430,7 +458,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         render_pass: &mut wgpu::RenderPass<'static>,
         resources: &egui_wgpu::CallbackResources,
     ) {
-        let resources: &BloomRenderResources = resources.get().unwrap();
+        let resources: &OutputResources = resources.get().unwrap();
         resources.paint(render_pass);
     }
 }
@@ -444,9 +472,9 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
         command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        let output_res: &OutputResources = resources.get().unwrap();
+        let res: &OutputResources = resources.get().unwrap();
 
-        let tex = output_res.tex.as_ref().unwrap();
+        let tex = res.tex.as_ref().unwrap();
         let tex_img_copy = tex.as_image_copy();
 
         let out_res: &OutputResources = resources.get().unwrap();

@@ -11,9 +11,7 @@ use wgpu::{Device, util::DeviceExt};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
-    generators::rendering::{
-        BlitRenderResources, BloomRenderResources, OutputResources, StereometerRenderResources,
-    },
+    generators::rendering::{BloomRenderResources, OutputResources, StereometerRenderResources},
     generators::stereometer::{
         FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD,
     },
@@ -328,85 +326,7 @@ fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_w
             tex: None,
         });
 }
-fn init_blit_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("blit"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("./blit_shader.wgsl").into()),
-    });
 
-    let blit_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("blit"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("blit"),
-        bind_group_layouts: &[Some(&blit_bind_group_layout)],
-        immediate_size: 0,
-    });
-
-    let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("blit"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: None,
-            buffers: &[],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu_render_state.target_format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    });
-
-    let blit_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("blit sampler"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Linear,
-        ..Default::default()
-    });
-
-    wgpu_render_state
-        .renderer
-        .write()
-        .callback_resources
-        .insert(BlitRenderResources {
-            pipeline: blit_pipeline,
-            bind_group_layout: blit_bind_group_layout,
-            sampler: blit_sampler,
-        });
-}
 fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("bloom"),
@@ -439,7 +359,7 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(32),
+                        min_binding_size: NonZeroU64::new(16),
                     },
                     count: None,
                 },
@@ -487,7 +407,7 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
     });
     let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0f32; 8]), // 32 bytes aligned
+        contents: bytemuck::cast_slice(&[0f32; 4]), // 16 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
 
@@ -505,19 +425,106 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
 }
 
 fn init_output_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
-    let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("output"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("./output_shader.wgsl").into()),
+    });
+
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("output"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("output"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("output"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: None,
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("output sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    });
+    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0u32; 1440 * 1440]), // 32 bytes aligned
+        contents: bytemuck::cast_slice(&[0f32; 4]), // 16 bytes aligned
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+    });
+    let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("output buffer"),
+        contents: bytemuck::cast_slice(&[0u32; 4096 * 4096]),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
     });
+
     wgpu_render_state
         .renderer
         .write()
         .callback_resources
         .insert(OutputResources {
+            pipeline,
+            tex: None,
+            sampler,
+            bind_group: None,
+            bind_group_layout: bgl,
+            params_buffer,
             output_buffer,
             target_format: wgpu_render_state.target_format,
-            tex: None,
         });
 }
 
@@ -529,7 +536,6 @@ fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
     let device = &wgpu_render_state.device;
 
     init_stereometer_render_resources(device, wgpu_render_state);
-    init_blit_render_resources(device, wgpu_render_state);
     init_bloom_render_resources(device, wgpu_render_state);
     init_output_render_resources(device, wgpu_render_state);
 }

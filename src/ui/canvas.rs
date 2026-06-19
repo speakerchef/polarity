@@ -114,6 +114,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             bloom_amt: st.bloom,
         },
     ));
+
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         OutputCallback,

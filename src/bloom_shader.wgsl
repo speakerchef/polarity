@@ -1,5 +1,4 @@
 struct Params {
-    @size(16) top_left: vec2f,
     @size(16) bloom_amt: f32,
 }
 
@@ -46,7 +45,7 @@ const RADIUS: i32 = 10;
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4<f32> {
     let size = vec2f(textureDimensions(tex));
-    let uv = (pos.xy - params.top_left) / size;
+    let uv = (pos.xy) / size;
     let pixel_size = 1.0 / size;
 
     let src = textureSample(tex, tex_sampler, uv).rgb;
