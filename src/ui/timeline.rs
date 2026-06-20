@@ -1,93 +1,15 @@
 use std::time::Duration;
 
-use egui::{Align, CornerRadius, Stroke, pos2, vec2};
+use eframe::egui;
+use eframe::egui::{Align, vec2};
 
 use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
-use crate::ui::{custom_text, palette as plt, timeline_widgets::*};
-
-fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
-    let (left_channel, right_channel) = p
-        .contents
-        .samples
-        .chunks_exact(2)
-        .map(|frame| {
-            let l = frame.first().unwrap();
-            let r = frame.last().unwrap_or(l);
-            (l, r)
-        })
-        .collect::<(Vec<f32>, Vec<f32>)>();
-
-    let avail_w = rect.width() * 6.0;
-    let avail_h = rect.height() - 1.0;
-    let step: usize = (left_channel.len() as f32 / avail_w) as usize;
-    let mut prev_left_top = pos2(0.0, 0.0);
-    (0..avail_w as usize).for_each(|i| {
-        let slice = &left_channel[i * step..i * step + step];
-        let max = slice
-            .iter()
-            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
-        let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG;
-        let mut inner = ui.allocate_rect(
-            egui::Rect::from_min_size(
-                pos2(
-                    rect.left_top().x + i as f32 / 6.0,
-                    rect.left_center().y - 0.25,
-                ),
-                vec2(0.3, h.abs()),
-            ),
-            egui::Sense::hover(),
-        );
-        // remove interaction
-        inner.interact_rect.set_width(0.0);
-        inner.interact_rect.set_height(0.0);
-
-        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
-        ui.painter().line_segment(
-            [prev_left_top, inner.rect.left_bottom()],
-            Stroke {
-                width: 0.3,
-                color: fill_col,
-            },
-        );
-        prev_left_top = inner.rect.left_bottom();
-    });
-
-    let step: usize = (right_channel.len() as f32 / avail_w) as usize;
-    let mut prev_left_top = pos2(0.0, 0.0);
-    (0..avail_w as usize).for_each(|i| {
-        let slice = &right_channel[i * step..i * step + step];
-        let max = slice
-            .iter()
-            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
-        let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG;
-        let mut inner = ui.allocate_rect(
-            egui::Rect::from_min_size(
-                pos2(
-                    rect.left_top().x + i as f32 / 6.0,
-                    rect.left_center().y - h.abs(),
-                ),
-                vec2(0.3, h.abs()),
-            ),
-            egui::Sense::hover(),
-        );
-        // remove interaction
-        inner.interact_rect.set_width(0.0);
-        inner.interact_rect.set_height(0.0);
-
-        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
-        ui.painter().line_segment(
-            [prev_left_top, inner.rect.left_top()],
-            Stroke {
-                width: 0.3,
-                color: fill_col,
-            },
-        );
-        prev_left_top = inner.rect.left_top();
-    });
-}
+use crate::ui::{palette as plt, timeline_widgets::*};
+const SKIP_START: &str = "\u{e045}";
+const PLAY: &str = "\u{e037}";
+const PAUSE: &str = "\u{e034}";
+const SKIP_END: &str = "\u{e044}";
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) {
     egui::Panel::bottom("timeline")
@@ -102,10 +24,6 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
                     vec2(ui.available_width(), H),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
-                        const SKIP_START: &str = "\u{e045}";
-                        const PLAY: &str = "\u{e037}";
-                        const PAUSE: &str = "\u{e034}";
-                        const SKIP_END: &str = "\u{e044}";
                         ui.add_space(16.0);
 
                         let skip_start_resp = transport_button(ui, SKIP_START, plt::DIM, false);
@@ -189,10 +107,6 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
             );
             let transport_rect = bgr.visual_bounding_rect();
             ui.painter().set(bg, bgr);
-            // ui.painter().line_segment(
-            //     [transport_rect.left_bottom(), transport_rect.right_bottom()],
-            //     border(),
-            // );
 
             let mut avail_size = ui.available_size();
             avail_size.y -= 1.0;
@@ -208,78 +122,10 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
             if let Some(p) = pl {
                 waveform = waveform.on_hover_and_drag_cursor(egui::CursorIcon::Text);
                 render_waveform(ui, p, &waveform.rect);
-                let mut playback_head = ui.allocate_rect(
-                    egui::Rect::from_min_size(
-                        pos2(
-                            transport_rect.left_bottom().x
-                                + (p.position().as_secs_f32() / p.contents.duration.as_secs_f32())
-                                    * avail_size.x,
-                            transport_rect.left_bottom().y,
-                        ),
-                        vec2(1.5, avail_size.y),
-                    ),
-                    egui::Sense::click(),
-                );
-                playback_head.interact_rect.set_height(0.0);
-                playback_head.interact_rect.set_width(0.0);
-
-                ui.painter().rect_filled(
-                    playback_head.rect,
-                    CornerRadius::from(1.),
-                    if p.is_paused() { plt::YELLO } else { plt::LIVE },
-                );
-
-                // click to seek
-                if ui
-                    .ctx()
-                    .input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
-                    && (waveform.hovered() || waveform.dragged())
-                {
-                    ui.ctx().input(|i| {
-                        i.pointer.hover_pos().inspect(|pos| {
-                            let ratio = (pos.x - 14.0) / avail_size.x;
-                            p.try_seek(Duration::from_secs_f32(
-                                (ratio * p.contents.duration.as_secs_f32()).max(0.0),
-                            ))
-                            .unwrap();
-                        })
-                    });
-                }
+                playback_head(ui, avail_size, transport_rect, waveform, p);
             } else {
                 waveform = waveform.on_hover_and_drag_cursor(egui::CursorIcon::Cell);
-                if waveform.clicked() {
-                    st.import_open = true;
-                }
-                custom_text(
-                    ui,
-                    "\u{f09b}",
-                    egui::FontId {
-                        size: plt::font_size::ICON,
-                        family: egui::FontFamily::Name("icons".into()),
-                    },
-                    pos2(
-                        waveform.rect.center_top().x - 64.0,
-                        waveform.rect.left_center().y - 9.5,
-                    ),
-                    plt::letter_spacing::BASE,
-                    plt::DIM,
-                    Align::LEFT,
-                );
-                custom_text(
-                    ui,
-                    "IMPORT AUDIO",
-                    egui::FontId {
-                        size: plt::font_size::BODY,
-                        family: egui::FontFamily::Name("inter_regular".into()),
-                    },
-                    pos2(
-                        waveform.rect.center_top().x - 40.0,
-                        waveform.rect.left_center().y - 6.0,
-                    ),
-                    plt::letter_spacing::BASE,
-                    plt::DIM,
-                    Align::LEFT,
-                );
+                file_import_prompt(ui, st, waveform);
             }
         });
 }

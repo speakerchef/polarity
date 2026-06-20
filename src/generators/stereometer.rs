@@ -1,5 +1,5 @@
 use crate::{Rgba, audio::StereoFilter, labeled_enum, state::Labeled};
-use egui::{Pos2, pos2};
+use eframe::egui::{Pos2, pos2};
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
@@ -105,7 +105,6 @@ pub const VERTICES_PER_QUAD: usize = 6;
 const SQRT_3: f32 = 1.7320508;
 const LINEAR_BIPOLAR_SF: f32 = 0.5;
 
-#[derive(Default)]
 pub struct Stereometer {
     pub kind: StereometerKind,
     pub render_mode: RenderMode,
@@ -136,6 +135,55 @@ pub struct Stereometer {
     pub trace_high_buffer: VecDeque<Pos2>,
 
     pub point_size: f32,
+}
+
+impl Default for Stereometer {
+    fn default() -> Self {
+        Self {
+            filter_freq: 1.0,
+            last_freq: 1.0,
+            fs_color: Rgba::new(0, 255, 0, 255),
+            // mb_color: [
+            //     Rgba::new(100, 0, 255, 255),
+            //     Rgba::new(255, 102, 0, 255),
+            //     Rgba::new(180, 255, 0, 255),
+            // ],
+            // mb_color: [
+            //     Rgba::new(255, 0, 64, 255),
+            //     Rgba::new(0, 51, 235, 255),
+            //     Rgba::new(0, 225, 215, 255),
+            // ],
+            // mb_color: [
+            //     Rgba::new(110, 0, 255, 255),
+            //     Rgba::new(0, 155, 255, 255),
+            //     Rgba::new(230, 0, 140, 255),
+            // ],
+            mb_color: [
+                Rgba::new(116, 0, 184, 255),
+                Rgba::new(83, 89, 255, 255),
+                Rgba::new(128, 88, 255, 255),
+            ],
+            point_size: 0.0040,
+            kind: StereometerKind::default(),
+            render_mode: RenderMode::MultiBand,
+            live_density: Default::default(),
+            trace_density: Default::default(),
+            filter_mode: FilterMode::Off,
+            live_fs_filters: Default::default(),
+            trace_fs_filters: Default::default(),
+            live_mb_filters: Default::default(),
+            trace_mb_filters: Default::default(),
+            live_buffer: Default::default(),
+            live_low_buffer: Default::default(),
+            live_mid_buffer: Default::default(),
+            live_high_buffer: Default::default(),
+            last_sample_idx: Default::default(),
+            trace_buffer: Default::default(),
+            trace_low_buffer: Default::default(),
+            trace_mid_buffer: Default::default(),
+            trace_high_buffer: Default::default(),
+        }
+    }
 }
 
 enum FilterBand {
@@ -303,11 +351,12 @@ impl Stereometer {
         self.trace_high_buffer.clear();
     }
 
-    pub fn draw(&mut self, p: &AudioPlayer) {
+    pub fn draw(&mut self, p: &AudioPlayer, export_sample_idx: Option<usize>) {
         let num_channels = p.contents.num_channels as usize;
 
         let sample_pos = p.position().as_secs_f64();
-        let sample_idx = (sample_pos * p.contents.sample_rate as f64) as usize;
+        let sample_idx =
+            export_sample_idx.unwrap_or((sample_pos * p.contents.sample_rate as f64) as usize);
         let last_idx = self.last_sample_idx;
         if sample_idx < last_idx {
             self.trace_buffer.clear();

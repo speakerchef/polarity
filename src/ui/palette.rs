@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_variables)]
-use egui::Color32;
+use eframe::egui::Color32;
 
 pub const VOID: Color32 = Color32::from_rgb(0x00, 0x00, 0x00);
 // pub const BG: Color32 = Color32::from_rgb(0x0d, 0x0d, 0x0d);

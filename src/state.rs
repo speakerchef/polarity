@@ -1,10 +1,16 @@
 #![allow(dead_code)]
 use std::{path::Path, time::Instant};
 
-use egui::{Align2, vec2};
+use eframe::egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog};
 
-use crate::{Rgba, generators::stereometer::Stereometer};
+use crate::{
+    generators::{
+        rendering::{BloomRenderResources, OutputResources, StereometerRenderResources},
+        stereometer::Stereometer,
+    },
+    labeled_enum,
+};
 
 #[derive(Default)]
 pub enum PlaybackMode {
@@ -17,11 +23,113 @@ pub trait Labeled: Copy + PartialEq {
     fn text(self) -> &'static str;
 }
 
+labeled_enum!(
+    Resolution {
+        P480 =>"480p",
+        P720 =>"720p",
+        P1080=>"1080p",
+        P1200=>"1200p",
+        P1440=>"1440p",
+        P1600=>"1600p",
+        P2560=>"2560p",
+    },
+    P1080
+);
+
+impl Resolution {
+    pub fn resolution(self) -> (u32, u32) {
+        match self {
+            Resolution::P480 => (480, 480),
+            Resolution::P720 => (720, 720),
+            Resolution::P1080 => (1080, 1080),
+            Resolution::P1200 => (1200, 1200),
+            Resolution::P1440 => (1440, 1440),
+            Resolution::P1600 => (1600, 1600),
+            Resolution::P2560 => (2560, 2560),
+        }
+    }
+}
+
+impl Labeled for Resolution {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+labeled_enum!(Fps {
+    FPS24 => "24",
+    FPS30 => "30",
+    FPS45 => "45",
+    FPS60 => "60",
+}, FPS45);
+
+impl Fps {
+    pub fn fps(self) -> usize {
+        match self {
+            Fps::FPS24 => 24,
+            Fps::FPS30 => 30,
+            Fps::FPS45 => 45,
+            Fps::FPS60 => 60,
+        }
+    }
+}
+
+impl Labeled for Fps {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+labeled_enum!(ExportQuality {
+    Worst => "Worst (Fastest)",
+    Good => "Good",
+    Best => "Best (Very Slow)",
+}, Good);
+
+impl ExportQuality {
+    pub fn quality(self) -> usize {
+        match self {
+            ExportQuality::Worst => 20,
+            ExportQuality::Good => 18,
+            ExportQuality::Best => 14,
+        }
+    }
+}
+
+impl Labeled for ExportQuality {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+#[derive(Default)]
+pub struct ExportConfig {
+    pub resolution: Resolution,
+    pub frame_rate: Fps,
+    pub quality: ExportQuality,
+}
+
 pub struct AppState {
     pub file_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
     pub stereo: Stereometer,
     pub pos: [f32; 2],
+
+    pub stereometer_render_resources: Option<StereometerRenderResources>,
+    pub bloom_render_resources: Option<BloomRenderResources>,
+    pub output_render_resources: Option<OutputResources>,
+
+    pub export_config: ExportConfig,
+    pub show_export_resolution: bool,
+    pub show_export_fps: bool,
+    pub show_export_quality: bool,
+    pub cur_frame_idx: usize,
+    pub export_sample_idx: usize,
+    pub show_export_modal: bool,
+    pub start_render: bool,
+    pub rendering: bool,
+    pub join_handle: Option<std::thread::JoinHandle<()>>,
+    pub export_tx: Option<flume::Sender<Vec<u8>>>,
 
     pub fullscreen: bool,
     pub import_open: bool,
@@ -71,35 +179,24 @@ impl Default for AppState {
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
             show_fullscreen_button: true,
+            stereometer_render_resources: None,
+            bloom_render_resources: None,
+            output_render_resources: None,
+
+            export_config: ExportConfig::default(),
+            join_handle: None,
+            export_tx: None,
+            show_export_resolution: false,
+            show_export_fps: false,
+            show_export_quality: false,
+            cur_frame_idx: 0,
+            export_sample_idx: 0,
+            show_export_modal: false,
+            start_render: false,
+            rendering: false,
 
             playback_mode: PlaybackMode::default(),
-            stereo: Stereometer {
-                filter_freq: 1.0,
-                last_freq: 1.0,
-                fs_color: Rgba::new(0, 255, 0, 255),
-                // mb_color: [
-                //     Rgba::new(100, 0, 255, 255),
-                //     Rgba::new(255, 102, 0, 255),
-                //     Rgba::new(180, 255, 0, 255),
-                // ],
-                // mb_color: [
-                //     Rgba::new(255, 0, 64, 255),
-                //     Rgba::new(0, 51, 235, 255),
-                //     Rgba::new(0, 225, 215, 255),
-                // ],
-                // mb_color: [
-                //     Rgba::new(110, 0, 255, 255),
-                //     Rgba::new(0, 155, 255, 255),
-                //     Rgba::new(230, 0, 140, 255),
-                // ],
-                mb_color: [
-                    Rgba::new(116, 0, 184, 255),
-                    Rgba::new(83, 89, 255, 255),
-                    Rgba::new(128, 88, 255, 255),
-                ],
-                point_size: 0.0040,
-                ..Default::default()
-            },
+            stereo: Stereometer::default(),
             pos: [0.0; 2],
 
             fullscreen: false,

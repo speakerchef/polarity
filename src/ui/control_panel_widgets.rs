@@ -1,7 +1,7 @@
 use crate::ui::custom_text;
 use std::ops::RangeInclusive;
 
-use egui::{
+use eframe::egui::{
     self, Align, CornerRadius, DragValue, FontFamily, FontId, Layout, Rect, Response, Sense,
     Stroke, StrokeKind, Vec2, pos2, vec2,
 };
@@ -195,7 +195,7 @@ pub fn menu_bar_option(
     states: &mut [&mut bool],
     h: f32,
 ) -> egui::Response {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, h - 2.0), Sense::click());
+    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, h - 4.0), Sense::click());
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     if resp.clicked() {
         *open = !*open;
@@ -293,7 +293,7 @@ pub fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
         &label.to_uppercase(),
         fonts.clone(),
         pos2(rect.left() + 10.0, rect.center().y - 7.0),
-        plt::letter_spacing::BASE,
+        plt::letter_spacing::MINIMAL,
         plt::BRIGHT,
         Align::LEFT,
     );
@@ -532,48 +532,4 @@ pub fn slider_row(
         ],
         border(),
     );
-}
-
-/// import/export
-pub fn project_handler_button(ui: &mut egui::Ui, icon: &str, label: &str, width: f32) -> Response {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, 38.0), Sense::click());
-    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
-    let bg = if resp.hovered() { plt::TEXT } else { plt::BG };
-    let fg = if resp.hovered() { plt::INK } else { plt::DIM };
-    let p = ui.painter();
-    p.rect_filled(rect, SHARP, bg);
-    p.line_segment([rect.left_top(), rect.left_bottom()], border());
-    p.line_segment([rect.left_bottom(), rect.right_bottom()], border());
-    let fonts = (
-        FontId {
-            size: plt::font_size::ICON,
-            family: FontFamily::Name("icons".into()),
-        },
-        FontId {
-            size: plt::font_size::BODY,
-            family: FontFamily::Name("inter_medium".into()),
-        },
-    );
-    custom_text(
-        ui,
-        icon,
-        fonts.0.clone(),
-        pos2(rect.left_center().x + 42.0, rect.left_center().y - 9.5),
-        plt::letter_spacing::BASE,
-        fg,
-        Align::LEFT,
-    );
-    custom_text(
-        ui,
-        label,
-        fonts.1.clone(),
-        pos2(
-            rect.right_center().x - rect.width() / 1.65,
-            rect.left_center().y - 7.0,
-        ),
-        plt::letter_spacing::BASE,
-        fg,
-        Align::LEFT,
-    );
-    resp
 }

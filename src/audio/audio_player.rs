@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::{io::Cursor, num::NonZero, path::PathBuf, sync::Arc, time::Duration};
 
-use egui::emath::Numeric;
+use eframe::egui::emath::Numeric;
 use rodio::{DeviceSinkError, Source, source::SeekError};
 
 use crate::audio::file_as_raw_bytes;

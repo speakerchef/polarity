@@ -1,12 +1,14 @@
 use std::{ops::Sub, time::Duration};
 
-use egui::{
-    self, Align, Color32, CornerRadius, FontFamily, FontId, Response, Sense, Stroke, StrokeKind,
+use eframe::egui;
+use eframe::egui::{
+    Align, Color32, CornerRadius, FontFamily, FontId, Response, Sense, Stroke, StrokeKind, Vec2,
     pos2, vec2,
 };
 
 use crate::{
-    state::PlaybackMode,
+    audio::audio_player::AudioPlayer,
+    state::{AppState, PlaybackMode},
     ui::{custom_text, palette as plt},
 };
 
@@ -201,5 +203,170 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
         plt::letter_spacing::BASE,
         fg,
         Align::RIGHT,
+    );
+}
+
+pub fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
+    let (left_channel, right_channel) = p
+        .contents
+        .samples
+        .chunks_exact(2)
+        .map(|frame| {
+            let l = frame.first().unwrap();
+            let r = frame.last().unwrap_or(l);
+            (l, r)
+        })
+        .collect::<(Vec<f32>, Vec<f32>)>();
+
+    let avail_w = rect.width() * 6.0;
+    let avail_h = rect.height() - 1.0;
+    let step: usize = (left_channel.len() as f32 / avail_w) as usize;
+    let mut prev_left_top = pos2(0.0, 0.0);
+    (0..avail_w as usize).for_each(|i| {
+        let slice = &left_channel[i * step..i * step + step];
+        let max = slice
+            .iter()
+            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
+        let h = max * (avail_h / 2.0);
+        let fill_col = plt::WAVEFORM_BG;
+        let mut inner = ui.allocate_rect(
+            egui::Rect::from_min_size(
+                pos2(
+                    rect.left_top().x + i as f32 / 6.0,
+                    rect.left_center().y - 0.25,
+                ),
+                vec2(0.3, h.abs()),
+            ),
+            egui::Sense::hover(),
+        );
+        // remove interaction
+        inner.interact_rect.set_width(0.0);
+        inner.interact_rect.set_height(0.0);
+
+        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
+        ui.painter().line_segment(
+            [prev_left_top, inner.rect.left_bottom()],
+            Stroke {
+                width: 0.3,
+                color: fill_col,
+            },
+        );
+        prev_left_top = inner.rect.left_bottom();
+    });
+
+    let step: usize = (right_channel.len() as f32 / avail_w) as usize;
+    let mut prev_left_top = pos2(0.0, 0.0);
+    (0..avail_w as usize).for_each(|i| {
+        let slice = &right_channel[i * step..i * step + step];
+        let max = slice
+            .iter()
+            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
+        let h = max * (avail_h / 2.0);
+        let fill_col = plt::WAVEFORM_BG;
+        let mut inner = ui.allocate_rect(
+            egui::Rect::from_min_size(
+                pos2(
+                    rect.left_top().x + i as f32 / 6.0,
+                    rect.left_center().y - h.abs(),
+                ),
+                vec2(0.3, h.abs()),
+            ),
+            egui::Sense::hover(),
+        );
+        // remove interaction
+        inner.interact_rect.set_width(0.0);
+        inner.interact_rect.set_height(0.0);
+
+        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
+        ui.painter().line_segment(
+            [prev_left_top, inner.rect.left_top()],
+            Stroke {
+                width: 0.3,
+                color: fill_col,
+            },
+        );
+        prev_left_top = inner.rect.left_top();
+    });
+}
+
+pub fn playback_head(
+    ui: &mut egui::Ui,
+    avail_size: Vec2,
+    transport_rect: egui::Rect,
+    waveform: egui::Response,
+    p: &AudioPlayer,
+) {
+    let mut playback_head = ui.allocate_rect(
+        egui::Rect::from_min_size(
+            pos2(
+                transport_rect.left_bottom().x
+                    + (p.position().as_secs_f32() / p.contents.duration.as_secs_f32())
+                        * avail_size.x,
+                transport_rect.left_bottom().y,
+            ),
+            vec2(1.5, avail_size.y),
+        ),
+        egui::Sense::click(),
+    );
+    playback_head.interact_rect.set_height(0.0);
+    playback_head.interact_rect.set_width(0.0);
+
+    ui.painter().rect_filled(
+        playback_head.rect,
+        CornerRadius::from(1.),
+        if p.is_paused() { plt::YELLO } else { plt::LIVE },
+    );
+
+    // click to seek
+    if ui
+        .ctx()
+        .input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
+        && (waveform.hovered() || waveform.dragged())
+    {
+        ui.ctx().input(|i| {
+            i.pointer.hover_pos().inspect(|pos| {
+                let ratio = (pos.x - 14.0) / avail_size.x;
+                p.try_seek(Duration::from_secs_f32(
+                    (ratio * p.contents.duration.as_secs_f32()).max(0.0),
+                ))
+                .unwrap();
+            })
+        });
+    }
+}
+
+pub fn file_import_prompt(ui: &mut egui::Ui, st: &mut AppState, waveform: egui::Response) {
+    if waveform.clicked() {
+        st.import_open = true;
+    }
+    custom_text(
+        ui,
+        "\u{f09b}",
+        egui::FontId {
+            size: plt::font_size::ICON,
+            family: egui::FontFamily::Name("icons".into()),
+        },
+        pos2(
+            waveform.rect.center_top().x - 64.0,
+            waveform.rect.left_center().y - 9.5,
+        ),
+        plt::letter_spacing::BASE,
+        plt::DIM,
+        Align::LEFT,
+    );
+    custom_text(
+        ui,
+        "IMPORT AUDIO",
+        egui::FontId {
+            size: plt::font_size::BODY,
+            family: egui::FontFamily::Name("inter_regular".into()),
+        },
+        pos2(
+            waveform.rect.center_top().x - 40.0,
+            waveform.rect.left_center().y - 6.0,
+        ),
+        plt::letter_spacing::BASE,
+        plt::DIM,
+        Align::LEFT,
     );
 }

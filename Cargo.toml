@@ -7,15 +7,13 @@ edition = "2024"
 egui-file-dialog = "0.13.0"
 eframe = { version = "0.34.3" }
 rodio = { version = "0.22.2", features = ["playback"] }
-egui = "0.34"
 env_logger = "0.11"
-wgpu = { version = "*", features = ["dx12", "metal"] }
+wgpu = { version = "29.0.3", features = ["dx12", "metal"] }
 biquad = "0.6.0"
 bytemuck = "1.25.0"
 egui-winit = "0.34.3"
 flume = "0.12.0"
 pollster = "0.4.0"
-image = "0.25.10"
 
 [profile.dev]
 opt-level = 1

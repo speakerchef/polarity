@@ -2,28 +2,39 @@ use biquad::*;
 use eframe::egui_wgpu::{self, wgpu};
 use egui_winit::winit::dpi::LogicalSize;
 use std::{
+    io::Write,
     num::NonZeroU64,
     ops::Add,
     path::PathBuf,
+    process::Stdio,
     time::{Duration, Instant},
 };
 use wgpu::{Device, util::DeviceExt};
 
 use crate::{
     audio::{StereoFilter, audio_player::*},
-    generators::rendering::{BloomRenderResources, OutputResources, StereometerRenderResources},
-    generators::stereometer::{
-        FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD,
+    generators::{
+        rendering::{
+            BloomRenderResources, OutputResources, RendererCallback, StereometerRenderResources,
+            effects_render_pipeline, get_gpu_frame, main_render_pipeline, output_render_pipeline,
+            prep_bloom_resources_for_effects, prep_meter_resources_for_effects,
+            prep_output_resources_for_effects,
+        },
+        stereometer::{
+            FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD,
+        },
     },
     state::PlaybackMode,
     ui::{
+        app_widgets::export_modal,
         canvas, control_panel,
         control_panel_widgets::menu_bar_option,
         custom_text, timeline,
         timeline_widgets::{SHARP, border},
     },
 };
-use egui::{Align, FontId, Key, StrokeKind, pos2, vec2};
+use eframe::egui;
+use eframe::egui::{Align, FontId, Key, StrokeKind, pos2, vec2};
 
 use crate::{state::AppState, ui::palette as plt, ui::theme};
 
@@ -32,79 +43,151 @@ pub struct PolarityApp {
     st: AppState,
     player: Option<AudioPlayer>,
 }
-const MB_H: f32 = 18.0;
+const MB_H: f32 = 20.0;
 const MB_GAP: f32 = 12.0;
+
+const BATCH_SIZE: usize = 200;
+
+fn export_batched_frames(
+    st: &mut AppState,
+    p: &AudioPlayer,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let canvas_size = st.export_config.resolution.resolution();
+    let (w, h) = (canvas_size.0, canvas_size.1);
+    let fps = st.export_config.frame_rate.fps();
+    let quality = st.export_config.quality.quality();
+
+    let bloom_amt = st.bloom;
+    let device = &wgpu_render_state.device;
+    let queue = &wgpu_render_state.queue;
+
+    let meter_res = st.stereometer_render_resources.as_mut().unwrap();
+    let bloom_res = st.bloom_render_resources.as_mut().unwrap();
+    let out_res = st.output_render_resources.as_mut().unwrap();
+    if st.join_handle.is_none() {
+        let mut cmd = std::process::Command::new("ffmpeg");
+        let mut cmd = cmd
+            .args([
+                "-f",
+                "rawvideo",
+                "-pixel_format",
+                "bgra",
+                "-video_size",
+                &format!("{w}x{h}"),
+                "-framerate",
+                &fps.to_string(),
+                "-i",
+                "-",
+                "-i",
+                p.contents.path.to_str().unwrap(),
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-crf",
+                &quality.to_string(),
+                "-preset",
+                "veryfast",
+                "-pix_fmt",
+                "yuv444p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "320k",
+                "-y",
+                "out.mp4",
+            ])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = cmd.stdin.take().expect("No stdin");
+        let (tx, rx) = flume::bounded::<Vec<u8>>(4);
+        let handle = std::thread::spawn(move || {
+            rx.iter().for_each(|frame| {
+                stdin.write_all(&frame).unwrap();
+            });
+            drop(stdin);
+            cmd.wait().unwrap();
+        });
+        st.join_handle = Some(handle);
+        st.export_tx = Some(tx);
+    }
+
+    let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
+
+    for _ in 0..BATCH_SIZE {
+        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("export command encoder"),
+        });
+
+        st.cur_frame_idx += 1;
+        if st.cur_frame_idx >= total_frames as usize {
+            drop(std::mem::take(&mut st.export_tx));
+            st.join_handle.take().unwrap().join().unwrap();
+            st.rendering = false;
+            st.cur_frame_idx = 0;
+            println!("Finished");
+            break;
+        }
+        let frac = st.cur_frame_idx as f32 / fps as f32;
+        let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
+
+        st.stereo.draw(p, Some(export_sample_idx));
+
+        let render_data = RendererCallback {
+            render_mode: st.stereo.render_mode,
+            live_pos: std::mem::take(&mut st.stereo.live_buffer),
+            trace_pos: st.stereo.trace_buffer.clone().into(),
+
+            live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
+            live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
+            live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
+            trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
+            trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
+            trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
+
+            fs_color: st.stereo.fs_color.into(),
+            lb_color: st.stereo.mb_color[0].into(),
+            mb_color: st.stereo.mb_color[1].into(),
+            hb_color: st.stereo.mb_color[2].into(),
+            canvas_size: vec2(w as f32, h as f32),
+        };
+
+        // Main pipeline
+        main_render_pipeline(
+            &render_data,
+            device,
+            queue,
+            (w, h),
+            &mut command_encoder,
+            meter_res,
+        );
+
+        // Effects pipeline
+        let (tex_size, bloom_bind_group) =
+            prep_meter_resources_for_effects(device, meter_res, bloom_res);
+
+        let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
+        prep_bloom_resources_for_effects(device, bloom_res, queue, bloom_bind_group, bloom_amt);
+        effects_render_pipeline(device, &mut command_encoder, dst_view, bloom_res);
+
+        // Output
+        output_render_pipeline(&mut command_encoder, out_res);
+        queue.submit(Some(command_encoder.finish()));
+        let frame = get_gpu_frame(device, out_res);
+        st.export_tx.as_ref().unwrap().send(frame).unwrap();
+    }
+}
 
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if !self.st.fullscreen {
-            egui::MenuBar::new().ui(ui, |ui| {
-                ui.set_min_height(MB_H + MB_GAP);
-                egui::Area::new("menu_bar".into())
-                    .fixed_pos(ui.viewport_rect().left_top() + vec2(0.0, MB_GAP))
-                    .order(egui::Order::Foreground)
-                    .movable(false)
-                    .show(ui.ctx(), |ui| {
-                        ui.set_max_height(MB_H);
-                        ui.set_width(ui.content_rect().width());
-
-                        ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                            let resp = ui.allocate_rect(
-                                egui::Rect::from_min_size(
-                                    pos2(
-                                        ui.content_rect().left_top().x,
-                                        ui.content_rect().left_top().y + 12.0,
-                                    ),
-                                    vec2(ui.available_width(), ui.available_height()),
-                                ),
-                                egui::Sense::focusable_noninteractive(),
-                            );
-                            let mut rect = resp.rect;
-                            rect.min.y -= MB_GAP;
-                            ui.painter().rect_filled(rect, SHARP, plt::BG);
-
-                            ui.set_max_width(ui.available_rect_before_wrap().width());
-                            ui.set_min_width(ui.available_rect_before_wrap().width());
-                            ui.add_space(12.0);
-
-                            menu_bar_option(
-                                ui,
-                                "file",
-                                44.0,
-                                FontId {
-                                    family: egui::FontFamily::Name("inter_medium".into()),
-                                    size: plt::font_size::TINY,
-                                },
-                                &mut self.st.show_file_options,
-                                &["Import", "Export"],
-                                &mut [&mut self.st.import_open, &mut false],
-                                MB_H,
-                            );
-                            ui.add_space(1.0);
-
-                            menu_bar_option(
-                                ui,
-                                "window",
-                                70.0,
-                                FontId {
-                                    family: egui::FontFamily::Name("inter_medium".into()),
-                                    size: plt::font_size::TINY,
-                                },
-                                &mut self.st.show_window_options,
-                                &[""],
-                                &mut [&mut self.st.window_options_open, &mut false],
-                                MB_H,
-                            );
-
-                            ui.add_space(ui.available_width() - 36.0);
-                        });
-                    });
-            });
+            self.render_menu_bar(ui);
         }
+
         let mut resp = egui::CentralPanel::default()
             .frame(
                 egui::Frame::NONE
-                    // .inner_margin(if !self.st.fullscreen { 12.0 } else { 0.0 })
                     .inner_margin(if !self.st.fullscreen {
                         egui::Margin {
                             bottom: 12,
@@ -142,7 +225,8 @@ impl eframe::App for PolarityApp {
                     if ui.ctx().input(|i| {
                         (!i.keys_down.is_empty() && !i.key_down(Key::Space))
                             || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
-                                || i.modifiers.matches_logically(egui::Modifiers::SHIFT))
+                                || i.modifiers.matches_logically(egui::Modifiers::SHIFT)
+                                || i.modifiers.matches_logically(egui::Modifiers::ALT))
                     }) {
                         frame
                             .winit_window()
@@ -151,7 +235,17 @@ impl eframe::App for PolarityApp {
                             .unwrap_or_default();
                     }
                 }
-                canvas::draw(ui, &mut self.st, &self.player);
+
+                if self.st.show_export_modal {
+                    export_modal(ui, &mut self.st);
+                }
+
+                if self.st.rendering {
+                    let p = self.player.as_ref().unwrap();
+                    p.pause();
+                } else {
+                    canvas::draw(ui, &mut self.st, &self.player);
+                }
             })
             .response;
 
@@ -162,17 +256,29 @@ impl eframe::App for PolarityApp {
                 .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
         }
     }
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let Some(p) = &self.player
             && !p.is_paused()
         {
             ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
+        }
+        //EXPORT
+        if let Some(p) = &self.player
+            && (self.st.start_render || self.st.rendering)
+        {
+            self.st.start_render = false;
+            self.st.rendering = true;
+            let wgpu_render_state = frame.wgpu_render_state().unwrap();
+            export_batched_frames(&mut self.st, p, wgpu_render_state);
+            ctx.request_repaint();
+            self.st.show_export_modal = false;
         }
 
         // Open file dialog
         if self.st.import_open {
             self.st.file_dialog.pick_file();
             self.st.import_open = false;
+            self.st.start_render = false;
         }
 
         // Check if user picked a file
@@ -199,7 +305,10 @@ impl eframe::App for PolarityApp {
     }
 }
 
-fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
+fn build_stereometer_render_resources(
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) -> StereometerRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("stereometer"),
         source: wgpu::ShaderSource::Wgsl(include_str!("./stereometer_shader.wgsl").into()),
@@ -311,23 +420,36 @@ fn init_stereometer_render_resources(device: &Device, wgpu_render_state: &egui_w
             },
         ],
     });
+    StereometerRenderResources {
+        target_format: wgpu_render_state.target_format,
+        pipeline,
+        bind_group: stereometer_bind_group,
+        vertex_buffer,
+        params_buffer,
+        alpha_buffer,
+        tex: None,
+    }
+}
 
+fn init_stereometer_render_resources(
+    st: &mut AppState,
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let live_res = build_stereometer_render_resources(device, wgpu_render_state);
+    let export_res = build_stereometer_render_resources(device, wgpu_render_state);
+    st.stereometer_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
         .callback_resources
-        .insert(StereometerRenderResources {
-            target_format: wgpu_render_state.target_format,
-            pipeline,
-            bind_group: stereometer_bind_group,
-            vertex_buffer,
-            params_buffer,
-            alpha_buffer,
-            tex: None,
-        });
+        .insert(live_res);
 }
 
-fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
+fn build_bloom_render_resources(
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) -> BloomRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("bloom"),
         source: wgpu::ShaderSource::Wgsl(include_str!("./bloom_shader.wgsl").into()),
@@ -411,20 +533,34 @@ fn init_bloom_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::R
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
 
+    BloomRenderResources {
+        pipeline,
+        bind_group_layout: bloom_bind_group_layout,
+        sampler: bloom_sampler,
+        bind_group: None,
+        params_buffer,
+    }
+}
+
+fn init_bloom_render_resources(
+    st: &mut AppState,
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let live_res = build_bloom_render_resources(device, wgpu_render_state);
+    let export_res = build_bloom_render_resources(device, wgpu_render_state);
+    st.bloom_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
         .callback_resources
-        .insert(BloomRenderResources {
-            pipeline,
-            bind_group_layout: bloom_bind_group_layout,
-            sampler: bloom_sampler,
-            bind_group: None,
-            params_buffer,
-        });
+        .insert(live_res);
 }
 
-fn init_output_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::RenderState) {
+fn build_output_render_resources(
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) -> OutputResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("output"),
         source: wgpu::ShaderSource::Wgsl(include_str!("./output_shader.wgsl").into()),
@@ -511,41 +647,119 @@ fn init_output_render_resources(device: &Device, wgpu_render_state: &egui_wgpu::
         contents: bytemuck::cast_slice(&[0u32; 4096 * 4096]),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
     });
+    OutputResources {
+        pipeline,
+        tex: None,
+        sampler,
+        bind_group: None,
+        bind_group_layout: bgl,
+        params_buffer,
+        output_buffer,
+        target_format: wgpu_render_state.target_format,
+    }
+}
 
+fn init_output_render_resources(
+    st: &mut AppState,
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let live_res = build_output_render_resources(device, wgpu_render_state);
+    let export_res = build_output_render_resources(device, wgpu_render_state);
+    st.output_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
         .callback_resources
-        .insert(OutputResources {
-            pipeline,
-            tex: None,
-            sampler,
-            bind_group: None,
-            bind_group_layout: bgl,
-            params_buffer,
-            output_buffer,
-            target_format: wgpu_render_state.target_format,
-        });
+        .insert(live_res);
 }
 
-fn setup_wgpu(cc: &eframe::CreationContext<'_>) {
+fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
     let wgpu_render_state = cc
         .wgpu_render_state
         .as_ref()
         .expect("not using wgpu backend");
     let device = &wgpu_render_state.device;
 
-    init_stereometer_render_resources(device, wgpu_render_state);
-    init_bloom_render_resources(device, wgpu_render_state);
-    init_output_render_resources(device, wgpu_render_state);
+    init_stereometer_render_resources(st, device, wgpu_render_state);
+    init_bloom_render_resources(st, device, wgpu_render_state);
+    init_output_render_resources(st, device, wgpu_render_state);
 }
 
 impl PolarityApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install_fonts(&cc.egui_ctx);
         theme::apply_theme(&cc.egui_ctx);
-        setup_wgpu(cc);
-        Self::default()
+        let mut st = AppState::default();
+        setup_wgpu(&mut st, cc);
+        Self {
+            st,
+            ..Default::default()
+        }
+    }
+    fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.set_min_height(MB_H + MB_GAP);
+            egui::Area::new("menu_bar".into())
+                .fixed_pos(ui.viewport_rect().left_top() + vec2(0.0, MB_GAP))
+                .order(egui::Order::Foreground)
+                .movable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.set_max_height(MB_H);
+                    ui.set_width(ui.content_rect().width());
+
+                    ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
+                        let resp = ui.allocate_rect(
+                            egui::Rect::from_min_size(
+                                pos2(
+                                    ui.content_rect().left_top().x,
+                                    ui.content_rect().left_top().y + 12.0,
+                                ),
+                                vec2(ui.available_width(), ui.available_height()),
+                            ),
+                            egui::Sense::focusable_noninteractive(),
+                        );
+                        let mut rect = resp.rect;
+                        rect.min.y -= MB_GAP;
+                        ui.painter().rect_filled(rect, SHARP, plt::BG);
+
+                        ui.set_max_width(ui.available_rect_before_wrap().width());
+                        ui.set_min_width(ui.available_rect_before_wrap().width());
+                        ui.add_space(12.0);
+
+                        menu_bar_option(
+                            ui,
+                            "file",
+                            44.0,
+                            FontId {
+                                family: egui::FontFamily::Name("inter_medium".into()),
+                                size: plt::font_size::TINY,
+                            },
+                            &mut self.st.show_file_options,
+                            &["Import", "Export"],
+                            &mut [&mut self.st.import_open, &mut self.st.show_export_modal],
+                            MB_H,
+                        );
+                        ui.add_space(1.0);
+
+                        menu_bar_option(
+                            ui,
+                            "window",
+                            70.0,
+                            FontId {
+                                family: egui::FontFamily::Name("inter_medium".into()),
+                                size: plt::font_size::TINY,
+                            },
+                            &mut self.st.show_window_options,
+                            &[""],
+                            &mut [&mut self.st.window_options_open, &mut false],
+                            MB_H,
+                        );
+
+                        ui.add_space(ui.available_width() - 36.0);
+                    });
+                });
+        });
     }
 
     pub fn load_file(&mut self, path: PathBuf) {

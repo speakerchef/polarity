@@ -3,6 +3,7 @@ use crate::generators::stereometer::{
 };
 use crate::state::*;
 use crate::ui::{control_panel_widgets::*, palette};
+use eframe::egui;
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::right("control_panel")

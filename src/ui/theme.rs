@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use egui::{self, CornerRadius, FontData, FontDefinitions, FontFamily, Margin, Stroke, Vec2};
+use eframe::egui::{
+    self, CornerRadius, FontData, FontDefinitions, FontFamily, Margin, Stroke, Vec2,
+};
 
 use crate::ui::palette;
 

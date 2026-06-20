@@ -1,6 +1,9 @@
-use egui::{Align, Color32, FontId, Pos2};
+use eframe::egui;
+use eframe::egui::{Align, Color32, FontId, Pos2};
 
+pub mod app_widgets;
 pub mod canvas;
+pub mod canvas_widgets;
 pub mod control_panel;
 pub mod control_panel_widgets;
 pub mod palette;
