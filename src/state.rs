@@ -141,6 +141,7 @@ pub struct AppState {
     pub prev_export_timestamp: Option<Instant>,
     pub export_elapsed_time: Option<Duration>,
 
+    pub dark_mode: bool,
     pub fullscreen: bool,
     pub import_open: bool,
 
@@ -162,6 +163,7 @@ pub struct AppState {
     pub window_drag_tooltip_modal_deadline: Option<Instant>,
     pub window_drag_tooltip_modal_open: bool,
     pub show_fullscreen_button: bool,
+    pub show_settings: bool,
 
     pub gen_open: bool,
     pub render_open: bool,
@@ -230,6 +232,7 @@ impl Default for AppState {
             stereo: Stereometer::default(),
             pos: [0.0; 2],
 
+            dark_mode: true,
             fullscreen: false,
             import_open: false,
             show_file_options: false,
@@ -249,6 +252,8 @@ impl Default for AppState {
             preset_save_path: None,
             preset_load_path: None,
             preset_name: String::default(),
+
+            show_settings: false,
 
             gen_open: false,
             render_open: false,

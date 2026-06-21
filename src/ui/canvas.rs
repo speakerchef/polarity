@@ -14,7 +14,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     egui::CentralPanel::default()
         .frame(
             egui::Frame::new()
-                .fill(palette::VOID)
+                .fill(palette::VOID(ui.style().visuals.dark_mode))
                 .inner_margin(0.0)
                 .outer_margin(0.0),
         )

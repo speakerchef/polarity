@@ -35,7 +35,7 @@ pub fn fullscreen_button(ui: &mut egui::Ui, st: &mut AppState) {
                 if resp.hovered() {
                     palette::YELLO
                 } else {
-                    palette::BORDER
+                    palette::BORDER(ui.style().visuals.dark_mode)
                 },
                 Align::LEFT,
             );

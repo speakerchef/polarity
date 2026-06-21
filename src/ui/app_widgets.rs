@@ -39,7 +39,8 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                     );
                     let mut rect = resp.rect;
                     rect.min.y -= MB_GAP;
-                    ui.painter().rect_filled(rect, SHARP, plt::BG);
+                    ui.painter()
+                        .rect_filled(rect, SHARP, plt::BG(ui.style().visuals.dark_mode));
 
                     ui.set_max_width(ui.available_rect_before_wrap().width());
                     ui.set_min_width(ui.available_rect_before_wrap().width());
@@ -57,6 +58,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                         &["Import", "Export"],
                         &mut [&mut st.import_open, &mut st.show_export_modal],
                         MB_H,
+                        false,
                     );
                     ui.add_space(1.0);
 
@@ -75,9 +77,27 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             &mut st.show_preset_load_modal,
                         ],
                         MB_H,
+                        false,
                     );
 
                     ui.add_space(ui.available_width() - 36.0);
+                    menu_bar_option(
+                        ui,
+                        "\u{e8b8}",
+                        25.0,
+                        FontId {
+                            family: egui::FontFamily::Name("icons".into()),
+                            size: plt::font_size::TINY,
+                        },
+                        &mut st.show_settings,
+                        &[&format!(
+                            "{} Mode",
+                            if st.dark_mode { "Light" } else { "Dark" }
+                        )],
+                        &mut [&mut st.dark_mode],
+                        MB_H,
+                        true,
+                    );
                 });
             });
     });
@@ -100,13 +120,17 @@ pub fn modal_button(
     );
     let rect = resp.rect;
     let (bg, fg) = if resp.hovered() {
-        (plt::SURFACE_HOVER, text_col)
+        (plt::SURFACE_HOVER(ui.style().visuals.dark_mode), text_col)
     } else {
-        (plt::BG, text_col)
+        (plt::BG(ui.style().visuals.dark_mode), text_col)
     };
     ui.painter().rect_filled(rect, SHARP, bg);
-    ui.painter()
-        .rect_stroke(rect, SHARP, border(), egui::StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        rect,
+        SHARP,
+        border(ui.style().visuals.dark_mode),
+        egui::StrokeKind::Inside,
+    );
 
     let font = FontId {
         size: font_size,
@@ -158,7 +182,8 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 egui::Sense::click(),
             );
 
-            ui.painter().rect_filled(resp.rect, SHARP, plt::BG);
+            ui.painter()
+                .rect_filled(resp.rect, SHARP, plt::BG(ui.style().visuals.dark_mode));
 
             if !st.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
@@ -188,8 +213,12 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     );
                 });
 
-                ui.painter()
-                    .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+                ui.painter().rect_stroke(
+                    resp.rect,
+                    SHARP,
+                    border(ui.style().visuals.dark_mode),
+                    StrokeKind::Inside,
+                );
 
                 const BUTTON_H: f32 = 30.0;
                 modal_button(
@@ -227,9 +256,13 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         ),
                         egui::Sense::focusable_noninteractive(),
                     );
-                    ui.painter().rect_filled(pbar_resp.rect, SHARP, plt::VOID);
-                    ui.painter()
-                        .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+                    ui.painter().rect_filled(pbar_resp.rect, SHARP, plt::BLACK);
+                    ui.painter().rect_stroke(
+                        resp.rect,
+                        SHARP,
+                        border(ui.style().visuals.dark_mode),
+                        StrokeKind::Inside,
+                    );
 
                     let font_id = FontId {
                         size: plt::font_size::MED,
@@ -264,7 +297,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         ui.painter().rect_stroke(
                             pbar_resp.rect,
                             SHARP,
-                            border(),
+                            border(ui.style().visuals.dark_mode),
                             StrokeKind::Inside,
                         );
                     });
@@ -342,13 +375,18 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 egui::Sense::click(),
             );
 
-            ui.painter().rect_filled(resp.rect, SHARP, plt::BG);
+            ui.painter()
+                .rect_filled(resp.rect, SHARP, plt::BG(ui.style().visuals.dark_mode));
 
             const BUTTON_H: f32 = 30.0;
             const OPTION_H: f32 = 37.0;
             const INNER_H: f32 = 21.0;
-            ui.painter()
-                .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+            ui.painter().rect_stroke(
+                resp.rect,
+                SHARP,
+                border(ui.style().visuals.dark_mode),
+                StrokeKind::Inside,
+            );
             if st.show_preset_save_modal {
                 ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
                     let path_rect = ui
@@ -363,7 +401,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     // ui.painter().rect_filled(path_rect, SHARP, plt::YELLO);
                     ui.painter().line_segment(
                         [path_rect.left_bottom(), path_rect.right_bottom()],
-                        border(),
+                        border(ui.style().visuals.dark_mode),
                     );
                     let font = FontId {
                         size: plt::font_size::META,
@@ -391,9 +429,13 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                             egui::Sense::focusable_noninteractive(),
                         )
                         .rect;
-                    ui.painter().rect_filled(path_name_rect, SHARP, plt::VOID);
-                    ui.painter()
-                        .rect_stroke(path_name_rect, SHARP, border(), StrokeKind::Inside);
+                    ui.painter().rect_filled(path_name_rect, SHARP, plt::BLACK);
+                    ui.painter().rect_stroke(
+                        path_name_rect,
+                        SHARP,
+                        border(ui.style().visuals.dark_mode),
+                        StrokeKind::Inside,
+                    );
 
                     let (cw, th) = get_text_size(ui, "K", font.clone()).into();
                     custom_text(
@@ -449,7 +491,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         .rect;
                     ui.painter().line_segment(
                         [area_rect.left_bottom(), area_rect.right_bottom()],
-                        border(),
+                        border(ui.style().visuals.dark_mode),
                     );
                     let font = FontId {
                         size: plt::font_size::META,
@@ -526,7 +568,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     // ui.painter().rect_filled(path_rect, SHARP, plt::YELLO);
                     ui.painter().line_segment(
                         [path_rect.left_bottom(), path_rect.right_bottom()],
-                        border(),
+                        border(ui.style().visuals.dark_mode),
                     );
                     let font = FontId {
                         size: plt::font_size::META,
@@ -554,9 +596,13 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                             egui::Sense::focusable_noninteractive(),
                         )
                         .rect;
-                    ui.painter().rect_filled(path_name_rect, SHARP, plt::VOID);
-                    ui.painter()
-                        .rect_stroke(path_name_rect, SHARP, border(), StrokeKind::Inside);
+                    ui.painter().rect_filled(path_name_rect, SHARP, plt::BLACK);
+                    ui.painter().rect_stroke(
+                        path_name_rect,
+                        SHARP,
+                        border(ui.style().visuals.dark_mode),
+                        StrokeKind::Inside,
+                    );
 
                     let (cw, th) = get_text_size(ui, "K", font.clone()).into();
                     custom_text(
@@ -651,7 +697,7 @@ pub fn window_drag_tooltip(ui: &mut egui::Ui) {
                 },
                 pos2(resp.rect.left(), resp.rect.left_center().y - 9.0),
                 plt::letter_spacing::BASE,
-                plt::BORDER,
+                plt::BORDER(ui.style().visuals.dark_mode),
                 Align::LEFT,
             );
         });

@@ -10,8 +10,8 @@ use crate::{state::Labeled, ui::palette as plt};
 
 const SHARP: CornerRadius = CornerRadius::ZERO;
 
-fn border() -> Stroke {
-    Stroke::new(plt::FRAME_WIDTH, plt::BORDER)
+fn border(dark: bool) -> Stroke {
+    Stroke::new(plt::FRAME_WIDTH, plt::BORDER(dark))
 }
 
 /// Root control panel headers. eg. "GENERATOR", "POST FX"
@@ -25,7 +25,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
     let (mut bg, fg) = if *open {
         (plt::TEXT, plt::INK)
     } else {
-        (plt::SURFACE, plt::BRIGHT)
+        (plt::SURFACE(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
 
     let num_w = 46.0;
@@ -33,7 +33,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
 
     // interactions
     bg = if !*open && (resp.hovered()) {
-        plt::SURFACE_HOVER
+        plt::SURFACE_HOVER(ui.style().visuals.dark_mode)
     } else {
         bg
     };
@@ -47,9 +47,14 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
             pos2(rect.left() + num_w, rect.top()),
             pos2(rect.left() + num_w, rect.bottom()),
         ],
-        border(),
+        border(ui.style().visuals.dark_mode),
     );
-    p.rect_stroke(rect, SHARP, border(), StrokeKind::Middle);
+    p.rect_stroke(
+        rect,
+        SHARP,
+        border(ui.style().visuals.dark_mode),
+        StrokeKind::Middle,
+    );
     let fonts = FontId {
         size: plt::font_size::BIG,
         family: FontFamily::Name("inter_bold".into()),
@@ -85,16 +90,31 @@ pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
     let (bg, fg) = if *open {
         (plt::TEXT, plt::INK)
     } else if resp.hovered() {
-        (plt::SURFACE_HOVER, plt::BRIGHT)
+        (
+            plt::SURFACE_HOVER(ui.style().visuals.dark_mode),
+            plt::BRIGHT,
+        )
     } else {
-        (plt::SURFACE, plt::BRIGHT)
+        (plt::SURFACE(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
-    p.line_segment([rect.left_bottom(), rect.right_bottom()], border());
-    p.line_segment([rect.left_top(), rect.right_top()], border());
-    p.line_segment([rect.left_bottom(), rect.left_top()], border());
-    p.line_segment([rect.right_bottom(), rect.right_top()], border());
+    p.line_segment(
+        [rect.left_bottom(), rect.right_bottom()],
+        border(ui.style().visuals.dark_mode),
+    );
+    p.line_segment(
+        [rect.left_top(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    p.line_segment(
+        [rect.left_bottom(), rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    p.line_segment(
+        [rect.right_bottom(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
     let fonts = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
@@ -119,9 +139,18 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
     let (rect, _) = ui.allocate_exact_size(vec2(w, plt::height::MENU_ITEM), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, SHARP, plt::GRAY);
-    p.line_segment([rect.left_bottom(), rect.right_bottom()], border());
-    p.line_segment([rect.left_bottom(), rect.left_top()], border());
-    p.line_segment([rect.right_bottom(), rect.right_top()], border());
+    p.line_segment(
+        [rect.left_bottom(), rect.right_bottom()],
+        border(ui.style().visuals.dark_mode),
+    );
+    p.line_segment(
+        [rect.left_bottom(), rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    p.line_segment(
+        [rect.right_bottom(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
     let fonts = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
@@ -143,10 +172,10 @@ fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
     let border_color = if resp.hovered() {
         plt::TEXT
     } else {
-        plt::BORDER
+        plt::BORDER(ui.style().visuals.dark_mode)
     };
     let p = ui.painter();
-    p.rect_filled(rect, SHARP, plt::VOID);
+    p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
     p.rect_stroke(
         rect,
         SHARP,
@@ -194,6 +223,7 @@ pub fn menu_bar_option(
     opts: &[&str],
     states: &mut [&mut bool],
     h: f32,
+    reverse_dropdown_pos: bool,
 ) -> egui::Response {
     let (rect, mut resp) = ui.allocate_exact_size(vec2(width, h - 4.0), Sense::click());
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
@@ -206,13 +236,18 @@ pub fn menu_bar_option(
         if *open {
             (plt::YELLO, plt::INK)
         } else {
-            (plt::SURFACE, plt::TEXT)
+            (plt::SURFACE(ui.style().visuals.dark_mode), plt::TEXT)
         }
     };
 
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
-    p.rect_stroke(rect, SHARP, border(), StrokeKind::Inside);
+    p.rect_stroke(
+        rect,
+        SHARP,
+        border(ui.style().visuals.dark_mode),
+        StrokeKind::Inside,
+    );
     let (_, th) = get_text_size(ui, &label.to_uppercase(), font.clone()).into();
     custom_text(
         ui,
@@ -225,16 +260,29 @@ pub fn menu_bar_option(
         Align::Center,
     );
     let mut popup_rect = egui::Rect::NOTHING;
+
+    let (drop_tw, _) = get_text_size(ui, label, font.clone()).into();
+    let padding = width - drop_tw;
+    let max_label_w = opts.iter().fold(0.0, |acc, opt| {
+        let (tw, _) = get_text_size(ui, opt, font.clone()).into();
+        if tw >= acc { tw } else { acc }
+    });
+
     if *open {
         popup_rect = egui::Area::new(egui::Id::new(label).with("popup"))
             .movable(false)
-            .fixed_pos(resp.rect.left_bottom())
+            .fixed_pos(if reverse_dropdown_pos {
+                resp.rect.right_bottom() - vec2(max_label_w - 1.0, 0.0)
+            } else {
+                resp.rect.left_bottom() + vec2(1.0, 0.0)
+            })
             .order(egui::Order::Tooltip)
             .show(ui.ctx(), |ui| {
                 egui::Frame::new().show(ui, |ui| {
                     for (i, label) in opts.iter().enumerate() {
                         ui.spacing_mut().item_spacing = Vec2::ZERO;
-                        if menu_bar_popup(ui, label, label.len() as f32 * 14.0).clicked() {
+                        // if menu_bar_popup(ui, label, width, padding).clicked() {
+                        if menu_bar_popup(ui, label, max_label_w.max(width), padding).clicked() {
                             *open = false;
                             if let Some(state) = states.get_mut(i) {
                                 **state = !**state;
@@ -268,10 +316,10 @@ pub fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
     let bc = if resp.hovered() {
         plt::TEXT
     } else {
-        plt::BORDER
+        plt::BORDER(ui.style().visuals.dark_mode)
     };
     let p = ui.painter();
-    p.rect_filled(rect, SHARP, plt::VOID);
+    p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
     p.rect_stroke(
         rect,
         SHARP,
@@ -297,35 +345,44 @@ pub fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
     resp
 }
 
-pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
-    // let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, 25.0), Sense::click());
-    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
-    let (bg, fg) = if resp.hovered() {
-        (plt::YELLO, plt::BG)
-    } else {
-        (plt::BG, plt::TEXT)
-    };
-    let p = ui.painter();
-    p.rect_filled(rect, SHARP, bg);
-    p.rect_stroke(
-        rect,
-        SHARP,
-        Stroke {
-            width: 0.5,
-            color: plt::BORDER,
-        },
-        StrokeKind::Inside,
-    );
+pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f32) -> Response {
+    width -= 2.0;
     let fonts = FontId {
         size: plt::font_size::TINY,
         family: FontFamily::Name("inter_medium".into()),
     };
+    let (tw, th) = get_text_size(ui, label, fonts.clone()).into();
+
+    let rect_sz = vec2(
+        if tw + padding > width {
+            width.max(tw) + padding
+        } else {
+            width
+        },
+        22.0,
+    );
+    let (rect, mut resp) = ui.allocate_exact_size(rect_sz, Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+
+    let (bg, fg) = if resp.hovered() {
+        (plt::YELLO, plt::BG(ui.style().visuals.dark_mode))
+    } else {
+        (plt::BG(ui.style().visuals.dark_mode), plt::TEXT)
+    };
+
+    ui.painter().rect_filled(rect, SHARP, bg);
+    ui.painter().rect_stroke(
+        rect,
+        SHARP,
+        border(ui.visuals().dark_mode),
+        StrokeKind::Outside,
+    );
+
     custom_text(
         ui,
         &label.to_uppercase(),
         fonts.clone(),
-        pos2(rect.left() + 11.0, rect.center().y - 6.0),
+        rect.left_center() + vec2(8.0, -th / 2.0),
         plt::letter_spacing::BASE,
         fg,
         Align::LEFT,
@@ -369,16 +426,22 @@ pub fn dropdown_row<T: Labeled>(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::SURFACE,
+        plt::SURFACE(ui.style().visuals.dark_mode),
     );
     ui.painter().set(bg, bg_rect.clone());
     let br = bg_rect.visual_bounding_rect();
-    ui.painter()
-        .line_segment([br.left_bottom(), br.right_bottom()], border());
-    ui.painter()
-        .line_segment([br.left_bottom(), br.left_top()], border());
-    ui.painter()
-        .line_segment([br.right_bottom(), br.right_top()], border());
+    ui.painter().line_segment(
+        [br.left_bottom(), br.right_bottom()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [br.left_bottom(), br.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [br.right_bottom(), br.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
 
     if *open {
         egui::Area::new(egui::Id::new(id).with("popup"))
@@ -414,17 +477,28 @@ fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
         *value = min + t * (max - min);
     }
     let t = ((*value - min) / (max - min)).clamp(0.0, 1.0);
-    ui.painter()
-        .rect_filled(rect, CornerRadius::from(2), plt::VOID);
-    ui.painter()
-        .rect_stroke(rect, CornerRadius::from(2), border(), StrokeKind::Inside);
+    ui.painter().rect_filled(
+        rect,
+        CornerRadius::from(2),
+        plt::VOID(ui.style().visuals.dark_mode),
+    );
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::from(2),
+        border(ui.style().visuals.dark_mode),
+        StrokeKind::Inside,
+    );
     let tw = 10.0;
     let x = rect.left() + t * (rect.width() - tw);
     let thumb = Rect::from_min_size(pos2(x, rect.top() - 6.0), vec2(tw, rect.height() + 12.0));
     ui.painter()
         .rect_filled(thumb, CornerRadius::from(2), plt::TEXT);
-    ui.painter()
-        .rect_stroke(thumb, CornerRadius::from(2), border(), StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        thumb,
+        CornerRadius::from(2),
+        border(ui.style().visuals.dark_mode),
+        StrokeKind::Inside,
+    );
 }
 
 fn value_box(
@@ -435,9 +509,14 @@ fn value_box(
     width: f32,
 ) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::hover());
-    ui.painter().rect_filled(rect, SHARP, plt::VOID);
     ui.painter()
-        .rect_stroke(rect, SHARP, border(), StrokeKind::Inside);
+        .rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    ui.painter().rect_stroke(
+        rect,
+        SHARP,
+        border(ui.style().visuals.dark_mode),
+        StrokeKind::Inside,
+    );
 
     let sty = ui.style_mut();
     let fonts = FontId {
@@ -505,7 +584,7 @@ pub fn slider_row(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::SURFACE,
+        plt::SURFACE(ui.style().visuals.dark_mode),
     );
     ui.painter().set(bg, bg_rect.clone());
     ui.painter().line_segment(
@@ -513,20 +592,20 @@ pub fn slider_row(
             bg_rect.visual_bounding_rect().left_bottom(),
             bg_rect.visual_bounding_rect().right_bottom(),
         ],
-        border(),
+        border(ui.style().visuals.dark_mode),
     );
     ui.painter().line_segment(
         [
             bg_rect.visual_bounding_rect().left_bottom(),
             bg_rect.visual_bounding_rect().left_top(),
         ],
-        border(),
+        border(ui.style().visuals.dark_mode),
     );
     ui.painter().line_segment(
         [
             bg_rect.visual_bounding_rect().right_bottom(),
             bg_rect.visual_bounding_rect().right_top(),
         ],
-        border(),
+        border(ui.style().visuals.dark_mode),
     );
 }

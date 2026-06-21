@@ -15,7 +15,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)
-        .frame(egui::Frame::NONE.fill(plt::BG))
+        .frame(egui::Frame::NONE.fill(plt::BG(ui.style().visuals.dark_mode)))
         .show_inside(ui, |ui| {
             const H: f32 = 28.0;
             let bg = ui.painter().add(egui::Shape::Noop);
@@ -103,7 +103,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
             let bgr = egui::Shape::rect_filled(
                 egui::Rect::from_min_size(inner_rect.left_top(), vec2(ui.available_width(), H)),
                 SHARP,
-                plt::BG,
+                plt::BG(ui.style().visuals.dark_mode),
             );
             let transport_rect = bgr.visual_bounding_rect();
             ui.painter().set(bg, bgr);
@@ -116,7 +116,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) 
             );
             ui.painter().line_segment(
                 [waveform.rect.left_top(), waveform.rect.right_top()],
-                border(),
+                border(ui.style().visuals.dark_mode),
             );
 
             if let Some(p) = pl {

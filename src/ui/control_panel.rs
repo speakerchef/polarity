@@ -9,7 +9,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::right("control_panel")
         .exact_size(320.0)
         .resizable(false)
-        .frame(egui::Frame::NONE.fill(palette::BG))
+        .frame(egui::Frame::NONE.fill(palette::BG(ui.style().visuals.dark_mode)))
         .show_inside(ui, |ui| {
             ui.vertical_centered(|ui| {
                 egui::Panel::right("control_panel_inner")

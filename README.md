@@ -1,8 +1,9 @@
 # Polarity
 
-- A simple, cross-platform, native desktop app that generates editable visualizations of your music in real-time that reacts with the sonic structure and frequency response of the audio.
-- Exists to aid those who want nice looking visuals for their music but do not want to spend too much time creating custom animations or visualizations using other methods.
-- Does not intend to replace meticulous, hand-designed animation sequences and visualizations.
+- Simple desktop app that generates customizable audio visualizations.
+- Intended for people who want pretty visuals for their music just with a few clicks.
+- Does not intend to replace meticulous handmade animations or visualizations.
+- Uses a generator based approach where your audio itself generates the visuals; A module-based structure where each module generates a specific type of visual.
 
 ---
 

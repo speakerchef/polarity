@@ -198,7 +198,7 @@ impl eframe::App for PolarityApp {
                     } else {
                         0.into()
                     })
-                    .fill(plt::BG),
+                    .fill(plt::BG(self.st.dark_mode)),
             )
             .show_inside(ui, |ui| {
                 if !self.st.fullscreen {
@@ -255,7 +255,7 @@ impl eframe::App for PolarityApp {
             resp.rect = resp.rect.translate(vec2(0., -6.));
             resp.rect = resp.rect.shrink2(vec2(12.0, 6.0));
             ui.painter()
-                .rect_stroke(resp.rect, SHARP, border(), StrokeKind::Inside);
+                .rect_stroke(resp.rect, SHARP, border(ui.style().visuals.dark_mode), StrokeKind::Inside);
         }
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -480,23 +480,25 @@ fn build_stereometer_render_resources(
         cache: None,
     });
 
-    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("live buffer"),
-        contents: bytemuck::cast_slice(
-            &[[0f32; 2];
-                (MAX_LIVE_POINT_DENSITY + MAX_TRACE_POINT_DENSITY) * VERTICES_PER_QUAD * 3],
-        ),
+        size: ((size_of::<f32>() * 2)
+            * (MAX_LIVE_POINT_DENSITY + MAX_TRACE_POINT_DENSITY)
+            * (VERTICES_PER_QUAD * 3)) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
     });
-    let alpha_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let alpha_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("alpha buffer"),
-        contents: bytemuck::cast_slice(&[0f32; MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD]),
+        size: (size_of::<f32>() * MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
     });
-    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0f32; 36]), // 144 bytes aligned
+        size: (size_of::<f32>() * 36) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
     });
 
     let stereometer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -739,10 +741,11 @@ fn build_output_render_resources(
         contents: bytemuck::cast_slice(&[0f32; 4]), // 16 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
     });
-    let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("output buffer"),
-        contents: bytemuck::cast_slice(&[0u32; 4096 * 4096]),
+        size: (2160 * 2160 * size_of::<u32>()) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
     });
     OutputResources {
         pipeline,
@@ -786,8 +789,8 @@ fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
 impl PolarityApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install_fonts(&cc.egui_ctx);
-        theme::apply_theme(&cc.egui_ctx);
         let mut st = AppState::default();
+        theme::apply_theme(&cc.egui_ctx, st.dark_mode);
         setup_wgpu(&mut st, cc);
         Self {
             st,

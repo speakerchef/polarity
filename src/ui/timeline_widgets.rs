@@ -14,8 +14,8 @@ use crate::{
 
 pub const SHARP: CornerRadius = CornerRadius::ZERO;
 
-pub fn border() -> Stroke {
-    Stroke::new(plt::FRAME_WIDTH, plt::BORDER)
+pub fn border(dark: bool) -> Stroke {
+    Stroke::new(plt::FRAME_WIDTH, plt::BORDER(dark))
 }
 
 pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) -> Response {
@@ -30,10 +30,11 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
 
     let rect = resp.rect;
+    let d = ui.style().visuals.dark_mode;
     let (bg, stk) = if resp.hovered() {
-        (plt::SURFACE_HOVER, plt::BORDER)
+        (plt::SURFACE_HOVER(d), plt::BORDER(d))
     } else {
-        (plt::BG, plt::BG)
+        (plt::BG(d), plt::BG(d))
     };
 
     ui.painter().rect_filled(rect, SHARP, bg);
@@ -69,11 +70,11 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
 
 pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(96.0, h), Sense::click());
-    ui.painter().rect_filled(rect, SHARP, plt::VOID);
+    ui.painter().rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
     ui.painter()
-        .line_segment([rect.left_bottom(), rect.left_top()], border());
+        .line_segment([rect.left_bottom(), rect.left_top()], border(ui.style().visuals.dark_mode));
     ui.painter()
-        .line_segment([rect.right_bottom(), rect.right_top()], border());
+        .line_segment([rect.right_bottom(), rect.right_top()], border(ui.style().visuals.dark_mode));
     let font = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_regular".into()),
@@ -156,22 +157,22 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
     let (bg, fg) = if matches!(mode, PlaybackMode::Loop) {
         (plt::YELLO, plt::INK)
     } else {
-        (plt::VOID, plt::BRIGHT)
+        (plt::VOID(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
     let bg = if resp.hovered() {
         if bg == plt::YELLO {
             bg
         } else {
-            plt::SURFACE_HOVER
+            plt::SURFACE_HOVER(ui.style().visuals.dark_mode)
         }
     } else {
         bg
     };
     ui.painter().rect_filled(resp.rect, SHARP, bg);
     ui.painter()
-        .line_segment([resp.rect.left_bottom(), resp.rect.left_top()], border());
+        .line_segment([resp.rect.left_bottom(), resp.rect.left_top()], border(ui.style().visuals.dark_mode));
     ui.painter()
-        .line_segment([resp.rect.right_bottom(), resp.rect.right_top()], border());
+        .line_segment([resp.rect.right_bottom(), resp.rect.right_top()], border(ui.style().visuals.dark_mode));
     let font_text = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
@@ -228,7 +229,7 @@ pub fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
             .iter()
             .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
         let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG;
+        let fill_col = plt::WAVEFORM_BG(ui.style().visuals.dark_mode);
         let mut inner = ui.allocate_rect(
             egui::Rect::from_min_size(
                 pos2(
@@ -262,7 +263,7 @@ pub fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
             .iter()
             .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
         let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG;
+        let fill_col = plt::WAVEFORM_BG(ui.style().visuals.dark_mode);
         let mut inner = ui.allocate_rect(
             egui::Rect::from_min_size(
                 pos2(
