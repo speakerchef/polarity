@@ -174,7 +174,14 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                 if st.postfx_open {
                                     section_header_submenu(ui, "BLOOM", &mut st.bloom_open);
                                     if st.bloom_open {
-                                        slider_row(ui, "AMOUNT", &mut st.bloom, 0.0, 10.0, 1);
+                                        slider_row(
+                                            ui,
+                                            "AMOUNT",
+                                            &mut st.stereo.bloom,
+                                            0.0,
+                                            10.0,
+                                            1,
+                                        );
                                     }
                                 }
                             })

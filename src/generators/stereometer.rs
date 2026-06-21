@@ -98,6 +98,7 @@ pub const VERTICES_PER_QUAD: usize = 6;
 const SQRT_3: f32 = 1.7320508;
 const LINEAR_BIPOLAR_SF: f32 = 0.5;
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Stereometer {
     pub kind: StereometerKind,
     pub render_mode: RenderMode,
@@ -108,148 +109,47 @@ pub struct Stereometer {
     pub filter_mode: FilterMode,
     pub filter_freq: f32,
     pub last_freq: f32,
-    pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 
     pub fs_color: Rgba,
     pub mb_color: [Rgba; 3],
 
-    pub live_buffer: Vec<Pos2>,
-    pub live_low_buffer: Vec<Pos2>,
-    pub live_mid_buffer: Vec<Pos2>,
-    pub live_high_buffer: Vec<Pos2>,
+    pub bloom: f32,
+    pub point_size: f32,
 
     pub last_sample_idx: usize,
-    pub trace_buffer: VecDeque<Pos2>,
-    pub trace_low_buffer: VecDeque<Pos2>,
-    pub trace_mid_buffer: VecDeque<Pos2>,
-    pub trace_high_buffer: VecDeque<Pos2>,
 
-    pub point_size: f32,
+    #[serde(skip)]
+    pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    #[serde(skip)]
+    pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    #[serde(skip)]
+    pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    #[serde(skip)]
+    pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+
+    #[serde(skip)]
+    pub live_buffer: Vec<Pos2>,
+    #[serde(skip)]
+    pub live_low_buffer: Vec<Pos2>,
+    #[serde(skip)]
+    pub live_mid_buffer: Vec<Pos2>,
+    #[serde(skip)]
+    pub live_high_buffer: Vec<Pos2>,
+    #[serde(skip)]
+    pub trace_buffer: VecDeque<Pos2>,
+    #[serde(skip)]
+    pub trace_low_buffer: VecDeque<Pos2>,
+    #[serde(skip)]
+    pub trace_mid_buffer: VecDeque<Pos2>,
+    #[serde(skip)]
+    pub trace_high_buffer: VecDeque<Pos2>,
 }
 
 impl Default for Stereometer {
     fn default() -> Self {
-        let glowing_galaxy = Stereometer {
-            filter_freq: 1.0,
-            last_freq: 1.0,
-            fs_color: Rgba::new(0, 255, 0, 255),
-            mb_color: [
-                Rgba::new(255, 22, 100, 255),
-                Rgba::new(75, 43, 255, 255),
-                Rgba::new(0, 255, 220, 255),
-            ],
-            point_size: 0.0020,
-            kind: StereometerKind::default(),
-            render_mode: RenderMode::MultiBand,
-            live_density: LiveDensity::Ultra,
-            trace_density: TraceDensity::High,
-            filter_mode: FilterMode::Off,
-            live_fs_filters: Default::default(),
-            trace_fs_filters: Default::default(),
-            live_mb_filters: Default::default(),
-            trace_mb_filters: Default::default(),
-            live_buffer: Default::default(),
-            live_low_buffer: Default::default(),
-            live_mid_buffer: Default::default(),
-            live_high_buffer: Default::default(),
-            last_sample_idx: Default::default(),
-            trace_buffer: Default::default(),
-            trace_low_buffer: Default::default(),
-            trace_mid_buffer: Default::default(),
-            trace_high_buffer: Default::default(),
-        };
-
-        let ultraviolet = Stereometer {
-            filter_freq: 1.0,
-            last_freq: 1.0,
-            fs_color: Rgba::new(0, 255, 0, 255),
-            mb_color: [
-                Rgba::new(116, 0, 184, 255),
-                Rgba::new(83, 89, 255, 255),
-                Rgba::new(128, 88, 255, 255),
-            ],
-            point_size: 0.0020,
-            kind: StereometerKind::default(),
-            render_mode: RenderMode::MultiBand,
-            live_density: LiveDensity::Ultra,
-            trace_density: TraceDensity::High,
-            filter_mode: FilterMode::Off,
-            live_fs_filters: Default::default(),
-            trace_fs_filters: Default::default(),
-            live_mb_filters: Default::default(),
-            trace_mb_filters: Default::default(),
-            live_buffer: Default::default(),
-            live_low_buffer: Default::default(),
-            live_mid_buffer: Default::default(),
-            live_high_buffer: Default::default(),
-            last_sample_idx: Default::default(),
-            trace_buffer: Default::default(),
-            trace_low_buffer: Default::default(),
-            trace_mid_buffer: Default::default(),
-            trace_high_buffer: Default::default(),
-        };
-        let synthwave = Stereometer {
-            filter_freq: 1.0,
-            last_freq: 1.0,
-            fs_color: Rgba::new(0, 255, 0, 255),
-            mb_color: [
-                Rgba::new(110, 0, 255, 255),
-                Rgba::new(0, 155, 255, 255),
-                Rgba::new(230, 0, 140, 255),
-            ],
-            point_size: 0.0020,
-            kind: StereometerKind::default(),
-            render_mode: RenderMode::MultiBand,
-            live_density: LiveDensity::Ultra,
-            trace_density: TraceDensity::High,
-            filter_mode: FilterMode::Off,
-            live_fs_filters: Default::default(),
-            trace_fs_filters: Default::default(),
-            live_mb_filters: Default::default(),
-            trace_mb_filters: Default::default(),
-            live_buffer: Default::default(),
-            live_low_buffer: Default::default(),
-            live_mid_buffer: Default::default(),
-            live_high_buffer: Default::default(),
-            last_sample_idx: Default::default(),
-            trace_buffer: Default::default(),
-            trace_low_buffer: Default::default(),
-            trace_mid_buffer: Default::default(),
-            trace_high_buffer: Default::default(),
-        };
-        let faded_joker = Stereometer {
-            filter_freq: 1.0,
-            last_freq: 1.0,
-            fs_color: Rgba::new(0, 255, 0, 255),
-            mb_color: [
-                Rgba::new(100, 0, 255, 255),
-                Rgba::new(255, 102, 0, 255),
-                Rgba::new(0, 222, 30, 255),
-            ],
-            point_size: 0.0022,
-            kind: StereometerKind::default(),
-            render_mode: RenderMode::MultiBand,
-            live_density: LiveDensity::Ultra,
-            trace_density: TraceDensity::High,
-            filter_mode: FilterMode::Off,
-            live_fs_filters: Default::default(),
-            trace_fs_filters: Default::default(),
-            live_mb_filters: Default::default(),
-            trace_mb_filters: Default::default(),
-            live_buffer: Default::default(),
-            live_low_buffer: Default::default(),
-            live_mid_buffer: Default::default(),
-            live_high_buffer: Default::default(),
-            last_sample_idx: Default::default(),
-            trace_buffer: Default::default(),
-            trace_low_buffer: Default::default(),
-            trace_mid_buffer: Default::default(),
-            trace_high_buffer: Default::default(),
-        };
-        faded_joker
+        // default preset
+        let fstr = std::fs::read_to_string("presets/synthwave.json").unwrap();
+        serde_json::from_str(&fstr).unwrap()
     }
 }
 

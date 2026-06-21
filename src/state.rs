@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -115,6 +115,7 @@ pub struct ExportConfig {
 
 pub struct AppState {
     pub file_dialog: FileDialog,
+    pub dir_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
     pub stereo: Stereometer,
     pub pos: [f32; 2],
@@ -123,6 +124,7 @@ pub struct AppState {
     pub bloom_render_resources: Option<BloomRenderResources>,
     pub output_render_resources: Option<OutputResources>,
 
+    // Export states
     pub export_config: ExportConfig,
     pub show_export_resolution: bool,
     pub show_export_fps: bool,
@@ -141,8 +143,21 @@ pub struct AppState {
 
     pub fullscreen: bool,
     pub import_open: bool,
-    pub show_window_options: bool,
-    pub window_options_open: bool,
+
+    pub save_preset: bool,
+    pub load_preset: bool,
+    pub show_preset_options: bool,
+    pub show_preset_save_modal: bool,
+    pub show_preset_load_modal: bool,
+    pub open_preset_save_file_picker: bool,
+    pub open_preset_load_file_picker: bool,
+    pub picked_preset_save_dir: bool,
+    pub picked_preset_load_file: bool,
+    pub file_picked: bool,
+    pub preset_save_path: Option<PathBuf>,
+    pub preset_load_path: Option<PathBuf>,
+    pub preset_name: String,
+
     pub show_file_options: bool,
     pub window_drag_tooltip_modal_deadline: Option<Instant>,
     pub window_drag_tooltip_modal_open: bool,
@@ -164,8 +179,6 @@ pub struct AppState {
 
     pub postfx_open: bool,
     pub bloom_open: bool,
-
-    pub bloom: f32,
 }
 
 impl Default for AppState {
@@ -184,6 +197,12 @@ impl Default for AppState {
                 )
                 .default_file_filter("Audio")
                 .allow_file_overwrite(true)
+                .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
+
+            dir_dialog: FileDialog::new()
+                .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
+                .show_left_panel(true)
+                .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
             show_fullscreen_button: true,
@@ -214,10 +233,22 @@ impl Default for AppState {
             fullscreen: false,
             import_open: false,
             show_file_options: false,
-            show_window_options: false,
-            window_options_open: false,
+            show_preset_options: false,
             window_drag_tooltip_modal_deadline: None,
             window_drag_tooltip_modal_open: false,
+
+            save_preset: false,
+            load_preset: false,
+            show_preset_save_modal: false,
+            show_preset_load_modal: false,
+            picked_preset_save_dir: false,
+            picked_preset_load_file: false,
+            open_preset_save_file_picker: false,
+            file_picked: false,
+            open_preset_load_file_picker: false,
+            preset_save_path: None,
+            preset_load_path: None,
+            preset_name: String::default(),
 
             gen_open: false,
             render_open: false,
@@ -235,7 +266,6 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
-            bloom: 4.5,
         }
     }
 }

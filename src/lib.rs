@@ -11,7 +11,7 @@ pub use app::PolarityApp;
 #[macro_export]
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
-        #[derive(Clone, Copy, PartialEq, Eq)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug,serde::Serialize, serde::Deserialize)]
         pub enum $name { $($variant),+ }
         impl $name {
             pub const ALL: &'static [$name] = &[$($name::$variant),+];
@@ -67,7 +67,7 @@ impl LinearRgba {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Rgba {
     pub r: f32,
     pub g: f32,

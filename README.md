@@ -30,9 +30,10 @@
 - [x] Transport bar with playback controls + File path + Loop mode toggle
 - [x] Fullscreen mode
 - [ ] Live/RT mode
+- [x] Save/Load presets + default bank of presets
 - [x] Timeline with waveform view
 - [x] Click to skip inside timeline
-- [ ] Simple MP4 Export pipeline to combine audio + generated motion
+- [x] Simple MP4 Export pipeline to combine audio + generated motion
 
 ### Author
 

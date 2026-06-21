@@ -20,12 +20,13 @@ use crate::{
             prep_output_resources_for_effects,
         },
         stereometer::{
-            FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD,
+            FilterMode, MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, Stereometer,
+            VERTICES_PER_QUAD,
         },
     },
     state::PlaybackMode,
     ui::{
-        app_widgets::{export_modal, menu_bar, window_drag_tooltip},
+        app_widgets::{export_modal, menu_bar, preset_modal, window_drag_tooltip},
         canvas, control_panel, timeline,
         timeline_widgets::{SHARP, border},
     },
@@ -52,7 +53,7 @@ fn export_batched_frames(
     let canvas_size = st.export_config.resolution.value();
     let (w, h) = (canvas_size.0, canvas_size.1);
 
-    let bloom_amt = st.bloom;
+    let bloom_amt = st.stereo.bloom;
     let device = &wgpu_render_state.device;
     let queue = &wgpu_render_state.queue;
 
@@ -238,6 +239,9 @@ impl eframe::App for PolarityApp {
                 if self.st.show_export_modal {
                     export_modal(ui, &mut self.st);
                 }
+                if self.st.show_preset_load_modal || self.st.show_preset_save_modal {
+                    preset_modal(ui, &mut self.st);
+                }
 
                 if self.st.rendering {
                     self.player.as_ref().unwrap().pause();
@@ -283,14 +287,73 @@ impl eframe::App for PolarityApp {
             ctx.request_repaint();
         }
 
-        // Open file dialog
+        // Open audio import dialog
         if self.st.import_open {
             self.st.file_dialog.pick_file();
             self.st.import_open = false;
             self.st.start_render = false;
         }
 
-        // Check if user picked a file
+        // save dialog
+        if self.st.open_preset_save_file_picker {
+            self.st.dir_dialog.pick_directory();
+            self.st.file_picked = true;
+            self.st.open_preset_save_file_picker = false;
+            self.st.show_preset_save_modal = false;
+            self.st.picked_preset_save_dir = true;
+        }
+        // load dialog
+        if self.st.open_preset_load_file_picker {
+            self.st.dir_dialog.pick_file();
+            self.st.file_picked = true;
+            self.st.open_preset_load_file_picker = false;
+            self.st.show_preset_load_modal = false;
+            self.st.picked_preset_load_file = true;
+        }
+
+        // check if user picked save directory
+        if let Some(path) = self
+            .st
+            .dir_dialog
+            .update(ctx)
+            .picked()
+            .map(|p| p.to_path_buf())
+            && (!self.st.save_preset && self.st.picked_preset_save_dir)
+        {
+            if let Some(oldpath) = &self.st.preset_save_path {
+                if *oldpath != path {
+                    self.st.preset_save_path = Some(path);
+                    self.st.show_preset_save_modal = true;
+                }
+            } else {
+                self.st.preset_save_path = Some(path);
+                self.st.show_preset_save_modal = true;
+            }
+            self.st.picked_preset_save_dir = false;
+        };
+
+        // check if user picked load directory
+        if let Some(path) = self
+            .st
+            .dir_dialog
+            .update(ctx)
+            .picked()
+            .map(|p| p.to_path_buf())
+            && (!self.st.load_preset && self.st.picked_preset_load_file)
+        {
+            if let Some(oldpath) = &self.st.preset_load_path {
+                if *oldpath != path {
+                    self.st.preset_load_path = Some(path);
+                    self.st.show_preset_load_modal = true;
+                }
+            } else {
+                self.st.preset_load_path = Some(path);
+                self.st.show_preset_load_modal = true;
+            }
+            self.st.picked_preset_load_file = false;
+        };
+
+        // Check if user picked an audio file
         if let Some(path) = self
             .st
             .file_dialog
@@ -302,6 +365,31 @@ impl eframe::App for PolarityApp {
         };
         self.update_filters();
         self.handle_playback(ctx);
+
+        if self.st.save_preset {
+            let Ok(data) = serde_json::to_vec(&self.st.stereo) else {
+                return;
+            };
+            let Some(path) = &self.st.preset_save_path else {
+                return;
+            };
+            std::fs::write(path.join(format!("{}.json", self.st.preset_name)), data)
+                .unwrap_or_else(|e| println!("Error saving preset: {e}"));
+            self.st.save_preset = false;
+            self.st.show_preset_save_modal = false;
+            println!("Saved Preset");
+        }
+        if self.st.load_preset {
+            let Some(path) = &self.st.preset_load_path else {
+                return;
+            };
+            let fstr = std::fs::read_to_string(path).unwrap();
+            let stereometer: Stereometer = serde_json::from_str(&fstr).unwrap();
+            self.st.load_preset = false;
+            self.st.show_preset_load_modal = false;
+            self.st.stereo = stereometer;
+            println!("Loaded Preset");
+        }
 
         // Check if playback has ended
         if let Some(player) = &self.player
