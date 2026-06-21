@@ -1,4 +1,6 @@
-use eframe::egui;
+use std::sync::Arc;
+
+use eframe::egui::{self, Vec2};
 use eframe::egui::{Align, Color32, FontId, Pos2};
 
 pub mod app_widgets;
@@ -11,6 +13,11 @@ pub mod theme;
 pub mod timeline;
 pub mod timeline_widgets;
 
+pub fn get_text_size(ui: &mut egui::Ui, text: &str, font_id: FontId) -> Vec2 {
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font_id, Color32::default()));
+    galley.size()
+}
+
 pub fn custom_text(
     ui: &mut egui::Ui,
     text: &str,
@@ -19,7 +26,7 @@ pub fn custom_text(
     extra_letter_spacing: f32,
     color: Color32,
     justify: Align,
-) {
+) -> Arc<egui::Galley> {
     let mut job = egui::text::LayoutJob {
         halign: justify,
         ..Default::default()
@@ -36,5 +43,6 @@ pub fn custom_text(
         },
     );
     let galley = ui.painter().layout_job(job);
-    ui.painter().galley(pos, galley, Color32::default());
+    ui.painter().galley(pos, galley.clone(), Color32::default());
+    galley
 }

@@ -1,4 +1,4 @@
-use crate::ui::custom_text;
+use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
 
 use eframe::egui::{
@@ -213,15 +213,12 @@ pub fn menu_bar_option(
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
     p.rect_stroke(rect, SHARP, border(), StrokeKind::Inside);
+    let (_, th) = get_text_size(ui, &label.to_uppercase(), font.clone()).into();
     custom_text(
         ui,
         &label.to_uppercase(),
         font.clone(),
-        pos2(
-            rect.center_top().x,
-            // rect.left_center().y - ((rect.height() / 4.0) + 0.5),
-            rect.left_center().y - ((rect.height() / 4.0) + 2.0),
-        ),
+        rect.center() - vec2(0.0, th / 2.0),
         plt::letter_spacing::BASE,
         // plt::BRIGHT,
         fg,

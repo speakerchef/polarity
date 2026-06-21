@@ -1,5 +1,8 @@
 #![allow(dead_code)]
-use std::{path::Path, time::Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use eframe::egui::{Align2, vec2};
 use egui_file_dialog::{self as fd, FileDialog};
@@ -31,13 +34,13 @@ labeled_enum!(
         P1200=>"1200p",
         P1440=>"1440p",
         P1600=>"1600p",
-        P2560=>"2560p",
+        P2160=>"2160p",
     },
     P1080
 );
 
 impl Resolution {
-    pub fn resolution(self) -> (u32, u32) {
+    pub fn value(self) -> (u32, u32) {
         match self {
             Resolution::P480 => (480, 480),
             Resolution::P720 => (720, 720),
@@ -45,7 +48,7 @@ impl Resolution {
             Resolution::P1200 => (1200, 1200),
             Resolution::P1440 => (1440, 1440),
             Resolution::P1600 => (1600, 1600),
-            Resolution::P2560 => (2560, 2560),
+            Resolution::P2160 => (2160, 2160),
         }
     }
 }
@@ -64,7 +67,7 @@ labeled_enum!(Fps {
 }, FPS45);
 
 impl Fps {
-    pub fn fps(self) -> usize {
+    pub fn value(self) -> usize {
         match self {
             Fps::FPS24 => 24,
             Fps::FPS30 => 30,
@@ -87,7 +90,7 @@ labeled_enum!(ExportQuality {
 }, Good);
 
 impl ExportQuality {
-    pub fn quality(self) -> usize {
+    pub fn value(self) -> usize {
         match self {
             ExportQuality::Worst => 20,
             ExportQuality::Good => 18,
@@ -107,6 +110,7 @@ pub struct ExportConfig {
     pub resolution: Resolution,
     pub frame_rate: Fps,
     pub quality: ExportQuality,
+    pub total_frames: usize,
 }
 
 pub struct AppState {
@@ -128,8 +132,12 @@ pub struct AppState {
     pub show_export_modal: bool,
     pub start_render: bool,
     pub rendering: bool,
-    pub join_handle: Option<std::thread::JoinHandle<()>>,
+    pub export_canceled: bool,
+    pub writer_handle: Option<std::thread::JoinHandle<()>>,
+    pub logger_handle: Option<std::thread::JoinHandle<()>>,
     pub export_tx: Option<flume::Sender<Vec<u8>>>,
+    pub prev_export_timestamp: Option<Instant>,
+    pub export_elapsed_time: Option<Duration>,
 
     pub fullscreen: bool,
     pub import_open: bool,
@@ -184,8 +192,11 @@ impl Default for AppState {
             output_render_resources: None,
 
             export_config: ExportConfig::default(),
-            join_handle: None,
+            writer_handle: None,
+            logger_handle: None,
             export_tx: None,
+            prev_export_timestamp: None,
+            export_elapsed_time: None,
             show_export_resolution: false,
             show_export_fps: false,
             show_export_quality: false,
@@ -194,6 +205,7 @@ impl Default for AppState {
             show_export_modal: false,
             start_render: false,
             rendering: false,
+            export_canceled: false,
 
             playback_mode: PlaybackMode::default(),
             stereo: Stereometer::default(),
@@ -223,7 +235,7 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
-            bloom: 2.0,
+            bloom: 4.5,
         }
     }
 }

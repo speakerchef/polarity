@@ -1,12 +1,11 @@
 use biquad::*;
 use eframe::egui_wgpu::{self, wgpu};
 use egui_winit::winit::dpi::LogicalSize;
+use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 use std::{
     io::Write,
     num::NonZeroU64,
-    ops::Add,
     path::PathBuf,
-    process::Stdio,
     time::{Duration, Instant},
 };
 use wgpu::{Device, util::DeviceExt};
@@ -26,15 +25,13 @@ use crate::{
     },
     state::PlaybackMode,
     ui::{
-        app_widgets::export_modal,
-        canvas, control_panel,
-        control_panel_widgets::menu_bar_option,
-        custom_text, timeline,
+        app_widgets::{export_modal, menu_bar, window_drag_tooltip},
+        canvas, control_panel, timeline,
         timeline_widgets::{SHARP, border},
     },
 };
 use eframe::egui;
-use eframe::egui::{Align, FontId, Key, StrokeKind, pos2, vec2};
+use eframe::egui::{Key, StrokeKind, vec2};
 
 use crate::{state::AppState, ui::palette as plt, ui::theme};
 
@@ -43,20 +40,17 @@ pub struct PolarityApp {
     st: AppState,
     player: Option<AudioPlayer>,
 }
-const MB_H: f32 = 20.0;
-const MB_GAP: f32 = 12.0;
 
-const BATCH_SIZE: usize = 200;
+const BATCH_SIZE: usize = 30;
 
 fn export_batched_frames(
     st: &mut AppState,
     p: &AudioPlayer,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let canvas_size = st.export_config.resolution.resolution();
+    let fps = st.export_config.frame_rate.value();
+    let canvas_size = st.export_config.resolution.value();
     let (w, h) = (canvas_size.0, canvas_size.1);
-    let fps = st.export_config.frame_rate.fps();
-    let quality = st.export_config.quality.quality();
 
     let bloom_amt = st.bloom;
     let device = &wgpu_render_state.device;
@@ -65,55 +59,54 @@ fn export_batched_frames(
     let meter_res = st.stereometer_render_resources.as_mut().unwrap();
     let bloom_res = st.bloom_render_resources.as_mut().unwrap();
     let out_res = st.output_render_resources.as_mut().unwrap();
-    if st.join_handle.is_none() {
-        let mut cmd = std::process::Command::new("ffmpeg");
-        let mut cmd = cmd
-            .args([
-                "-f",
-                "rawvideo",
-                "-pixel_format",
-                "bgra",
-                "-video_size",
-                &format!("{w}x{h}"),
-                "-framerate",
-                &fps.to_string(),
-                "-i",
-                "-",
-                "-i",
-                p.contents.path.to_str().unwrap(),
-                "-shortest",
-                "-c:v",
-                "libx264",
-                "-crf",
-                &quality.to_string(),
-                "-preset",
-                "veryfast",
-                "-pix_fmt",
-                "yuv444p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "320k",
-                "-y",
-                "out.mp4",
-            ])
-            .stdin(Stdio::piped())
+
+    // Spawn writer thread for entire job
+    if st.writer_handle.is_none() {
+        let quality = st.export_config.quality.value();
+        let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
+
+        let mut output = FfmpegCommand::new()
+            .format("rawvideo")
+            .args(["-pixel_format", "bgra"])
+            .size(w, h)
+            .rate(fps as f32)
+            .input("-")
+            .input(p.contents.path.to_string_lossy())
+            .codec_video("libx264")
+            .crf(quality as u32)
+            .preset("veryfast")
+            .pix_fmt("yuv444p")
+            .codec_audio("aac")
+            .args(["-b:a", "320k"])
+            .args(["-y", "out.mp4"])
             .spawn()
             .unwrap();
-        let mut stdin = cmd.stdin.take().expect("No stdin");
+
+        let mut stdin = output.take_stdin().unwrap();
         let (tx, rx) = flume::bounded::<Vec<u8>>(4);
-        let handle = std::thread::spawn(move || {
+        let write_handle = std::thread::spawn(move || {
             rx.iter().for_each(|frame| {
                 stdin.write_all(&frame).unwrap();
             });
             drop(stdin);
-            cmd.wait().unwrap();
         });
-        st.join_handle = Some(handle);
+        let log_handle = std::thread::spawn(move || {
+            for event in output.iter().unwrap() {
+                match event {
+                    FfmpegEvent::Log(_, _) => (),
+                    FfmpegEvent::Error(_e) => (),
+                    FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
+                    FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
+                    _ => (),
+                }
+            }
+            output.wait().unwrap();
+        });
+        st.writer_handle = Some(write_handle);
+        st.logger_handle = Some(log_handle);
         st.export_tx = Some(tx);
+        st.export_config.total_frames = total_frames as usize;
     }
-
-    let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
 
     for _ in 0..BATCH_SIZE {
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -121,11 +114,17 @@ fn export_batched_frames(
         });
 
         st.cur_frame_idx += 1;
-        if st.cur_frame_idx >= total_frames as usize {
+        if st.cur_frame_idx >= st.export_config.total_frames || st.export_canceled {
             drop(std::mem::take(&mut st.export_tx));
-            st.join_handle.take().unwrap().join().unwrap();
+            st.writer_handle.take().unwrap().join().unwrap();
+            st.logger_handle.take().unwrap().join().unwrap();
             st.rendering = false;
+            st.show_export_modal = false;
             st.cur_frame_idx = 0;
+            st.export_elapsed_time.take();
+            st.prev_export_timestamp.take();
+            st.export_config.total_frames = 0;
+            st.export_canceled = false;
             println!("Finished");
             break;
         }
@@ -182,7 +181,7 @@ fn export_batched_frames(
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if !self.st.fullscreen {
-            self.render_menu_bar(ui);
+            menu_bar(&mut self.st, ui);
         }
 
         let mut resp = egui::CentralPanel::default()
@@ -241,8 +240,7 @@ impl eframe::App for PolarityApp {
                 }
 
                 if self.st.rendering {
-                    let p = self.player.as_ref().unwrap();
-                    p.pause();
+                    self.player.as_ref().unwrap().pause();
                 } else {
                     canvas::draw(ui, &mut self.st, &self.player);
                 }
@@ -262,6 +260,7 @@ impl eframe::App for PolarityApp {
         {
             ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
         }
+
         //EXPORT
         if let Some(p) = &self.player
             && (self.st.start_render || self.st.rendering)
@@ -269,9 +268,19 @@ impl eframe::App for PolarityApp {
             self.st.start_render = false;
             self.st.rendering = true;
             let wgpu_render_state = frame.wgpu_render_state().unwrap();
+
+            if let (Some(t), Some(start_point)) = (
+                self.st.export_elapsed_time.as_mut(),
+                self.st.prev_export_timestamp,
+            ) {
+                *t = Instant::now().duration_since(start_point);
+            } else {
+                self.st.prev_export_timestamp = Some(Instant::now());
+                self.st.export_elapsed_time = Some(Duration::default());
+            }
             export_batched_frames(&mut self.st, p, wgpu_render_state);
+
             ctx.request_repaint();
-            self.st.show_export_modal = false;
         }
 
         // Open file dialog
@@ -697,70 +706,6 @@ impl PolarityApp {
             ..Default::default()
         }
     }
-    fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.set_min_height(MB_H + MB_GAP);
-            egui::Area::new("menu_bar".into())
-                .fixed_pos(ui.viewport_rect().left_top() + vec2(0.0, MB_GAP))
-                .order(egui::Order::Foreground)
-                .movable(false)
-                .show(ui.ctx(), |ui| {
-                    ui.set_max_height(MB_H);
-                    ui.set_width(ui.content_rect().width());
-
-                    ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                        let resp = ui.allocate_rect(
-                            egui::Rect::from_min_size(
-                                pos2(
-                                    ui.content_rect().left_top().x,
-                                    ui.content_rect().left_top().y + 12.0,
-                                ),
-                                vec2(ui.available_width(), ui.available_height()),
-                            ),
-                            egui::Sense::focusable_noninteractive(),
-                        );
-                        let mut rect = resp.rect;
-                        rect.min.y -= MB_GAP;
-                        ui.painter().rect_filled(rect, SHARP, plt::BG);
-
-                        ui.set_max_width(ui.available_rect_before_wrap().width());
-                        ui.set_min_width(ui.available_rect_before_wrap().width());
-                        ui.add_space(12.0);
-
-                        menu_bar_option(
-                            ui,
-                            "file",
-                            44.0,
-                            FontId {
-                                family: egui::FontFamily::Name("inter_medium".into()),
-                                size: plt::font_size::TINY,
-                            },
-                            &mut self.st.show_file_options,
-                            &["Import", "Export"],
-                            &mut [&mut self.st.import_open, &mut self.st.show_export_modal],
-                            MB_H,
-                        );
-                        ui.add_space(1.0);
-
-                        menu_bar_option(
-                            ui,
-                            "window",
-                            70.0,
-                            FontId {
-                                family: egui::FontFamily::Name("inter_medium".into()),
-                                size: plt::font_size::TINY,
-                            },
-                            &mut self.st.show_window_options,
-                            &[""],
-                            &mut [&mut self.st.window_options_open, &mut false],
-                            MB_H,
-                        );
-
-                        ui.add_space(ui.available_width() - 36.0);
-                    });
-                });
-        });
-    }
 
     pub fn load_file(&mut self, path: PathBuf) {
         if let Some(old_player) = &self.player {
@@ -877,32 +822,7 @@ impl PolarityApp {
         }
 
         if self.st.window_drag_tooltip_modal_open {
-            egui::Area::new("window drag tooltip".into())
-                .order(egui::Order::Background)
-                .show(ui.ctx(), |ui| {
-                    let mut resp = ui.allocate_rect(
-                        egui::Rect::from_min_size(
-                            ui.content_rect().left_top().add(vec2(48., 14.)),
-                            vec2(360., 30.),
-                        ),
-                        egui::Sense::click(),
-                    );
-                    resp.interact_rect.set_height(0.0);
-                    resp.interact_rect.set_width(0.0);
-
-                    custom_text(
-                        ui,
-                        "PRESS AND HOLD ANY KEY TO MOVE THE WINDOW",
-                        FontId {
-                            size: plt::font_size::META,
-                            family: egui::FontFamily::Name("inter_regular".into()),
-                        },
-                        pos2(resp.rect.left(), resp.rect.left_center().y - 9.0),
-                        plt::letter_spacing::BASE,
-                        plt::BORDER,
-                        Align::LEFT,
-                    );
-                });
+            window_drag_tooltip(ui);
         }
 
         if let Some(start_time) = self.st.window_drag_tooltip_modal_deadline
