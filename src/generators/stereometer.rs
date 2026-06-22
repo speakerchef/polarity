@@ -149,7 +149,36 @@ impl Default for Stereometer {
     fn default() -> Self {
         // default preset
         let fstr = std::fs::read_to_string("presets/synthwave.json").unwrap();
-        serde_json::from_str(&fstr).unwrap()
+        serde_json::from_str(&fstr).unwrap_or_else(|_err| Self {
+            filter_freq: 1.0,
+            last_freq: 1.0,
+            bloom: 4.5,
+            fs_color: Rgba::new(0, 255, 0, 255),
+            mb_color: [
+                Rgba::new(110, 0, 255, 255),
+                Rgba::new(0, 155, 255, 255),
+                Rgba::new(230, 0, 140, 255),
+            ],
+            point_size: 0.0020,
+            kind: StereometerKind::default(),
+            render_mode: RenderMode::MultiBand,
+            live_density: LiveDensity::Ultra,
+            trace_density: TraceDensity::High,
+            filter_mode: FilterMode::Off,
+            live_fs_filters: Default::default(),
+            trace_fs_filters: Default::default(),
+            live_mb_filters: Default::default(),
+            trace_mb_filters: Default::default(),
+            live_buffer: Default::default(),
+            live_low_buffer: Default::default(),
+            live_mid_buffer: Default::default(),
+            live_high_buffer: Default::default(),
+            last_sample_idx: Default::default(),
+            trace_buffer: Default::default(),
+            trace_low_buffer: Default::default(),
+            trace_mid_buffer: Default::default(),
+            trace_high_buffer: Default::default(),
+        })
     }
 }
 

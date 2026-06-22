@@ -80,7 +80,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                         false,
                     );
 
-                    ui.add_space(ui.available_width() - 36.0);
+                    ui.add_space(ui.available_width() - 37.0);
                     menu_bar_option(
                         ui,
                         "\u{e8b8}",
@@ -91,8 +91,8 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                         },
                         &mut st.show_settings,
                         &[&format!(
-                            "{} Mode",
-                            if st.dark_mode { "Light" } else { "Dark" }
+                            "{} Theme",
+                            if st.dark_mode { "Graphite" } else { "Midnight" }
                         )],
                         &mut [&mut st.dark_mode],
                         MB_H,

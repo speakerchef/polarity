@@ -55,20 +55,24 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
-pub fn apply_theme(ctx: &egui::Context) {
+pub fn apply_theme(ctx: &egui::Context, dark: bool) {
     use palette as p;
 
-    let bdr = Stroke::new(p::FRAME_WIDTH, p::BORDER);
-    let mut v = egui::Visuals::dark();
+    let bdr = Stroke::new(p::FRAME_WIDTH, p::BORDER(dark));
+    let mut v = if dark {
+        egui::Visuals::dark()
+    } else {
+        egui::Visuals::light()
+    };
 
-    v.panel_fill = p::BG;
-    v.window_fill = p::BG_DARK;
-    v.extreme_bg_color = p::VOID;
-    v.faint_bg_color = p::SURFACE;
+    v.panel_fill = p::BG(dark);
+    v.window_fill = p::BG_DARK(dark);
+    v.extreme_bg_color = p::VOID(dark);
+    v.faint_bg_color = p::SURFACE(dark);
     v.override_text_color = Some(p::TEXT);
     v.window_stroke = bdr;
     v.window_corner_radius = CornerRadius::ZERO;
-    v.selection.bg_fill = p::SURFACE_HOVER;
+    v.selection.bg_fill = p::SURFACE_HOVER(dark);
     v.selection.stroke = Stroke::new(p::FRAME_WIDTH, p::BRIGHT);
 
     for w in [
@@ -83,11 +87,11 @@ pub fn apply_theme(ctx: &egui::Context) {
         w.expansion = 0.0;
         w.fg_stroke = Stroke::new(1.0, p::TEXT);
     }
-    v.widgets.noninteractive.bg_fill = p::BG;
-    v.widgets.inactive.bg_fill = p::SURFACE;
-    v.widgets.inactive.weak_bg_fill = p::VOID;
-    v.widgets.hovered.bg_fill = p::SURFACE_HOVER;
-    v.widgets.hovered.weak_bg_fill = p::SURFACE_HOVER;
+    v.widgets.noninteractive.bg_fill = p::BG(dark);
+    v.widgets.inactive.bg_fill = p::SURFACE(dark);
+    v.widgets.inactive.weak_bg_fill = p::VOID(dark);
+    v.widgets.hovered.bg_fill = p::SURFACE_HOVER(dark);
+    v.widgets.hovered.weak_bg_fill = p::SURFACE_HOVER(dark);
 
     ctx.set_visuals(v);
 

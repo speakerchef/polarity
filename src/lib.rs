@@ -5,6 +5,7 @@ mod audio;
 mod generators;
 mod state;
 mod ui;
+mod wgpu_init;
 
 pub use app::PolarityApp;
 
