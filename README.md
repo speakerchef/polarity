@@ -10,7 +10,7 @@
 > [!NOTE]
 > Currently in a super early prototyping stage.
 
-### V1 MVP Roadmap
+### V1 MVP Roadmap (Complete)
 
 - [x] Desktop app shell
 - [x] Audio file import (Formats: WAV, MP3, OGGVORBIS)
@@ -24,18 +24,36 @@
   - [x] Tunable point density for primary and trace generators
   - [x] Editable point size
   - [x] Tunable animation scale-factor
-- [ ] Primitive Rack of Post FX modules
+- [x] Post-FX
   - [x] Bloom / Sparkle
-  - [ ] Chromatic aberration
-  - [ ] Phosphor
 - [x] Transport bar with playback controls + File path + Loop mode toggle
 - [x] Fullscreen mode
-- [ ] Live/RT mode
 - [x] Themes
 - [x] Save/Load presets + default bank of presets
 - [x] Timeline with waveform view
 - [x] Click to skip inside timeline
 - [x] Simple MP4 Export pipeline to combine audio + generated motion
+
+### V2 Roadmap (In Progress)
+
+- [ ] Build/packaging system to get `.app`
+- [ ] Particle / Fluid simulation motion generator
+  - [ ] No-gravity based fluid Canvas
+  - [ ] 2 modes:
+    - [ ] Transient/impact based wave generator
+    - [ ] Visualize waves through particle compression and expansion
+    - [ ] Have dynamic velocity based color generation
+- [ ] Live/RT mode
+- [ ] Preferences pane with adjustable defaults
+  - [ ] audio input options for live mode
+  - [ ] Undo levels
+  - [ ] Selectable themes
+- [ ] Project save/load ability with custom format:
+  - [ ] container that also stores the audio file path (or audio copied into project container)
+- [ ] Undo/Redo system
+- [ ] Post-FX
+  - [ ] Chromatic aberration
+  - [ ] Phosphor
 
 ### Author
 
