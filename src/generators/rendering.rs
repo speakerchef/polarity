@@ -3,6 +3,8 @@ use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
 
+use crate::GeneratorKind;
+use crate::ui::canvas::NUM_PARTICLES;
 use crate::{
     LinearRgba,
     generators::stereometer::{MAX_TRACE_POINT_DENSITY, RenderMode, VERTICES_PER_QUAD},
@@ -114,7 +116,38 @@ impl OutputResources {
     }
 }
 
+pub struct FluidRenderResources {
+    pub target_format: wgpu::TextureFormat,
+    pub pipeline: wgpu::RenderPipeline,
+    pub compute: wgpu::ComputePipeline,
+    pub render_bind_group: wgpu::BindGroup,
+    pub compute_bind_group: wgpu::BindGroup,
+    pub vertex_buffer: wgpu::Buffer,
+    pub params_buffer: wgpu::Buffer,
+    pub debug_storage: wgpu::Buffer,
+    pub debug_staging: wgpu::Buffer,
+    pub tex: Option<wgpu::Texture>,
+}
+impl FluidRenderResources {
+    fn prepare(&self, queue: &wgpu::Queue, dt: f32) {
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[dt]));
+    }
+    fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
+        compute_pass.set_pipeline(&self.compute);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+        compute_pass.dispatch_workgroups(64, 1, 1);
+    }
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.render_bind_group, &[]);
+        render_pass.draw(0..8 * num_points, 0..1);
+    }
+}
+
 pub struct RendererCallback {
+    pub canvas_size: Vec2,
+    pub gen_kind: GeneratorKind,
+
     // Stereometer fields
     pub render_mode: RenderMode,
     pub live_pos: Vec<Pos2>,
@@ -131,15 +164,19 @@ pub struct RendererCallback {
     pub lb_color: LinearRgba,
     pub mb_color: LinearRgba,
     pub hb_color: LinearRgba,
-    pub canvas_size: Vec2,
+
+    // Particle fields
+    pub particle_pos: Vec<Pos2>,
+    pub frame_time: f32,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    dim: (u32, u32),
     command_encoder: &mut wgpu::CommandEncoder,
-    meter_res: &mut StereometerRenderResources,
+    stereometer_res: &StereometerRenderResources,
+    fluid_res: &FluidRenderResources,
+    target_texture_view: wgpu::TextureView,
 ) {
     let pos = match data.render_mode {
         RenderMode::FullSpectrum => {
@@ -159,7 +196,7 @@ pub fn main_render_pipeline(
     };
     let (live_len, trace_len) = (data.live_pos.len(), data.trace_pos.len());
     let (live_mb_len, trace_mb_len) = (data.live_low_pos.len(), data.trace_low_pos.len());
-    meter_res.prepare(
+    stereometer_res.prepare(
         device,
         queue,
         pos,
@@ -173,49 +210,18 @@ pub fn main_render_pipeline(
         live_mb_len as u32,
         trace_mb_len as u32,
     );
+    fluid_res.prepare(queue, data.frame_time);
+    let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+        label: Some("fluid compute pass"),
+        timestamp_writes: None,
+    });
+    fluid_res.compute(&mut compute_pass);
+    drop(compute_pass);
 
-    let (w, h) = (dim.0, dim.1);
-    let resized = meter_res
-        .tex
-        .as_ref()
-        .map(|t| t.width() != w || t.height() != h)
-        .unwrap_or(true);
-    if resized {
-        // Now we create the texture
-        let diffuse_blit_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("blit texture"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: meter_res.target_format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        meter_res.tex = Some(diffuse_blit_texture);
-    }
-    let src_view = meter_res
-        .tex
-        .as_ref()
-        .unwrap()
-        .create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            base_mip_level: 0,
-            mip_level_count: Some(1),
-            ..Default::default()
-        });
-
-    let mut stereometer_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("stereometer pass"),
+    let mut main_render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("main pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &src_view,
+            view: &target_texture_view,
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {
@@ -229,17 +235,119 @@ pub fn main_render_pipeline(
         multiview_mask: None,
     });
 
-    let n = match data.render_mode {
-        RenderMode::FullSpectrum => (data.live_pos.len() + data.trace_pos.len()) as u32,
-        RenderMode::MultiBand => {
-            let live = data.live_low_pos.len() + data.live_mid_pos.len() + data.live_high_pos.len();
-            let trace =
-                data.trace_low_pos.len() + data.trace_mid_pos.len() + data.trace_high_pos.len();
-            (live + trace) as u32
+    match data.gen_kind {
+        GeneratorKind::Stereometer => {
+            let n = match data.render_mode {
+                RenderMode::FullSpectrum => (data.live_pos.len() + data.trace_pos.len()) as u32,
+                RenderMode::MultiBand => {
+                    let live = data.live_low_pos.len()
+                        + data.live_mid_pos.len()
+                        + data.live_high_pos.len();
+                    let trace = data.trace_low_pos.len()
+                        + data.trace_mid_pos.len()
+                        + data.trace_high_pos.len();
+                    (live + trace) as u32
+                }
+            };
+            stereometer_res.paint(&mut main_render_pass, n);
         }
-    };
-    meter_res.paint(&mut stereometer_pass, n);
+        GeneratorKind::Fluidwave => {
+            fluid_res.paint(
+                &mut main_render_pass,
+                (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4,
+            );
+        }
+    }
+    drop(main_render_pass);
+
+    command_encoder.copy_buffer_to_buffer(
+        &fluid_res.debug_storage,
+        0,
+        &fluid_res.debug_staging,
+        0,
+        64,
+    );
+    let fut = read_debug_buffer(fluid_res.debug_staging.slice(..), device);
+    fut.block_on();
+    fluid_res.debug_staging.unmap();
 }
+
+pub fn get_texture_view(
+    res: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    dim: (u32, u32),
+    gen_kind: GeneratorKind,
+) -> wgpu::TextureView {
+    let (w, h) = (dim.0, dim.1);
+    let resized = match gen_kind {
+        GeneratorKind::Stereometer => res
+            .get_mut::<StereometerRenderResources>()
+            .unwrap()
+            .tex
+            .as_ref()
+            .map(|t| t.width() != w || t.height() != h)
+            .unwrap_or(true),
+        GeneratorKind::Fluidwave => res
+            .get_mut::<FluidRenderResources>()
+            .unwrap()
+            .tex
+            .as_ref()
+            .map(|t| t.width() != w || t.height() != h)
+            .unwrap_or(true),
+    };
+    if resized {
+        // Now we create the texture
+        let main_tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("main texture"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: res
+                .get_mut::<StereometerRenderResources>()
+                .unwrap()
+                .target_format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        res.get_mut::<StereometerRenderResources>().unwrap().tex = Some(main_tex.clone());
+        res.get_mut::<FluidRenderResources>().unwrap().tex = Some(main_tex);
+    }
+    match gen_kind {
+        GeneratorKind::Stereometer => res
+            .get_mut::<StereometerRenderResources>()
+            .unwrap()
+            .tex
+            .as_ref()
+            .unwrap()
+            .create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                ..Default::default()
+            }),
+        GeneratorKind::Fluidwave => res
+            .get_mut::<FluidRenderResources>()
+            .unwrap()
+            .tex
+            .as_ref()
+            .unwrap()
+            .create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                ..Default::default()
+            }),
+    }
+}
+
 impl egui_wgpu::CallbackTrait for RendererCallback {
     fn prepare(
         &self,
@@ -254,8 +362,18 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             (self.canvas_size.x * ppp) as u32,
             (self.canvas_size.y * ppp) as u32,
         );
-        let meter_res = resources.get_mut::<StereometerRenderResources>().unwrap();
-        main_render_pipeline(self, device, queue, (w, h), command_encoder, meter_res);
+        let tex_view = get_texture_view(resources, device, (w, h), self.gen_kind);
+        let meter_res = resources.get::<StereometerRenderResources>().unwrap();
+        let fluid_res = resources.get::<FluidRenderResources>().unwrap();
+        main_render_pipeline(
+            self,
+            device,
+            queue,
+            command_encoder,
+            meter_res,
+            fluid_res,
+            tex_view,
+        );
         Vec::new()
     }
 
@@ -506,6 +624,23 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
         _resources: &egui_wgpu::CallbackResources,
     ) {
     }
+}
+
+async fn read_debug_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::Device) {
+    let (tx, rx) = flume::bounded(1);
+    buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+        tx.send(result).unwrap();
+    });
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .unwrap_or_else(|e| {
+            println!("{e}");
+            wgpu::PollStatus::QueueEmpty
+        });
+    rx.recv_async().await.unwrap().unwrap();
+    let data = buffer_slice.get_mapped_range();
+    let val: &[f32] = bytemuck::cast_slice(&data);
+    println!("Debug: {:?}", val.first().unwrap());
 }
 
 async fn read_output_buffer(

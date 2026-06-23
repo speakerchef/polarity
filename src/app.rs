@@ -12,8 +12,9 @@ use crate::{
     audio::{StereoFilter, audio_player::*},
     generators::{
         rendering::{
-            RendererCallback, effects_render_pipeline, get_gpu_frame, main_render_pipeline,
-            output_render_pipeline, prep_bloom_resources_for_effects,
+            BloomRenderResources, FluidRenderResources, OutputResources, RendererCallback,
+            StereometerRenderResources, effects_render_pipeline, get_gpu_frame, get_texture_view,
+            main_render_pipeline, output_render_pipeline, prep_bloom_resources_for_effects,
             prep_meter_resources_for_effects, prep_output_resources_for_effects,
         },
         stereometer::{FilterMode, Stereometer},
@@ -52,9 +53,10 @@ fn export_batched_frames(
     let device = &wgpu_render_state.device;
     let queue = &wgpu_render_state.queue;
 
-    let meter_res = st.stereometer_render_resources.as_mut().unwrap();
-    let bloom_res = st.bloom_render_resources.as_mut().unwrap();
-    let out_res = st.output_render_resources.as_mut().unwrap();
+    // let meter_res = st.stereometer_render_resources.as_mut().unwrap();
+    // let fluid_res = st.fluid_render_resources.as_mut().unwrap();
+    // let bloom_res = st.bloom_render_resources.as_mut().unwrap();
+    // let out_res = st.output_render_resources.as_mut().unwrap();
 
     // Spawn writer thread for entire job
     if st.writer_handle.is_none() {
@@ -130,6 +132,9 @@ fn export_batched_frames(
         st.stereo.draw(p, Some(export_sample_idx));
 
         let render_data = RendererCallback {
+            gen_kind: st.gen_kind,
+            canvas_size: vec2(w as f32, h as f32),
+
             render_mode: st.stereo.render_mode,
             live_pos: std::mem::take(&mut st.stereo.live_buffer),
             trace_pos: st.stereo.trace_buffer.clone().into(),
@@ -145,28 +150,44 @@ fn export_batched_frames(
             lb_color: st.stereo.mb_color[0].into(),
             mb_color: st.stereo.mb_color[1].into(),
             hb_color: st.stereo.mb_color[2].into(),
-            canvas_size: vec2(w as f32, h as f32),
+
+            particle_pos: Vec::new(),
+            frame_time: 0.0,
         };
 
+        // let mut res = egui_wgpu::CallbackResources::new();
+        // res.insert(meter_res);
+        // res.insert(fluid_res);
+
+        let texture_view = get_texture_view(&mut st.resources, device, (w, h), st.gen_kind);
+
+        let meter_res = st.resources.get::<StereometerRenderResources>().unwrap();
+        let fluid_res = st.resources.get::<FluidRenderResources>().unwrap();
         // Main pipeline
         main_render_pipeline(
             &render_data,
             device,
             queue,
-            (w, h),
             &mut command_encoder,
             meter_res,
+            fluid_res,
+            texture_view,
         );
 
+        let bloom_res = st.resources.get::<BloomRenderResources>().unwrap();
         // Effects pipeline
         let (tex_size, bloom_bind_group) =
             prep_meter_resources_for_effects(device, meter_res, bloom_res);
 
+        let out_res = st.resources.get_mut::<OutputResources>().unwrap();
         let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
+
+        let bloom_res = st.resources.get_mut::<BloomRenderResources>().unwrap();
         prep_bloom_resources_for_effects(device, bloom_res, queue, bloom_bind_group, bloom_amt);
         effects_render_pipeline(device, &mut command_encoder, dst_view, bloom_res);
 
         // Output
+        let out_res = st.resources.get::<OutputResources>().unwrap();
         output_render_pipeline(&mut command_encoder, out_res);
         queue.submit(Some(command_encoder.finish()));
         let frame = get_gpu_frame(device, out_res);

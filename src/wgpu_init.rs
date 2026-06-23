@@ -5,10 +5,13 @@ use wgpu::{Device, util::DeviceExt};
 
 use crate::{
     generators::{
-        rendering::{BloomRenderResources, OutputResources, StereometerRenderResources},
+        rendering::{
+            BloomRenderResources, FluidRenderResources, OutputResources, StereometerRenderResources,
+        },
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
     },
     state::AppState,
+    ui::canvas::{NUM_PARTICLES, generate_particle_grid, generate_rand_particles},
 };
 
 fn build_stereometer_render_resources(
@@ -146,7 +149,8 @@ fn init_stereometer_render_resources(
 ) {
     let live_res = build_stereometer_render_resources(device, wgpu_render_state);
     let export_res = build_stereometer_render_resources(device, wgpu_render_state);
-    st.stereometer_render_resources = Some(export_res);
+    st.resources.insert(export_res);
+    // st.stereometer_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -257,7 +261,8 @@ fn init_bloom_render_resources(
 ) {
     let live_res = build_bloom_render_resources(device, wgpu_render_state);
     let export_res = build_bloom_render_resources(device, wgpu_render_state);
-    st.bloom_render_resources = Some(export_res);
+    st.resources.insert(export_res);
+    // st.bloom_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -368,6 +373,240 @@ fn build_output_render_resources(
     }
 }
 
+fn build_fluid_render_resources(
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) -> FluidRenderResources {
+    let render_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fluid render shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_render.wgsl").into()),
+    });
+    let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fluid compute shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_compute.wgsl").into()),
+    });
+
+    let num_params = 1;
+
+    let render_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fluid render bgl"),
+        entries: &[
+            // positions
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(8),
+                },
+                count: None,
+            },
+            // velocities
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+            // Params
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16 * num_params),
+                },
+                count: None,
+            },
+        ],
+    });
+    let compute_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fluid compute bgl"),
+        entries: &[
+            // positions
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(8),
+                },
+                count: None,
+            },
+            // velocities
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+            // Params
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16 * num_params),
+                },
+                count: None,
+            },
+            // Debug
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+        ],
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fluid render pipeline"),
+        bind_group_layouts: &[Some(&render_bgl)],
+        immediate_size: 0,
+    });
+
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("fluid"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &render_shader,
+            entry_point: None,
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &render_shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let compute_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fluid compute pipeline"),
+        bind_group_layouts: &[Some(&compute_bgl)],
+        immediate_size: 0,
+    });
+    let compute = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fluid compute"),
+        layout: Some(&compute_layout),
+        module: &compute_shader,
+        entry_point: Some("cs_main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    const POS: [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] = generate_rand_particles();
+    // println!("{:?}", POS.as_flattened());
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("fluid vertex buffer"),
+        contents: bytemuck::cast_slice(POS.as_flattened()),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+    });
+    let velocity_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("fluid velocity buffer"),
+        size: (size_of::<[f32; 2]>() * (4096) * (4096)) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    });
+    let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("uniform buffer"),
+        size: num_params * 16, // 16 bytes aligned
+        usage: wgpu::BufferUsages::COPY_DST
+            | wgpu::BufferUsages::COPY_SRC
+            | wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
+    });
+    let debug_storage = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("debug storage"),
+        size: 64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+    let debug_staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("debug staging"),
+        size: 64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("fluid render bg"),
+        layout: &render_bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vertex_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: velocity_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: params_buffer.as_entire_binding(),
+            },
+        ],
+    });
+    let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("fluid compute bg"),
+        layout: &compute_bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vertex_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: velocity_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: params_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: debug_storage.as_entire_binding(),
+            },
+        ],
+    });
+    FluidRenderResources {
+        pipeline,
+        compute,
+        tex: None,
+        render_bind_group,
+        compute_bind_group,
+        vertex_buffer,
+        params_buffer,
+        debug_storage,
+        debug_staging,
+        target_format: wgpu_render_state.target_format,
+    }
+}
+
 fn init_output_render_resources(
     st: &mut AppState,
     device: &Device,
@@ -375,7 +614,23 @@ fn init_output_render_resources(
 ) {
     let live_res = build_output_render_resources(device, wgpu_render_state);
     let export_res = build_output_render_resources(device, wgpu_render_state);
-    st.output_render_resources = Some(export_res);
+    st.resources.insert(export_res);
+    // st.output_render_resources = Some(export_res);
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(live_res);
+}
+
+fn init_fluid_render_resources(
+    st: &mut AppState,
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let live_res = build_fluid_render_resources(device, wgpu_render_state);
+    let export_res = build_fluid_render_resources(device, wgpu_render_state);
+    st.resources.insert(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -393,4 +648,5 @@ pub fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
     init_stereometer_render_resources(st, device, wgpu_render_state);
     init_bloom_render_resources(st, device, wgpu_render_state);
     init_output_render_resources(st, device, wgpu_render_state);
+    init_fluid_render_resources(st, device, wgpu_render_state);
 }

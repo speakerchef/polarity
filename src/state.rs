@@ -4,12 +4,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eframe::egui::{Align2, vec2};
+use eframe::{
+    egui::{Align2, vec2},
+    egui_wgpu,
+};
 use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::{
+    GeneratorKind,
     generators::{
-        rendering::{BloomRenderResources, OutputResources, StereometerRenderResources},
+        rendering::{
+            BloomRenderResources, FluidRenderResources, OutputResources, StereometerRenderResources,
+        },
         stereometer::Stereometer,
     },
     labeled_enum,
@@ -113,16 +119,24 @@ pub struct ExportConfig {
     pub total_frames: usize,
 }
 
+pub struct Fluidwave {
+    pub last_frame: Instant,
+}
+
 pub struct AppState {
     pub file_dialog: FileDialog,
     pub dir_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
+    pub gen_kind: GeneratorKind,
     pub stereo: Stereometer,
+    pub fwave: Fluidwave,
     pub pos: [f32; 2],
 
     pub stereometer_render_resources: Option<StereometerRenderResources>,
+    pub fluid_render_resources: Option<FluidRenderResources>,
     pub bloom_render_resources: Option<BloomRenderResources>,
     pub output_render_resources: Option<OutputResources>,
+    pub resources: egui_wgpu::CallbackResources,
 
     // Export states
     pub export_config: ExportConfig,
@@ -207,10 +221,13 @@ impl Default for AppState {
                 .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
+            gen_kind: GeneratorKind::Fluidwave,
             show_fullscreen_button: true,
             stereometer_render_resources: None,
+            fluid_render_resources: None,
             bloom_render_resources: None,
             output_render_resources: None,
+            resources: egui_wgpu::CallbackResources::new(),
 
             export_config: ExportConfig::default(),
             writer_handle: None,
@@ -230,6 +247,9 @@ impl Default for AppState {
 
             playback_mode: PlaybackMode::default(),
             stereo: Stereometer::default(),
+            fwave: Fluidwave {
+                last_frame: Instant::now(),
+            },
             pos: [0.0; 2],
 
             dark_mode: true,

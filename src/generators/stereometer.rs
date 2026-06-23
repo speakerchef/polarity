@@ -1,5 +1,5 @@
-use crate::{Rgba, audio::StereoFilter, labeled_enum, state::Labeled};
-use eframe::egui::{Pos2, pos2};
+use crate::{Rgba, audio::StereoFilter, labeled_enum, points_to_quad_vertices, state::Labeled};
+use eframe::egui::Pos2;
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
@@ -189,17 +189,6 @@ enum FilterBand {
 }
 
 impl Stereometer {
-    fn points_to_quad_vertices(&self, l: f32, r: f32) -> [Pos2; 6] {
-        let s = self.point_size;
-        [
-            pos2(l + s, r + s),
-            pos2(l + s, r - s),
-            pos2(l - s, r - s),
-            pos2(l + s, r + s),
-            pos2(l - s, r + s),
-            pos2(l - s, r - s),
-        ]
-    }
     fn filter_fs(&mut self, is_live: bool, l: f32, r: f32) -> (f32, f32) {
         if is_live {
             if let Some(live_fs) = &mut self.live_fs_filters {
@@ -288,7 +277,7 @@ impl Stereometer {
             RenderMode::FullSpectrum => {
                 let (l, r) = self.filter_fs(is_live, l, r);
                 let (l, r) = self.get_coord_from_meterkind(l, r);
-                let pos = self.points_to_quad_vertices(l, r);
+                let pos = points_to_quad_vertices(self.point_size, l, r);
                 if is_live {
                     self.live_buffer.extend(pos);
                 } else {
@@ -302,9 +291,9 @@ impl Stereometer {
                 let (lowl, lowr) = self.get_coord_from_meterkind(lowl, lowr);
                 let (midl, midr) = self.get_coord_from_meterkind(midl, midr);
                 let (highl, highr) = self.get_coord_from_meterkind(highl, highr);
-                let posl = self.points_to_quad_vertices(lowl, lowr);
-                let posm = self.points_to_quad_vertices(midl, midr);
-                let posh = self.points_to_quad_vertices(highl, highr);
+                let posl = points_to_quad_vertices(self.point_size, lowl, lowr);
+                let posm = points_to_quad_vertices(self.point_size, midl, midr);
+                let posh = points_to_quad_vertices(self.point_size, highl, highr);
                 if is_live {
                     self.live_low_buffer.extend(posl);
                     self.live_mid_buffer.extend(posm);

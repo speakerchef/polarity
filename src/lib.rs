@@ -8,6 +8,7 @@ mod ui;
 mod wgpu_init;
 
 pub use app::PolarityApp;
+use eframe::egui::{Pos2, pos2};
 
 #[macro_export]
 macro_rules! labeled_enum {
@@ -68,6 +69,11 @@ impl LinearRgba {
     }
 }
 
+labeled_enum!(GeneratorKind {
+    Stereometer => "Stereometer",
+    Fluidwave => "Fluidwave"
+}, Stereometer);
+
 #[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Rgba {
     pub r: f32,
@@ -95,4 +101,15 @@ impl Rgba {
         let max = u8::MAX as f32;
         (self.r / max, self.g / max, self.b / max, self.a / max)
     }
+}
+
+pub fn points_to_quad_vertices(s: f32, l: f32, r: f32) -> [Pos2; 6] {
+    [
+        pos2(l + s, r + s),
+        pos2(l + s, r - s),
+        pos2(l - s, r - s),
+        pos2(l + s, r + s),
+        pos2(l - s, r + s),
+        pos2(l - s, r - s),
+    ]
 }
