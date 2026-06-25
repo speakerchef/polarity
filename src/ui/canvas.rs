@@ -1,6 +1,6 @@
 #![allow(dead_code, unused)]
-use std::ops::Mul;
-use std::time::Instant;
+use std::ops::{Div, Mul};
+use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Pos2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
@@ -112,10 +112,39 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         .samples
         .get(sample_idx * num_channels..sample_idx * num_channels + 50 * 50)
         .unwrap_or_default();
-    let speaker_pos: Vec<_> = live_window
-        .chunks_exact(2)
-        .map(|x| pos2(*x.first().unwrap(), *x.last().unwrap_or(x.first().unwrap())).mul(0.1))
-        .collect();
+
+    // Envelope follower
+    const WINDOW: u64 = 100; // ms 
+    const ATT: f32 = 0.75;
+    const REL: f32 = 0.999;
+    if pl.position() <= Duration::from_millis(WINDOW) {
+        return;
+    }
+
+    let start = pl
+        .position()
+        .saturating_sub(Instant::now().duration_since(st.fwave.last_frame));
+    let start = (start.as_secs_f64() * pl.contents.sample_rate as f64) as usize;
+    let end = (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize;
+    let ef_window = &pl.contents.samples[start * num_channels..end * num_channels];
+    let mut ls = st.env_follower_last_sample;
+
+    for s in ef_window.chunks_exact(2) {
+        let l = s.first().unwrap_or(&0.0);
+        let abs = l.abs();
+        if abs > ls {
+            ls = ls * ATT + (1.0 - ATT) * abs;
+        } else {
+            ls = ls * REL + (1.0 - REL) * abs;
+        }
+    }
+    st.env_follower_last_sample = ls;
+    // println!("ENV: {}", st.env_follower_last_sample);
+
+    // let speaker_pos: Vec<_> = live_window
+    //     .chunks_exact(2)
+    //     .map(|x| pos2(*x.first().unwrap(), *x.last().unwrap_or(x.first().unwrap())).mul(0.1))
+    //     .collect();
 
     let now = Instant::now();
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
@@ -140,7 +169,9 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             mb_color: st.stereo.mb_color[1].into(),
             hb_color: st.stereo.mb_color[2].into(),
 
-            particle_pos: speaker_pos,
+            // particle_pos: vec![pos2(-st.env_follower_last_sample / 2.0, 0.0)],
+            // particle_pos: st.env_follower_last_sample / 8.0,
+            particle_pos: st.env_follower_last_sample.div(1.1).powf(2.0),
 
             frame_time: now
                 .duration_since(st.fwave.last_frame)
@@ -157,7 +188,6 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         },
     ));
     st.fwave.last_frame = now;
-
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         EffectsCallback {

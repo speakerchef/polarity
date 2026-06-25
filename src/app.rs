@@ -146,7 +146,8 @@ fn export_batched_frames(
             mb_color: st.stereo.mb_color[1].into(),
             hb_color: st.stereo.mb_color[2].into(),
 
-            particle_pos: Vec::new(),
+            // particle_pos: Vec::new(),
+            particle_pos: 0.0,
             frame_time: 0.0,
 
             g: st.fwave.gravity,
@@ -276,28 +277,28 @@ impl eframe::App for PolarityApp {
             );
         }
 
-        egui::Window::new("Debug").show(ui.ctx(), |ui| {
-            ui.add(egui::Slider::new(&mut self.st.fwave.gravity, -100.0..=100.0).text("gravity"));
-            ui.add(
-                egui::Slider::new(&mut self.st.fwave.pressure_multiplier, 0.0..=400.0)
-                    .text("pressure"),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.st.fwave.target_density, 0.0..=6000.0)
-                    .text("target density"),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.st.fwave.smoothing_radius, 0.01..=1.0).text("radius"),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.st.fwave.near_pressure_multiplier, 0.00..=10.0)
-                    .text("near pressure multiplier"),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.st.fwave.viscosity_strength, 0.00..=0.05)
-                    .text("viscosity_strength"),
-            );
-        });
+        // egui::Window::new("Debug").show(ui.ctx(), |ui| {
+        //     ui.add(egui::Slider::new(&mut self.st.fwave.gravity, -100.0..=100.0).text("gravity"));
+        //     ui.add(
+        //         egui::Slider::new(&mut self.st.fwave.pressure_multiplier, 0.0..=400.0)
+        //             .text("pressure"),
+        //     );
+        //     ui.add(
+        //         egui::Slider::new(&mut self.st.fwave.target_density, 0.0..=6000.0)
+        //             .text("target density"),
+        //     );
+        //     ui.add(
+        //         egui::Slider::new(&mut self.st.fwave.smoothing_radius, 0.01..=1.0).text("radius"),
+        //     );
+        //     ui.add(
+        //         egui::Slider::new(&mut self.st.fwave.near_pressure_multiplier, 0.00..=10.0)
+        //             .text("near pressure multiplier"),
+        //     );
+        //     ui.add(
+        //         egui::Slider::new(&mut self.st.fwave.viscosity_strength, 0.00..=0.05)
+        //             .text("viscosity_strength"),
+        //     );
+        // });
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.dark_mode);

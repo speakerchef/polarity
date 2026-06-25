@@ -202,6 +202,8 @@ pub struct AppState {
 
     pub postfx_open: bool,
     pub bloom_open: bool,
+
+    pub env_follower_last_sample: f32,
 }
 
 impl Default for AppState {
@@ -257,17 +259,23 @@ impl Default for AppState {
             fwave: Fluidwave {
                 last_frame: Instant::now(),
                 // gravity: 0.0,
-                // pressure_multiplier: 40.0,
-                // target_density: 650.0,
-                // smoothing_radius: 0.065,
+                // pressure_multiplier: 290.0,
+                // target_density: 2300.0,
+                // smoothing_radius: 0.1,
                 // near_pressure_multiplier: 10.0,
-                // viscosity_strength: 0.03,
-                gravity: -20.0,
-                pressure_multiplier: 210.0,
-                target_density: 5550.0,
-                smoothing_radius: 0.08,
-                near_pressure_multiplier: 10.0,
-                viscosity_strength: 0.02,
+                // viscosity_strength: 0.001,
+                // gravity: -20.0,
+                // pressure_multiplier: 210.0,
+                // target_density: 5550.0,
+                // smoothing_radius: 0.08,
+                // near_pressure_multiplier: 10.0,
+                // viscosity_strength: 0.02,
+                gravity: 0.0,
+                pressure_multiplier: 152.0,
+                target_density: 0.0,
+                smoothing_radius: 0.1,
+                near_pressure_multiplier: 7.1,
+                viscosity_strength: 0.01,
             },
             pos: [0.0; 2],
 
@@ -311,6 +319,8 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
+
+            env_follower_last_sample: 0.0,
         }
     }
 }

@@ -6,6 +6,7 @@ struct Params {
     @size(16) smoothing_radius: f32,
     @size(16) near_pressure_multiplier: f32,
     @size(16) viscosity_strength: f32,
+    @size(16) envelope: f32,
 }
 
 struct VertOut {
@@ -29,18 +30,21 @@ var<storage, read> speaker_position: array<f32>;
 const point_size: f32 = 0.005;
 var<private> quad_pos = array(vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(-point_size, point_size), vec2f(point_size, -point_size), vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(point_size, -point_size), vec2f(-point_size, point_size));
 
-const obstacle: array<vec2f, 6> = array(vec2f(0.075, 0.5), vec2f(0.075, -0.5), vec2f(-0.075, -0.5), vec2f(0.075, 0.5), vec2f(-0.075, 0.5), vec2f(-0.075, -0.5));
+const obstacle_w: f32 = 0.0025;
+const obstacle_h: f32 = 1.0;
+const obstacle: array<vec2f, 6> = array(vec2f(obstacle_w, obstacle_h), vec2f(obstacle_w, -obstacle_h), vec2f(-obstacle_w, -obstacle_h), vec2f(obstacle_w, obstacle_h), vec2f(-obstacle_w, obstacle_h), vec2f(-obstacle_w, -obstacle_h));
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     var out: VertOut;
     let particle_id = i / 6u;
     let corner = i % 6u;
 
-    if i < 6 {
-        out.position = vec4f(vec2f(0) + obstacle[i] + vec2f(speaker_position[particle_id], 0.0), 0.0, 1.0);
-    } else {
-        out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
-    }
+    //if i < 6 {
+    //    out.position = vec4f(vec2f(0) + obstacle[i] + vec2f(params.envelope, 0.0), 0.0, 1.0);
+    //} else {
+    //    out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
+    //}
+    out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
 
     out.uv = quad_pos[corner];
     out.speed = length(velocities[particle_id]);

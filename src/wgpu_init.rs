@@ -386,7 +386,7 @@ fn build_fluid_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_compute.wgsl").into()),
     });
 
-    let num_params = 7;
+    let num_params = 8;
 
     let render_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fluid render bgl"),

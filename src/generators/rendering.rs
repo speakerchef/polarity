@@ -137,7 +137,8 @@ impl FluidRenderResources {
     fn prepare(
         &self,
         queue: &wgpu::Queue,
-        pos: Vec<f32>,
+        //pos: Vec<f32>,
+        pos: f32,
         dt: f32,
         g: f32,
         pm: f32,
@@ -153,8 +154,9 @@ impl FluidRenderResources {
         queue.write_buffer(&self.params_buffer, 64, bytemuck::cast_slice(&[r]));
         queue.write_buffer(&self.params_buffer, 80, bytemuck::cast_slice(&[npm]));
         queue.write_buffer(&self.params_buffer, 96, bytemuck::cast_slice(&[vs]));
+        queue.write_buffer(&self.params_buffer, 112, bytemuck::cast_slice(&[pos]));
         // println!("{:.9?}", pos.last().unwrap());
-        queue.write_buffer(&self.speaker_position, 0, bytemuck::cast_slice(&pos));
+        // queue.write_buffer(&self.speaker_position, 0, bytemuck::cast_slice(&pos));
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
         const WORKGROUP_SIZE: u32 = 128;
@@ -207,7 +209,8 @@ pub struct RendererCallback {
     pub hb_color: LinearRgba,
 
     // Particle fields
-    pub particle_pos: Vec<Pos2>,
+    // pub particle_pos: Vec<Pos2>,
+    pub particle_pos: f32,
     pub frame_time: f32,
 
     pub g: f32,
@@ -261,7 +264,8 @@ pub fn main_render_pipeline(
     // println!("{:.9}", data.particle_pos.first().unwrap().x);
     fluid_res.prepare(
         queue,
-        data.particle_pos.iter().map(|pos| pos.x).collect(),
+        // data.particle_pos.iter().map(|pos| pos.x).collect(),
+        data.particle_pos,
         data.frame_time,
         data.g,
         data.pm,
