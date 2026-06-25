@@ -132,18 +132,19 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             hb_color: st.stereo.mb_color[2].into(),
 
             particle_pos: quads,
+
             frame_time: now
                 .duration_since(st.fwave.last_frame)
                 .as_secs_f32()
                 .min(0.016)
                 / 10.0,
             // frame_time: 1. / 120.,
-            g: st.gravity,
-            pm: st.pressure_multiplier,
-            td: st.target_density,
-            r: st.smoothing_radius,
-            npm: st.near_pressure_multiplier,
-            vs: st.viscosity_strength,
+            g: st.fwave.gravity,
+            pm: st.fwave.pressure_multiplier,
+            td: st.fwave.target_density,
+            r: st.fwave.smoothing_radius,
+            npm: st.fwave.near_pressure_multiplier,
+            vs: st.fwave.viscosity_strength,
         },
     ));
     st.fwave.last_frame = now;

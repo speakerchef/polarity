@@ -121,6 +121,12 @@ pub struct ExportConfig {
 
 pub struct Fluidwave {
     pub last_frame: Instant,
+    pub gravity: f32,
+    pub pressure_multiplier: f32,
+    pub target_density: f32,
+    pub smoothing_radius: f32,
+    pub near_pressure_multiplier: f32,
+    pub viscosity_strength: f32,
 }
 
 pub struct AppState {
@@ -179,6 +185,7 @@ pub struct AppState {
     pub show_fullscreen_button: bool,
     pub show_settings: bool,
 
+    pub gen_kind_options_open: bool,
     pub gen_open: bool,
     pub render_open: bool,
     pub render_mode_options_open: bool,
@@ -195,14 +202,6 @@ pub struct AppState {
 
     pub postfx_open: bool,
     pub bloom_open: bool,
-
-    // DEBUG PARAMS
-    pub gravity: f32,
-    pub pressure_multiplier: f32,
-    pub target_density: f32,
-    pub smoothing_radius: f32,
-    pub near_pressure_multiplier: f32,
-    pub viscosity_strength: f32,
 }
 
 impl Default for AppState {
@@ -257,6 +256,15 @@ impl Default for AppState {
             stereo: Stereometer::default(),
             fwave: Fluidwave {
                 last_frame: Instant::now(),
+                gravity: 0.0,
+                // pressure_multiplier: 5.0,
+                pressure_multiplier: 40.0,
+                // target_density: 4600.0,
+                target_density: 650.0,
+                smoothing_radius: 0.065,
+                near_pressure_multiplier: 10.0,
+                // viscosity_strength: 0.015,
+                viscosity_strength: 0.03,
             },
             pos: [0.0; 2],
 
@@ -283,6 +291,7 @@ impl Default for AppState {
 
             show_settings: false,
 
+            gen_kind_options_open: false,
             gen_open: false,
             render_open: false,
             render_mode_options_open: false,
@@ -299,16 +308,6 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
-
-            gravity: 0.0,
-            // pressure_multiplier: 5.0,
-            pressure_multiplier: 40.0,
-            // target_density: 4600.0,
-            target_density: 650.0,
-            smoothing_radius: 0.065,
-            near_pressure_multiplier: 10.0,
-            // viscosity_strength: 0.015,
-            viscosity_strength: 0.03,
         }
     }
 }

@@ -10,6 +10,8 @@ mod wgpu_init;
 pub use app::PolarityApp;
 use eframe::egui::{Pos2, pos2};
 
+use crate::state::Labeled;
+
 #[macro_export]
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
@@ -73,6 +75,12 @@ labeled_enum!(GeneratorKind {
     Stereometer => "Stereometer",
     Fluidwave => "Fluidwave"
 }, Stereometer);
+
+impl Labeled for GeneratorKind {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
 
 #[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Rgba {

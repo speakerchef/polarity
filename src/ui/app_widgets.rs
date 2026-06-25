@@ -11,7 +11,6 @@ use crate::{
 use eframe::egui::{self, pos2};
 use eframe::egui::{Align, FontId, Key, Pos2, StrokeKind, Vec2, vec2};
 
-// const MB_H: f32 = 20.0;
 const MB_H: f32 = 24.0;
 const MB_GAP: f32 = 12.0;
 
@@ -189,7 +188,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
                     dropdown_row(
                         ui,
-                        "resolution",
                         "Resolution",
                         &mut st.export_config.resolution,
                         Resolution::ALL,
@@ -197,7 +195,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     );
                     dropdown_row(
                         ui,
-                        "fps",
                         "FPS",
                         &mut st.export_config.frame_rate,
                         Fps::ALL,
@@ -205,7 +202,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     );
                     dropdown_row(
                         ui,
-                        "quality",
                         "Quality",
                         &mut st.export_config.quality,
                         ExportQuality::ALL,

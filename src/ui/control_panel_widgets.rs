@@ -15,7 +15,7 @@ fn border(dark: bool) -> Stroke {
 }
 
 /// Root control panel headers. eg. "GENERATOR", "POST FX"
-pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bool) {
+pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bool) -> Response {
     let w = ui.available_width();
     let (rect, mut resp) = ui.allocate_exact_size(
         vec2(w, plt::height::ROWHEAD),
@@ -79,6 +79,8 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
         fg,
         Align::LEFT,
     );
+
+    resp
 }
 
 /// One level below section headers
@@ -166,53 +168,6 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
     );
 }
 
-fn selector_box(ui: &mut egui::Ui, label: &str, width: f32) -> egui::Response {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
-    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
-    let border_color = if resp.hovered() {
-        plt::TEXT
-    } else {
-        plt::BORDER(ui.style().visuals.dark_mode)
-    };
-    let p = ui.painter();
-    p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
-    p.rect_stroke(
-        rect,
-        SHARP,
-        Stroke {
-            width: 1.0,
-            color: border_color,
-        },
-        StrokeKind::Inside,
-    );
-    let textfont = FontId {
-        size: plt::font_size::TINY,
-        family: FontFamily::Name("inter_regular".into()),
-    };
-    let iconfont = FontId {
-        size: plt::font_size::ICON,
-        family: FontFamily::Name("icons".into()),
-    };
-    custom_text(
-        ui,
-        &label.to_uppercase(),
-        textfont,
-        pos2(rect.left() + 10.0, rect.center().y - 6.0),
-        plt::letter_spacing::BASE,
-        plt::BRIGHT,
-        Align::LEFT,
-    );
-    custom_text(
-        ui,
-        "\u{e5c5}",
-        iconfont,
-        pos2(rect.right() - 4.0, rect.center().y - 9.0),
-        plt::letter_spacing::BASE,
-        plt::DIM,
-        Align::RIGHT,
-    );
-    resp
-}
 #[allow(clippy::too_many_arguments)]
 pub fn menu_bar_option(
     ui: &mut egui::Ui,
@@ -310,36 +265,46 @@ pub fn menu_bar_option(
     resp
 }
 
-pub fn popup_item(ui: &mut egui::Ui, label: &str, width: f32) -> Response {
-    let (rect, mut resp) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::click());
+pub fn popup_item(
+    ui: &mut egui::Ui,
+    label: &str,
+    font_size: f32,
+    w: f32,
+    h: Option<f32>,
+) -> Response {
+    let (rect, mut resp) =
+        ui.allocate_exact_size(vec2(w, h.unwrap_or(plt::height::INNER)), Sense::click());
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
-    let bc = if resp.hovered() {
-        plt::TEXT
+    let (bg, fg) = if resp.hovered() {
+        (plt::YELLO, plt::INK)
     } else {
-        plt::BORDER(ui.style().visuals.dark_mode)
+        (plt::VOID(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
     let p = ui.painter();
-    p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    // p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    p.rect_filled(rect, SHARP, bg);
     p.rect_stroke(
         rect,
         SHARP,
-        Stroke {
-            width: 1.0,
-            color: bc,
-        },
+        // Stroke {
+        //     width: 1.0,
+        //     color: bc,
+        // },
+        border(ui.visuals().dark_mode),
         StrokeKind::Inside,
     );
     let fonts = FontId {
-        size: plt::font_size::META,
+        size: font_size,
         family: FontFamily::Name("inter_regular".into()),
     };
+    let (_, th) = get_text_size(ui, &label.to_uppercase(), fonts.clone()).into();
     custom_text(
         ui,
         &label.to_uppercase(),
         fonts.clone(),
-        pos2(rect.left() + 10.0, rect.center().y - 7.0),
+        rect.left_center() - vec2(-(h.unwrap_or(plt::height::INNER) - th) / 1.25, th / 2.0),
         plt::letter_spacing::MINIMAL,
-        plt::BRIGHT,
+        fg,
         Align::LEFT,
     );
     resp
@@ -393,14 +358,12 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
 /// Menu item with `label        [ item ]` structure
 pub fn dropdown_row<T: Labeled>(
     ui: &mut egui::Ui,
-    id: &str,
     label: &str,
     value: &mut T,
     options: &[T],
     open: &mut bool,
 ) {
     const SEL_W: f32 = 150.0;
-    let mut sel_rect = egui::Rect::NOTHING;
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
@@ -411,11 +374,7 @@ pub fn dropdown_row<T: Labeled>(
             |ui| {
                 ui.add_space(PAD);
                 label_text(ui, label, ui.available_width() - (SEL_W + PAD * 1.0));
-                let resp = selector_box(ui, value.text(), SEL_W);
-                sel_rect = resp.rect;
-                if resp.clicked() {
-                    *open = !*open;
-                }
+                dropdown_menu(ui, (SEL_W, plt::height::INNER), value, options, open);
             },
         )
         .response
@@ -443,15 +402,80 @@ pub fn dropdown_row<T: Labeled>(
         border(ui.style().visuals.dark_mode),
     );
 
+    // close dropdown if clicked elsewhere
+    ui.ctx().input(|i| {
+        if i.pointer.primary_clicked()
+            && !br.contains(i.pointer.interact_pos().unwrap_or_default())
+            && !inner_rect.contains(i.pointer.interact_pos().unwrap_or_default())
+        {
+            *open = false;
+        }
+    });
+}
+
+pub fn dropdown_menu<T: Labeled>(
+    ui: &mut egui::Ui,
+    dim: (f32, f32),
+    value: &mut T,
+    options: &[T],
+    open: &mut bool,
+) {
+    let (inner, resp) = ui.allocate_exact_size(vec2(dim.0, dim.1), egui::Sense::click());
+    if resp.clicked() {
+        *open = !*open;
+    }
+    ui.painter()
+        .rect_filled(inner, SHARP, plt::VOID(ui.visuals().dark_mode));
+    ui.painter().rect_stroke(
+        inner,
+        SHARP,
+        border(ui.visuals().dark_mode),
+        egui::StrokeKind::Inside,
+    );
+
+    let font = FontId {
+        size: plt::font_size::TINY,
+        family: egui::FontFamily::Name("inter_medium".into()),
+    };
+    let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
+    custom_text(
+        ui,
+        &value.text().to_uppercase(),
+        font.clone(),
+        inner.left_center() - vec2(-(dim.1 - th) / 1.25, th / 2.0),
+        plt::letter_spacing::MINIMAL,
+        plt::TEXT,
+        Align::LEFT,
+    );
+    let icon_font = FontId {
+        size: plt::font_size::ICON,
+        family: egui::FontFamily::Name("icons".into()),
+    };
+
+    let (_, th) = get_text_size(ui, "\u{e5c5}", icon_font.clone()).into();
+    const CHEVRON_UP: &str = "\u{e5c7}";
+    const CHEVRON_DOWN: &str = "\u{e5c5}";
+    custom_text(
+        ui,
+        if *open { CHEVRON_UP } else { CHEVRON_DOWN },
+        icon_font,
+        inner.right_center() - vec2((dim.1 - th) * 1.75, th / 2.0),
+        plt::letter_spacing::MINIMAL,
+        plt::YELLO,
+        Align::RIGHT,
+    );
+
     if *open {
-        egui::Area::new(egui::Id::new(id).with("popup"))
-            .fixed_pos(sel_rect.left_bottom())
+        egui::Area::new(egui::Id::new(value.text()).with("popup"))
+            .fixed_pos(inner.left_bottom())
             .order(egui::Order::Foreground)
             .show(ui.ctx(), |ui| {
                 egui::Frame::new().show(ui, |ui| {
                     for &opt in options {
                         ui.spacing_mut().item_spacing = Vec2::ZERO;
-                        if popup_item(ui, opt.text(), SEL_W).clicked() {
+                        if popup_item(ui, opt.text(), plt::font_size::TINY, dim.0, Some(dim.1))
+                            .clicked()
+                        {
                             *value = opt;
                             *open = false;
                         }
@@ -462,8 +486,7 @@ pub fn dropdown_row<T: Labeled>(
     // close dropdown if clicked elsewhere
     ui.ctx().input(|i| {
         if i.pointer.primary_clicked()
-            && !br.contains(i.pointer.interact_pos().unwrap_or_default())
-            && !sel_rect.contains(i.pointer.interact_pos().unwrap_or_default())
+            && !inner.contains(i.pointer.interact_pos().unwrap_or_default())
         {
             *open = false;
         }
