@@ -405,7 +405,7 @@ fn build_fluid_render_resources(
             // velocities
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -416,11 +416,22 @@ fn build_fluid_render_resources(
             // Params
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(16 * num_params),
+                },
+                count: None,
+            },
+            // speaker position
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
                 },
                 count: None,
             },
@@ -490,6 +501,17 @@ fn build_fluid_render_resources(
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+            // Predicted positions
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(16),
                 },
@@ -579,6 +601,7 @@ fn build_fluid_render_resources(
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("fluid vertex buffer"),
         contents: bytemuck::cast_slice(POS.as_flattened()),
+        // contents: bytemuck::cast_slice(&square),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
     });
     let density_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -594,6 +617,12 @@ fn build_fluid_render_resources(
     let velocity_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("fluid velocity buffer"),
         size: (size_of::<[f32; 2]>() * (4096) * (4096)) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    });
+    let speaker_position = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("fluid speaker_positions buffer"),
+        size: ((size_of::<f32>() * 2) * 4096 * 4096) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
@@ -633,6 +662,10 @@ fn build_fluid_render_resources(
                 binding: 2,
                 resource: params_buffer.as_entire_binding(),
             },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: speaker_position.as_entire_binding(),
+            },
         ],
     });
     let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -663,6 +696,10 @@ fn build_fluid_render_resources(
                 binding: 5,
                 resource: pred_pos_buffer.as_entire_binding(),
             },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: speaker_position.as_entire_binding(),
+            },
         ],
     });
     FluidRenderResources {
@@ -677,6 +714,7 @@ fn build_fluid_render_resources(
         compute_bind_group,
         vertex_buffer,
         params_buffer,
+        speaker_position,
         debug_storage,
         debug_staging,
     }

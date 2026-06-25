@@ -2,6 +2,7 @@ use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
+use rodio::queue;
 
 use crate::GeneratorKind;
 use crate::ui::canvas::NUM_PARTICLES;
@@ -127,6 +128,7 @@ pub struct FluidRenderResources {
     pub compute_bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
+    pub speaker_position: wgpu::Buffer,
     pub debug_storage: wgpu::Buffer,
     pub debug_staging: wgpu::Buffer,
     pub tex: Option<wgpu::Texture>,
@@ -135,6 +137,7 @@ impl FluidRenderResources {
     fn prepare(
         &self,
         queue: &wgpu::Queue,
+        pos: Vec<f32>,
         dt: f32,
         g: f32,
         pm: f32,
@@ -150,6 +153,8 @@ impl FluidRenderResources {
         queue.write_buffer(&self.params_buffer, 64, bytemuck::cast_slice(&[r]));
         queue.write_buffer(&self.params_buffer, 80, bytemuck::cast_slice(&[npm]));
         queue.write_buffer(&self.params_buffer, 96, bytemuck::cast_slice(&[vs]));
+        // println!("{:.9?}", pos.last().unwrap());
+        queue.write_buffer(&self.speaker_position, 0, bytemuck::cast_slice(&pos));
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
         const WORKGROUP_SIZE: u32 = 128;
@@ -253,8 +258,10 @@ pub fn main_render_pipeline(
         live_mb_len as u32,
         trace_mb_len as u32,
     );
+    // println!("{:.9}", data.particle_pos.first().unwrap().x);
     fluid_res.prepare(
         queue,
+        data.particle_pos.iter().map(|pos| pos.x).collect(),
         data.frame_time,
         data.g,
         data.pm,
@@ -694,7 +701,7 @@ async fn read_debug_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::D
     rx.recv_async().await.unwrap().unwrap();
     let data = buffer_slice.get_mapped_range();
     let val: &[f32] = bytemuck::cast_slice(&data);
-    println!("Debug: {:?}", val.first().unwrap());
+    // println!("Debug: {:?}", val.first().unwrap());
 }
 
 async fn read_output_buffer(

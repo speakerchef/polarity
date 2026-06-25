@@ -1,11 +1,18 @@
 struct Params {
     @size(16) dt: f32,
+    @size(16) g: f32,
+    @size(16) pressure_multiplier: f32,
+    @size(16) target_density: f32,
+    @size(16) smoothing_radius: f32,
+    @size(16) near_pressure_multiplier: f32,
+    @size(16) viscosity_strength: f32,
 }
 
 struct VertOut {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) speed: f32,
+    @location(2) speaker_pos: f32,
 }
 
 @group(0) @binding(0)
@@ -14,20 +21,30 @@ var<storage, read> positions: array<vec2f>;
 var<storage, read> velocities: array<vec2f>;
 @group(0) @binding(2)
 var<uniform> params: Params;
+@group(0) @binding(3)
+var<storage, read> speaker_position: array<f32>;
 //@group(0) @binding(3) 
 //var<storage, read> pressure: f32;
 
 const point_size: f32 = 0.005;
 var<private> quad_pos = array(vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(-point_size, point_size), vec2f(point_size, -point_size), vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(point_size, -point_size), vec2f(-point_size, point_size));
 
+const obstacle: array<vec2f, 6> = array(vec2f(0.075, 0.5), vec2f(0.075, -0.5), vec2f(-0.075, -0.5), vec2f(0.075, 0.5), vec2f(-0.075, 0.5), vec2f(-0.075, -0.5));
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     var out: VertOut;
     let particle_id = i / 6u;
     let corner = i % 6u;
-    out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
+
+    if i < 6 {
+        out.position = vec4f(vec2f(0) + obstacle[i] + vec2f(speaker_position[particle_id], 0.0), 0.0, 1.0);
+    } else {
+        out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
+    }
+
     out.uv = quad_pos[corner];
     out.speed = length(velocities[particle_id]);
+
     return out;
 }
 
@@ -36,16 +53,8 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     let len = length(v.uv);
     var col = vec4f(1);
 
-    if len > point_size {
-        discard;
-    }
-
-    //if pressure < 0 {
-    //    return vec4f(0, 0.25, 0.75, 1);
-    //} else if pressure > 0 {
-    //    return vec4f(0.75, 0.10, 0, 1);
-    //} else {
-    //    return vec4f(1);
+    //if len > point_size {
+    //    discard;
     //}
 
     return vec4f(1);

@@ -20,8 +20,10 @@ var<storage, read_write> debug: array<f32>;
 var<storage, read_write> densities: array<vec2f>;
 @group(0) @binding(5) 
 var<storage, read_write> predicted_positions: array<vec2f>;
+@group(0) @binding(6)
+var<storage, read> speaker_position: array<f32>;
 
-var<private> damp: f32 = 0.5;
+var<private> damp: f32 = 0.9;
 
 const PI: f32 = 3.14159265;
 const mass: f32 = 1.0;
@@ -163,6 +165,7 @@ fn cs_calculate_viscosity(@builtin(global_invocation_id) id: vec3u) {
     velocities[i] += calculate_viscosity(i) * params.viscosity_strength * params.dt;
 }
 
+const obstacle: array<vec2f, 6> = array(vec2f(0.075, 0.5), vec2f(0.075, -0.5), vec2f(-0.075, -0.5), vec2f(0.075, 0.5), vec2f(-0.075, 0.5), vec2f(-0.075, -0.5));
 @compute @workgroup_size(128)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
@@ -170,19 +173,46 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
 
     positions[i] += velocities[i] * params.dt;
 
-    if positions[i].y < -0.9 {
+    let xpos = positions[i].x;
+    let ypos = positions[i].y;
+
+    let speaker_pos = speaker_position[i / 6u];
+    // obstacle sides
+    if (ypos < 0.5 && ypos > -0.5) && (xpos < (0.075 + speaker_pos) && xpos > -(0.075 + speaker_pos)) {
+        let x_pos_delta = (speaker_pos + 0.075) - xpos;
+        let x_neg_delta = xpos + (speaker_pos + 0.075);
+        let y_pos_delta = 0.5 - ypos;
+        let y_neg_delta = ypos + 0.5;
+
+        let min_pos = min(min(x_pos_delta, x_neg_delta), min(y_pos_delta, y_neg_delta));
+        if min_pos == x_pos_delta {
+            positions[i].x = 0.075 + speaker_pos;
+            velocities[i].x = -velocities[i].x * damp;
+        } else if min_pos == x_neg_delta {
+            positions[i].x = -(0.075 + speaker_pos);
+            velocities[i].x = -velocities[i].x * damp;
+        } else if min_pos == y_pos_delta {
+            positions[i].y = 0.5;
+            velocities[i].y = -velocities[i].y * damp;
+        } else {
+            positions[i].y = -0.5;
+            velocities[i].y = -velocities[i].y * damp;
+        }
+    }
+
+    if ypos < -0.9 {
         positions[i].y = -0.9;
         velocities[i].y = -velocities[i].y * damp;
     }
-    if positions[i].y > 0.9 {
+    if ypos > 0.9 {
         positions[i].y = 0.9;
         velocities[i].y = -velocities[i].y * damp;
     }
-    if positions[i].x > 0.9 {
+    if xpos > 0.9 {
         positions[i].x = 0.9;
         velocities[i].x = -velocities[i].x * damp;
     }
-    if positions[i].x < -0.9 {
+    if xpos < -0.9 {
         positions[i].x = -0.9;
         velocities[i].x = -velocities[i].x * damp;
     }

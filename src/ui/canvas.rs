@@ -1,4 +1,5 @@
 #![allow(dead_code, unused)]
+use std::ops::Mul;
 use std::time::Instant;
 
 use eframe::egui::{self, Pos2};
@@ -102,10 +103,18 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         GeneratorKind::Fluidwave => (),
     }
 
-    let pos = generate_particle_grid();
-    let quads = pos
-        .iter()
-        .flat_map(|pos| points_to_quad_vertices(0.01, 0.0, 0.0))
+    let num_channels = pl.contents.num_channels as usize;
+
+    let sample_pos = pl.position().as_secs_f64();
+    let sample_idx = (sample_pos * pl.contents.sample_rate as f64) as usize;
+    let live_window = pl
+        .contents
+        .samples
+        .get(sample_idx * num_channels..sample_idx * num_channels + 50 * 50)
+        .unwrap_or_default();
+    let speaker_pos: Vec<_> = live_window
+        .chunks_exact(2)
+        .map(|x| pos2(*x.first().unwrap(), *x.last().unwrap_or(x.first().unwrap())).mul(0.1))
         .collect();
 
     let now = Instant::now();
@@ -131,13 +140,13 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             mb_color: st.stereo.mb_color[1].into(),
             hb_color: st.stereo.mb_color[2].into(),
 
-            particle_pos: quads,
+            particle_pos: speaker_pos,
 
             frame_time: now
                 .duration_since(st.fwave.last_frame)
                 .as_secs_f32()
                 .min(0.016)
-                / 10.0,
+                / 8.0,
             // frame_time: 1. / 120.,
             g: st.fwave.gravity,
             pm: st.fwave.pressure_multiplier,
@@ -153,7 +162,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
-            bloom_amt: st.stereo.bloom,
+            // bloom_amt: st.stereo.bloom,
+            bloom_amt: 0.0,
         },
     ));
 
