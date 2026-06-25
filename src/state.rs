@@ -195,6 +195,14 @@ pub struct AppState {
 
     pub postfx_open: bool,
     pub bloom_open: bool,
+
+    // DEBUG PARAMS
+    pub gravity: f32,
+    pub pressure_multiplier: f32,
+    pub target_density: f32,
+    pub smoothing_radius: f32,
+    pub near_pressure_multiplier: f32,
+    pub viscosity_strength: f32,
 }
 
 impl Default for AppState {
@@ -221,7 +229,7 @@ impl Default for AppState {
                 .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
-            gen_kind: GeneratorKind::Fluidwave,
+            gen_kind: GeneratorKind::Stereometer,
             show_fullscreen_button: true,
             stereometer_render_resources: None,
             fluid_render_resources: None,
@@ -291,6 +299,16 @@ impl Default for AppState {
 
             postfx_open: false,
             bloom_open: false,
+
+            gravity: 0.0,
+            // pressure_multiplier: 5.0,
+            pressure_multiplier: 40.0,
+            // target_density: 4600.0,
+            target_density: 650.0,
+            smoothing_radius: 0.065,
+            near_pressure_multiplier: 10.0,
+            // viscosity_strength: 0.015,
+            viscosity_strength: 0.03,
         }
     }
 }

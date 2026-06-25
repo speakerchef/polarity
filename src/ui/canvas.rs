@@ -33,7 +33,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
         });
 }
 
-pub const NUM_PARTICLES: i32 = 15;
+pub const NUM_PARTICLES: i32 = 50;
 pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] {
     let mut pos =
         [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; (NUM_PARTICLES * NUM_PARTICLES) as usize];
@@ -94,11 +94,14 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         .rect;
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
-    //NOTE: UNCOMMENT AFTER TESTING
-    // let Some(pl) = pl else {
-    //     return;
-    // };
-    // st.stereo.draw(pl, None);
+    let Some(pl) = pl else {
+        return;
+    };
+    match st.gen_kind {
+        GeneratorKind::Stereometer => st.stereo.draw(pl, None),
+        GeneratorKind::Fluidwave => (),
+    }
+
     let pos = generate_particle_grid();
     let quads = pos
         .iter()
@@ -110,7 +113,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         rect,
         RendererCallback {
             canvas_size,
-            gen_kind: GeneratorKind::Fluidwave,
+            gen_kind: st.gen_kind,
 
             render_mode: st.stereo.render_mode,
             live_pos: std::mem::take(&mut st.stereo.live_buffer),
@@ -132,7 +135,15 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             frame_time: now
                 .duration_since(st.fwave.last_frame)
                 .as_secs_f32()
-                .min(0.016),
+                .min(0.016)
+                / 10.0,
+            // frame_time: 1. / 120.,
+            g: st.gravity,
+            pm: st.pressure_multiplier,
+            td: st.target_density,
+            r: st.smoothing_radius,
+            npm: st.near_pressure_multiplier,
+            vs: st.viscosity_strength,
         },
     ));
     st.fwave.last_frame = now;
@@ -141,8 +152,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
-            // bloom_amt: st.stereo.bloom,
-            bloom_amt: 0.0,
+            bloom_amt: st.stereo.bloom,
         },
     ));
 

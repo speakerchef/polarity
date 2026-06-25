@@ -1,12 +1,11 @@
 struct Params {
     @size(16) dt: f32,
-    @size(16) debug: f32,
 }
 
 struct VertOut {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
-    @location(1) density: f32,
+    @location(1) speed: f32,
 }
 
 @group(0) @binding(0)
@@ -18,7 +17,7 @@ var<uniform> params: Params;
 //@group(0) @binding(3) 
 //var<storage, read> pressure: f32;
 
-const point_size: f32 = 0.01;
+const point_size: f32 = 0.005;
 var<private> quad_pos = array(vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(-point_size, point_size), vec2f(point_size, -point_size), vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(point_size, -point_size), vec2f(-point_size, point_size));
 
 @vertex
@@ -28,7 +27,7 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     let corner = i % 6u;
     out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
     out.uv = quad_pos[corner];
-    out.density = velocities[0].x;
+    out.speed = length(velocities[particle_id]);
     return out;
 }
 
@@ -49,5 +48,6 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     //    return vec4f(1);
     //}
 
-    return vec4f(1, 0.5, 1, 1);
+    return vec4f(1);
+    //return vec4f(1 - v.speed, 1 - v.speed, v.speed, 1);
 }

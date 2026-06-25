@@ -153,6 +153,13 @@ fn export_batched_frames(
 
             particle_pos: Vec::new(),
             frame_time: 0.0,
+
+            g: st.gravity,
+            pm: st.pressure_multiplier,
+            td: st.target_density,
+            r: st.smoothing_radius,
+            npm: st.near_pressure_multiplier,
+            vs: st.viscosity_strength,
         };
 
         // let mut res = egui_wgpu::CallbackResources::new();
@@ -277,6 +284,25 @@ impl eframe::App for PolarityApp {
                 StrokeKind::Inside,
             );
         }
+
+        egui::Window::new("Debug").show(ui.ctx(), |ui| {
+            ui.add(egui::Slider::new(&mut self.st.gravity, -100.0..=100.0).text("gravity"));
+            ui.add(
+                egui::Slider::new(&mut self.st.pressure_multiplier, 0.0..=400.0).text("pressure"),
+            );
+            ui.add(
+                egui::Slider::new(&mut self.st.target_density, 0.0..=6000.0).text("target density"),
+            );
+            ui.add(egui::Slider::new(&mut self.st.smoothing_radius, 0.01..=1.0).text("radius"));
+            ui.add(
+                egui::Slider::new(&mut self.st.near_pressure_multiplier, 0.00..=10.0)
+                    .text("near pressure multiplier"),
+            );
+            ui.add(
+                egui::Slider::new(&mut self.st.viscosity_strength, 0.00..=0.05)
+                    .text("viscosity_strength"),
+            );
+        });
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.dark_mode);

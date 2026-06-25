@@ -386,7 +386,7 @@ fn build_fluid_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_compute.wgsl").into()),
     });
 
-    let num_params = 1;
+    let num_params = 7;
 
     let render_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fluid render bgl"),
@@ -457,7 +457,7 @@ fn build_fluid_render_resources(
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
+                    has_dynamic_offset: true,
                     min_binding_size: NonZeroU64::new(16 * num_params),
                 },
                 count: None,
@@ -465,6 +465,28 @@ fn build_fluid_render_resources(
             // Debug
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+            // Densities
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
+                },
+                count: None,
+            },
+            // Predicted positions
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -520,10 +542,52 @@ fn build_fluid_render_resources(
         compilation_options: Default::default(),
         cache: None,
     });
-    const POS: [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] = generate_rand_particles();
+    let density = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fluid density pipeline"),
+        layout: Some(&compute_layout),
+        module: &compute_shader,
+        entry_point: Some("cs_calculate_densities"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let pressure = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fluid pressure pipeline"),
+        layout: Some(&compute_layout),
+        module: &compute_shader,
+        entry_point: Some("cs_calculate_pressure"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let positions = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fluid positions pipeline"),
+        layout: Some(&compute_layout),
+        module: &compute_shader,
+        entry_point: Some("cs_calculate_predicted_positions"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let viscosity = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fluid viscosity pipeline"),
+        layout: Some(&compute_layout),
+        module: &compute_shader,
+        entry_point: Some("cs_calculate_viscosity"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    static POS: [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] = generate_particle_grid();
     // println!("{:?}", POS.as_flattened());
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("fluid vertex buffer"),
+        contents: bytemuck::cast_slice(POS.as_flattened()),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+    });
+    let density_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("fluid density buffer"),
+        contents: bytemuck::cast_slice(POS.as_flattened()),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+    });
+    let pred_pos_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("fluid predicted positions buffer"),
         contents: bytemuck::cast_slice(POS.as_flattened()),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
     });
@@ -591,11 +655,23 @@ fn build_fluid_render_resources(
                 binding: 3,
                 resource: debug_storage.as_entire_binding(),
             },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: density_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: pred_pos_buffer.as_entire_binding(),
+            },
         ],
     });
     FluidRenderResources {
         pipeline,
-        compute,
+        compute_pipeline: compute,
+        density_pipeline: density,
+        pressure_pipeline: pressure,
+        viscosity_pipeline: viscosity,
+        positions_pipeline: positions,
         tex: None,
         render_bind_group,
         compute_bind_group,
@@ -603,7 +679,6 @@ fn build_fluid_render_resources(
         params_buffer,
         debug_storage,
         debug_staging,
-        target_format: wgpu_render_state.target_format,
     }
 }
 

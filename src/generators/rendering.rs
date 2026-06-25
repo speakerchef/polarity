@@ -117,9 +117,12 @@ impl OutputResources {
 }
 
 pub struct FluidRenderResources {
-    pub target_format: wgpu::TextureFormat,
     pub pipeline: wgpu::RenderPipeline,
-    pub compute: wgpu::ComputePipeline,
+    pub compute_pipeline: wgpu::ComputePipeline,
+    pub density_pipeline: wgpu::ComputePipeline,
+    pub pressure_pipeline: wgpu::ComputePipeline,
+    pub positions_pipeline: wgpu::ComputePipeline,
+    pub viscosity_pipeline: wgpu::ComputePipeline,
     pub render_bind_group: wgpu::BindGroup,
     pub compute_bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
@@ -129,13 +132,46 @@ pub struct FluidRenderResources {
     pub tex: Option<wgpu::Texture>,
 }
 impl FluidRenderResources {
-    fn prepare(&self, queue: &wgpu::Queue, dt: f32) {
+    fn prepare(
+        &self,
+        queue: &wgpu::Queue,
+        dt: f32,
+        g: f32,
+        pm: f32,
+        td: f32,
+        r: f32,
+        npm: f32,
+        vs: f32,
+    ) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[dt]));
+        queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[g]));
+        queue.write_buffer(&self.params_buffer, 32, bytemuck::cast_slice(&[pm]));
+        queue.write_buffer(&self.params_buffer, 48, bytemuck::cast_slice(&[td]));
+        queue.write_buffer(&self.params_buffer, 64, bytemuck::cast_slice(&[r]));
+        queue.write_buffer(&self.params_buffer, 80, bytemuck::cast_slice(&[npm]));
+        queue.write_buffer(&self.params_buffer, 96, bytemuck::cast_slice(&[vs]));
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
-        compute_pass.set_pipeline(&self.compute);
-        compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
-        compute_pass.dispatch_workgroups(64, 1, 1);
+        const WORKGROUP_SIZE: u32 = 128;
+        compute_pass.set_pipeline(&self.positions_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
+        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+
+        compute_pass.set_pipeline(&self.density_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
+        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+
+        compute_pass.set_pipeline(&self.viscosity_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
+        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+
+        compute_pass.set_pipeline(&self.pressure_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
+        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+
+        compute_pass.set_pipeline(&self.compute_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
+        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
     }
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
         render_pass.set_pipeline(&self.pipeline);
@@ -168,6 +204,13 @@ pub struct RendererCallback {
     // Particle fields
     pub particle_pos: Vec<Pos2>,
     pub frame_time: f32,
+
+    pub g: f32,
+    pub pm: f32,
+    pub td: f32,
+    pub r: f32,
+    pub npm: f32,
+    pub vs: f32,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
@@ -210,7 +253,16 @@ pub fn main_render_pipeline(
         live_mb_len as u32,
         trace_mb_len as u32,
     );
-    fluid_res.prepare(queue, data.frame_time);
+    fluid_res.prepare(
+        queue,
+        data.frame_time,
+        data.g,
+        data.pm,
+        data.td,
+        data.r,
+        data.npm,
+        data.vs,
+    );
     let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
         label: Some("fluid compute pass"),
         timestamp_writes: None,
@@ -260,16 +312,18 @@ pub fn main_render_pipeline(
     }
     drop(main_render_pass);
 
-    command_encoder.copy_buffer_to_buffer(
-        &fluid_res.debug_storage,
-        0,
-        &fluid_res.debug_staging,
-        0,
-        64,
-    );
-    let fut = read_debug_buffer(fluid_res.debug_staging.slice(..), device);
-    fut.block_on();
-    fluid_res.debug_staging.unmap();
+    if data.gen_kind == GeneratorKind::Fluidwave {
+        command_encoder.copy_buffer_to_buffer(
+            &fluid_res.debug_storage,
+            0,
+            &fluid_res.debug_staging,
+            0,
+            64,
+        );
+        let fut = read_debug_buffer(fluid_res.debug_staging.slice(..), device);
+        fut.block_on();
+        fluid_res.debug_staging.unmap();
+    }
 }
 
 pub fn get_texture_view(
