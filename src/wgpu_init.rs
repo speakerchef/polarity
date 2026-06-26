@@ -11,7 +11,7 @@ use crate::{
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
     },
     state::AppState,
-    ui::canvas::{NUM_PARTICLES, generate_particle_grid, generate_rand_particles},
+    ui::canvas::{NUM_PARTICLES, generate_particle_grid},
 };
 
 fn build_stereometer_render_resources(
@@ -386,7 +386,7 @@ fn build_fluid_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_compute.wgsl").into()),
     });
 
-    let num_params = 8;
+    let num_params = 13;
 
     let render_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fluid render bgl"),

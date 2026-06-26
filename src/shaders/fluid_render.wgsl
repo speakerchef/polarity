@@ -7,6 +7,10 @@ struct Params {
     @size(16) near_pressure_multiplier: f32,
     @size(16) viscosity_strength: f32,
     @size(16) envelope: f32,
+    @size(16) point_size: f32,
+    @size(16) is_gradient_mode: u32, // !0 == true, 0 == false
+    @size(16) uniform_color: vec4f,
+    @size(16) is_obstacle: u32,
 }
 
 struct VertOut {
@@ -27,26 +31,23 @@ var<storage, read> speaker_position: array<f32>;
 //@group(0) @binding(3) 
 //var<storage, read> pressure: f32;
 
-const point_size: f32 = 0.005;
-var<private> quad_pos = array(vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(-point_size, point_size), vec2f(point_size, -point_size), vec2f(point_size, point_size), vec2f(-point_size, -point_size), vec2f(point_size, -point_size), vec2f(-point_size, point_size));
-
 //const obstacle_w: f32 = 0.0025;
 const obstacle_w: f32 = 0.25;
 const obstacle_h: f32 = 0.25;
 const obstacle: array<vec2f, 6> = array(vec2f(obstacle_w, obstacle_h), vec2f(obstacle_w, -obstacle_h), vec2f(-obstacle_w, -obstacle_h), vec2f(obstacle_w, obstacle_h), vec2f(-obstacle_w, obstacle_h), vec2f(-obstacle_w, -obstacle_h));
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
+    let ps = params.point_size;
+    let quad_pos = array(vec2f(ps, ps), vec2f(-ps, -ps), vec2f(-ps, ps), vec2f(ps, -ps), vec2f(ps, ps), vec2f(-ps, -ps), vec2f(ps, -ps), vec2f(-ps, ps));
     var out: VertOut;
     let particle_id = i / 6u;
     let corner = i % 6u;
 
-    //if i < 6 {
-    //    out.position = vec4f(vec2f(0) + obstacle[i] + vec2f(params.envelope, 0.0), 0.0, 1.0);
-    //} else {
-    //    out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
-    //}
     out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
 
+    if i >= arrayLength(&positions) * 6 {
+        out.position = vec4f(0, 0, 0, 1);
+    }
     out.uv = quad_pos[corner];
     out.speed = length(velocities[particle_id]);
 
@@ -58,17 +59,19 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     let len = length(v.uv);
     var col = vec4f(1);
 
-    if len > point_size {
+    if len > params.point_size {
         discard;
     }
     // let vel = pow(v.speed, 4.0);
     let vel = v.speed;
 
-    //return vec4f(1);
-    //let b = v.speed - 1.0;
-    let g = v.speed - 0.5;
-    //let r = 1.0 - sqrt(vel);
-    let r = 1.0 - vel;
-    let b = 1.0 - vel / 4.0;
-    return vec4f(r, g, b, 1);
+    if params.is_gradient_mode != 0 {
+        // velocity gradient
+        let r = v.speed - 0.5;
+        let g = 1.0 - vel;
+        let b = 1.0 - vel / 4.0;
+        return vec4f(r, g, b, 1);
+    } else {
+        return params.uniform_color;
+    }
 }

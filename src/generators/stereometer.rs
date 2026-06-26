@@ -148,7 +148,7 @@ pub struct Stereometer {
 impl Default for Stereometer {
     fn default() -> Self {
         // default preset
-        let fstr = std::fs::read_to_string("presets/synthwave.json").unwrap();
+        let fstr = std::fs::read_to_string("presets/lsd_flames.json").unwrap();
         serde_json::from_str(&fstr).unwrap_or_else(|_err| Self {
             filter_freq: 1.0,
             last_freq: 1.0,

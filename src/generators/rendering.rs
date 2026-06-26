@@ -2,9 +2,9 @@ use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
-use rodio::queue;
 
 use crate::GeneratorKind;
+use crate::generators::fluidwave::{ColorMode, EnergyTransferMode, ForceDirection};
 use crate::ui::canvas::NUM_PARTICLES;
 use crate::{
     LinearRgba,
@@ -133,12 +133,12 @@ pub struct FluidRenderResources {
     pub debug_staging: wgpu::Buffer,
     pub tex: Option<wgpu::Texture>,
 }
+
+#[allow(clippy::too_many_arguments)]
 impl FluidRenderResources {
     fn prepare(
         &self,
         queue: &wgpu::Queue,
-        //pos: Vec<f32>,
-        pos: f32,
         dt: f32,
         g: f32,
         pm: f32,
@@ -146,6 +146,12 @@ impl FluidRenderResources {
         r: f32,
         npm: f32,
         vs: f32,
+        pos: f32,
+        p_sz: f32,
+        col_mode: ColorMode,
+        col: crate::Rgba,
+        et_mode: EnergyTransferMode,
+        force_dir: ForceDirection,
     ) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[dt]));
         queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[g]));
@@ -155,11 +161,33 @@ impl FluidRenderResources {
         queue.write_buffer(&self.params_buffer, 80, bytemuck::cast_slice(&[npm]));
         queue.write_buffer(&self.params_buffer, 96, bytemuck::cast_slice(&[vs]));
         queue.write_buffer(&self.params_buffer, 112, bytemuck::cast_slice(&[pos]));
-        // println!("{:.9?}", pos.last().unwrap());
-        // queue.write_buffer(&self.speaker_position, 0, bytemuck::cast_slice(&pos));
+        queue.write_buffer(&self.params_buffer, 128, bytemuck::cast_slice(&[p_sz]));
+        queue.write_buffer(
+            &self.params_buffer,
+            144,
+            bytemuck::cast_slice(&[matches!(col_mode, ColorMode::VelocityGradient) as u32]),
+        );
+
+        let (r, g, b, a) = col.as_tuple();
+        let col = LinearRgba::from_u8rgb(r, g, b, a);
+        queue.write_buffer(
+            &self.params_buffer,
+            160,
+            bytemuck::cast_slice(&[col.r, col.g, col.b, col.a]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            176,
+            bytemuck::cast_slice(&[matches!(et_mode, EnergyTransferMode::Obstacle) as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            192,
+            bytemuck::cast_slice(&[matches!(force_dir, ForceDirection::Out) as u32]),
+        );
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
-        const WORKGROUP_SIZE: u32 = 128;
+        const WORKGROUP_SIZE: u32 = 200;
         compute_pass.set_pipeline(&self.positions_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
         compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
@@ -208,27 +236,32 @@ pub struct RendererCallback {
     pub mb_color: LinearRgba,
     pub hb_color: LinearRgba,
 
-    // Particle fields
-    // pub particle_pos: Vec<Pos2>,
+    // Fluidwave fields
+    pub color_mode: ColorMode,
+    pub uniform_color: crate::Rgba,
+
     pub particle_pos: f32,
     pub frame_time: f32,
-
-    pub g: f32,
-    pub pm: f32,
-    pub td: f32,
-    pub r: f32,
-    pub npm: f32,
-    pub vs: f32,
+    pub gravity: f32,
+    pub pressure_multiplier: f32,
+    pub target_density: f32,
+    pub smoothing_radius: f32,
+    pub near_pressure_multiplier: f32,
+    pub viscosity_strength: f32,
+    pub point_size: f32,
+    pub energy_transfer_mode: EnergyTransferMode,
+    pub force_direction: ForceDirection,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
-    stereometer_res: &StereometerRenderResources,
-    fluid_res: &FluidRenderResources,
+    res: &mut egui_wgpu::CallbackResources,
     target_texture_view: wgpu::TextureView,
 ) {
+    let stereometer_res: &StereometerRenderResources = res.get().unwrap();
+    let fluid_res: &FluidRenderResources = res.get().unwrap();
     let pos = match data.render_mode {
         RenderMode::FullSpectrum => {
             let mut pos = data.live_pos.clone();
@@ -261,18 +294,22 @@ pub fn main_render_pipeline(
         live_mb_len as u32,
         trace_mb_len as u32,
     );
-    // println!("{:.9}", data.particle_pos.first().unwrap().x);
     fluid_res.prepare(
         queue,
         // data.particle_pos.iter().map(|pos| pos.x).collect(),
-        data.particle_pos,
         data.frame_time,
-        data.g,
-        data.pm,
-        data.td,
-        data.r,
-        data.npm,
-        data.vs,
+        data.gravity,
+        data.pressure_multiplier,
+        data.target_density,
+        data.smoothing_radius,
+        data.near_pressure_multiplier,
+        data.viscosity_strength,
+        data.particle_pos,
+        data.point_size,
+        data.color_mode,
+        data.uniform_color,
+        data.energy_transfer_mode,
+        data.force_direction,
     );
     let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
         label: Some("fluid compute pass"),
@@ -428,17 +465,7 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             (self.canvas_size.y * ppp) as u32,
         );
         let tex_view = get_texture_view(resources, device, (w, h), self.gen_kind);
-        let meter_res = resources.get::<StereometerRenderResources>().unwrap();
-        let fluid_res = resources.get::<FluidRenderResources>().unwrap();
-        main_render_pipeline(
-            self,
-            device,
-            queue,
-            command_encoder,
-            meter_res,
-            fluid_res,
-            tex_view,
-        );
+        main_render_pipeline(self, device, queue, command_encoder, resources, tex_view);
         Vec::new()
     }
 
@@ -469,7 +496,7 @@ pub struct EffectsCallback {
     pub bloom_amt: f32,
 }
 
-pub fn prep_meter_resources_for_effects(
+fn prep_meter_resources_for_effects(
     device: &wgpu::Device,
     meter_res: &StereometerRenderResources,
     bloom_res: &BloomRenderResources,
@@ -503,7 +530,7 @@ pub fn prep_meter_resources_for_effects(
     (tex_size, bloom_bind_group)
 }
 
-pub fn prep_output_resources_for_effects(
+fn prep_output_resources_for_effects(
     device: &wgpu::Device,
     tex_size: (u32, u32),
     out_res: &mut OutputResources,
@@ -567,7 +594,7 @@ pub fn prep_output_resources_for_effects(
     dst_view
 }
 
-pub fn prep_bloom_resources_for_effects(
+fn prep_bloom_resources_for_effects(
     device: &wgpu::Device,
     bloom_res: &mut BloomRenderResources,
     queue: &wgpu::Queue,
@@ -579,11 +606,24 @@ pub fn prep_bloom_resources_for_effects(
 }
 
 pub fn effects_render_pipeline(
-    _device: &wgpu::Device,
+    data: &EffectsCallback,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
-    dst_view: wgpu::TextureView,
-    bloom_res: &BloomRenderResources,
+    // bloom_res: &BloomRenderResources,
+    res: &mut egui_wgpu::CallbackResources,
 ) {
+    let meter_res = res.get::<StereometerRenderResources>().unwrap();
+    let bloom_res = res.get::<BloomRenderResources>().unwrap();
+    let (tex_size, bloom_bind_group) =
+        prep_meter_resources_for_effects(device, meter_res, bloom_res);
+
+    let out_res = res.get_mut::<OutputResources>().unwrap();
+    let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
+
+    let bloom_res = res.get_mut::<BloomRenderResources>().unwrap();
+    prep_bloom_resources_for_effects(device, bloom_res, queue, bloom_bind_group, data.bloom_amt);
+
     let mut output_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("output pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -614,26 +654,8 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        let meter_res = resources.get::<StereometerRenderResources>().unwrap();
-        let bloom_res = resources.get::<BloomRenderResources>().unwrap();
-        let (tex_size, bloom_bind_group) =
-            prep_meter_resources_for_effects(device, meter_res, bloom_res);
-
-        let out_res = resources.get_mut::<OutputResources>().unwrap();
-        let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
-
-        let bloom_res = resources.get_mut::<BloomRenderResources>().unwrap();
-        prep_bloom_resources_for_effects(
-            device,
-            bloom_res,
-            queue,
-            bloom_bind_group,
-            self.bloom_amt,
-        );
-
-        let bloom_res = resources.get::<BloomRenderResources>().unwrap();
+        effects_render_pipeline(self, device, queue, command_encoder, resources);
         let out_res = resources.get::<OutputResources>().unwrap();
-        effects_render_pipeline(device, command_encoder, dst_view, bloom_res);
         out_res.prepare(queue, self.top_left * screen_descriptor.pixels_per_point);
         Vec::new()
     }
@@ -704,7 +726,7 @@ async fn read_debug_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::D
         });
     rx.recv_async().await.unwrap().unwrap();
     let data = buffer_slice.get_mapped_range();
-    let val: &[f32] = bytemuck::cast_slice(&data);
+    let _val: &[f32] = bytemuck::cast_slice(&data);
     // println!("Debug: {:?}", val.first().unwrap());
 }
 

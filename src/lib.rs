@@ -7,10 +7,15 @@ mod state;
 mod ui;
 mod wgpu_init;
 
+use std::time::Instant;
+
 pub use app::PolarityApp;
 use eframe::egui::{Pos2, pos2};
 
-use crate::state::Labeled;
+use crate::{
+    audio::audio_player::AudioPlayer,
+    state::{AppState, Labeled},
+};
 
 #[macro_export]
 macro_rules! labeled_enum {
@@ -120,4 +125,36 @@ pub fn points_to_quad_vertices(s: f32, l: f32, r: f32) -> [Pos2; 6] {
         pos2(l - s, r + s),
         pos2(l - s, r - s),
     ]
+}
+
+pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool, fps: usize) {
+    let num_channels = pl.contents.num_channels as usize;
+    const ATT: f32 = 0.75;
+    const REL: f32 = 0.90;
+    let start = if live {
+        (pl.position()
+            .saturating_sub(Instant::now().duration_since(st.fwave.last_frame))
+            .as_secs_f64()
+            * pl.contents.sample_rate as f64) as usize
+    } else {
+        st.export_sample_idx
+    };
+    let end = if live {
+        (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize
+    } else {
+        start + (1. / fps as f64 * pl.contents.sample_rate as f64) as usize
+    };
+    let ef_window = &pl.contents.samples[start * num_channels..end * num_channels];
+    let mut ls = st.fwave.envelope_last_sample;
+
+    for s in ef_window.chunks_exact(2) {
+        let l = s.first().unwrap_or(&0.0);
+        let abs = l.abs();
+        if abs > ls {
+            ls = ls * ATT + (1.0 - ATT) * abs;
+        } else {
+            ls = ls * REL + (1.0 - REL) * abs;
+        }
+    }
+    st.fwave.envelope_last_sample = ls;
 }

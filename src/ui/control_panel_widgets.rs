@@ -28,7 +28,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
         (plt::SURFACE(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
 
-    let num_w = 46.0;
+    let num_w = 42.0;
     let p = ui.painter();
 
     // interactions
@@ -60,7 +60,6 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
         family: FontFamily::Name("inter_bold".into()),
     };
     let lbl_pos = pos2(rect.left() + num_w + 12.0, rect.center().y - 8.0);
-    let idx_pos = pos2(rect.left() + num_w / 3.25, rect.center().y - 8.0);
     custom_text(
         ui,
         name,
@@ -70,14 +69,15 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
         fg,
         Align::LEFT,
     );
+    let (_, th) = get_text_size(ui, &format!("{index:02}"), fonts.clone()).into();
     custom_text(
         ui,
         &format!("{index:02}"),
         fonts,
-        idx_pos,
+        rect.left_center() + vec2(num_w / 2.0, -th / 2.0),
         plt::letter_spacing::SPACED,
         fg,
-        Align::LEFT,
+        Align::Center,
     );
 
     resp
@@ -121,11 +121,12 @@ pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
     };
+    let (_, th) = get_text_size(ui, name, fonts.clone()).into();
     custom_text(
         ui,
         name,
         fonts.clone(),
-        pos2(rect.left() + 14.0, rect.center().y - 7.0),
+        rect.left_center() + vec2(12.0, -th / 2.0),
         plt::letter_spacing::BASE,
         fg,
         Align::LEFT,
@@ -157,11 +158,12 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
     };
+    let (_, th) = get_text_size(ui, name, fonts.clone()).into();
     custom_text(
         ui,
         name,
         fonts.clone(),
-        pos2(rect.left() + 14.0, rect.center().y - 8.0),
+        rect.left_center() + vec2(12.0, -th / 2.0),
         plt::letter_spacing::BASE,
         plt::TEXT,
         Align::LEFT,
@@ -364,7 +366,7 @@ pub fn dropdown_row<T: Labeled>(
     open: &mut bool,
 ) {
     const SEL_W: f32 = 150.0;
-    const PAD: f32 = 12.0;
+    const PAD: f32 = 10.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
@@ -385,7 +387,7 @@ pub fn dropdown_row<T: Labeled>(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::SURFACE(ui.style().visuals.dark_mode),
+        plt::INK,
     );
     ui.painter().set(bg, bg_rect.clone());
     let br = bg_rect.visual_bounding_rect();
@@ -561,8 +563,8 @@ fn value_box(
 fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::hover());
     let fonts = FontId {
-        size: plt::font_size::META,
-        family: FontFamily::Name("inter_medium".into()),
+        size: plt::font_size::TINY,
+        family: FontFamily::Name("inter_regular".into()),
     };
     custom_text(
         ui,
@@ -591,7 +593,7 @@ pub fn slider_row(
             Layout::left_to_right(Align::Center),
             |ui| {
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
-                ui.add_space(12.0);
+                ui.add_space(10.0);
                 label_text(ui, label, 65.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
                 ui.add_space(13.0);
@@ -607,7 +609,7 @@ pub fn slider_row(
             vec2(ui.available_width(), inner_rect.height()),
         ),
         SHARP,
-        plt::SURFACE(ui.style().visuals.dark_mode),
+        plt::INK,
     );
     ui.painter().set(bg, bg_rect.clone());
     ui.painter().line_segment(

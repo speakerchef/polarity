@@ -13,6 +13,7 @@ use egui_file_dialog::{self as fd, FileDialog};
 use crate::{
     GeneratorKind,
     generators::{
+        fluidwave::Fluidwave,
         rendering::{
             BloomRenderResources, FluidRenderResources, OutputResources, StereometerRenderResources,
         },
@@ -119,16 +120,6 @@ pub struct ExportConfig {
     pub total_frames: usize,
 }
 
-pub struct Fluidwave {
-    pub last_frame: Instant,
-    pub gravity: f32,
-    pub pressure_multiplier: f32,
-    pub target_density: f32,
-    pub smoothing_radius: f32,
-    pub near_pressure_multiplier: f32,
-    pub viscosity_strength: f32,
-}
-
 pub struct AppState {
     pub file_dialog: FileDialog,
     pub dir_dialog: FileDialog,
@@ -136,7 +127,6 @@ pub struct AppState {
     pub gen_kind: GeneratorKind,
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
-    pub pos: [f32; 2],
 
     pub stereometer_render_resources: Option<StereometerRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
@@ -189,6 +179,11 @@ pub struct AppState {
     pub gen_open: bool,
     pub render_open: bool,
     pub render_mode_options_open: bool,
+
+    pub energy_transfer_mode_options_open: bool,
+    pub force_direction_options_open: bool,
+    pub color_mode_options_open: bool,
+
     pub stereo_kind_options_open: bool,
     pub filtering_open: bool,
     pub filter_mode_options_open: bool,
@@ -202,8 +197,6 @@ pub struct AppState {
 
     pub postfx_open: bool,
     pub bloom_open: bool,
-
-    pub env_follower_last_sample: f32,
 }
 
 impl Default for AppState {
@@ -256,29 +249,7 @@ impl Default for AppState {
 
             playback_mode: PlaybackMode::default(),
             stereo: Stereometer::default(),
-            fwave: Fluidwave {
-                last_frame: Instant::now(),
-                // gravity: 0.0,
-                // pressure_multiplier: 290.0,
-                // target_density: 2300.0,
-                // smoothing_radius: 0.1,
-                // near_pressure_multiplier: 10.0,
-                // viscosity_strength: 0.001,
-                // gravity: -20.0,
-                // pressure_multiplier: 210.0,
-                // target_density: 5550.0,
-                // smoothing_radius: 0.08,
-                // near_pressure_multiplier: 10.0,
-                // viscosity_strength: 0.02,
-                gravity: 0.0,
-                pressure_multiplier: 152.0,
-                // target_density: 0.0,
-                target_density: 2000.0,
-                smoothing_radius: 0.1,
-                near_pressure_multiplier: 7.1,
-                viscosity_strength: 0.01,
-            },
-            pos: [0.0; 2],
+            fwave: Fluidwave::default(),
 
             dark_mode: true,
             fullscreen: false,
@@ -305,8 +276,14 @@ impl Default for AppState {
 
             gen_kind_options_open: false,
             gen_open: false,
+
             render_open: false,
             render_mode_options_open: false,
+
+            energy_transfer_mode_options_open: false,
+            force_direction_options_open: false,
+            color_mode_options_open: false,
+
             stereo_kind_options_open: false,
             filtering_open: false,
             filter_mode_options_open: false,
@@ -315,13 +292,10 @@ impl Default for AppState {
             visual_open: false,
             density_open: false,
             trace_open: false,
-
             set_default_freqs: true,
 
             postfx_open: false,
             bloom_open: false,
-
-            env_follower_last_sample: 0.0,
         }
     }
 }

@@ -1,5 +1,8 @@
 use biquad::*;
-use eframe::egui_wgpu::{self, wgpu};
+use eframe::{
+    egui::Pos2,
+    egui_wgpu::{self, wgpu},
+};
 use egui_winit::winit::dpi::LogicalSize;
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 use std::{
@@ -9,20 +12,21 @@ use std::{
 };
 
 use crate::{
+    GeneratorKind,
     audio::{StereoFilter, audio_player::*},
+    envelope_follower,
     generators::{
         rendering::{
-            BloomRenderResources, FluidRenderResources, OutputResources, RendererCallback,
-            StereometerRenderResources, effects_render_pipeline, get_gpu_frame, get_texture_view,
-            main_render_pipeline, output_render_pipeline, prep_bloom_resources_for_effects,
-            prep_meter_resources_for_effects, prep_output_resources_for_effects,
+            EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
+            get_texture_view, main_render_pipeline, output_render_pipeline,
         },
         stereometer::{FilterMode, Stereometer},
     },
     state::PlaybackMode,
     ui::{
         app_widgets::{export_modal, menu_bar, preset_modal, window_drag_tooltip},
-        canvas, control_panel, timeline,
+        canvas::{self, get_render_callback_data},
+        control_panel, timeline,
         timeline_widgets::{SHARP, border},
     },
     wgpu_init::setup_wgpu,
@@ -40,6 +44,109 @@ pub struct PolarityApp {
 
 const BATCH_SIZE: usize = 30;
 
+fn render_wgpu_frame(
+    st: &mut AppState,
+    p: &AudioPlayer,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    fps: usize,
+    dim: (u32, u32),
+) -> Vec<u8> {
+    let (w, h) = (dim.0, dim.1);
+    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("export command encoder"),
+    });
+    let frac = st.cur_frame_idx as f32 / fps as f32;
+    let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
+
+    match st.gen_kind {
+        GeneratorKind::Stereometer => st.stereo.draw(p, Some(export_sample_idx)),
+        GeneratorKind::Fluidwave => envelope_follower(p, st, false, fps),
+    }
+
+    let render_data = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);
+    let texture_view = get_texture_view(&mut st.resources, device, (w, h), st.gen_kind);
+
+    // Main pipeline
+    main_render_pipeline(
+        &render_data,
+        device,
+        queue,
+        &mut command_encoder,
+        &mut st.resources,
+        texture_view,
+    );
+
+    let effects_data = EffectsCallback {
+        top_left: Pos2::ZERO,
+        bloom_amt: match st.gen_kind {
+            crate::GeneratorKind::Stereometer => st.stereo.bloom,
+            crate::GeneratorKind::Fluidwave => st.fwave.bloom,
+        },
+    };
+    effects_render_pipeline(
+        &effects_data,
+        device,
+        queue,
+        &mut command_encoder,
+        &mut st.resources,
+    );
+
+    // Output
+    let out_res = st.resources.get::<OutputResources>().unwrap();
+    output_render_pipeline(&mut command_encoder, out_res);
+    queue.submit(Some(command_encoder.finish()));
+    get_gpu_frame(device, out_res)
+}
+
+fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32, u32)) {
+    let (w, h) = (dim.0, dim.1);
+    let quality = st.export_config.quality.value();
+    let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
+
+    let mut output = FfmpegCommand::new()
+        .format("rawvideo")
+        .args(["-pixel_format", "bgra"])
+        .size(w, h)
+        .rate(fps as f32)
+        .input("-")
+        .input(p.contents.path.to_string_lossy())
+        .codec_video("libx264")
+        .crf(quality as u32)
+        .preset("veryfast")
+        .pix_fmt("yuv444p")
+        .codec_audio("aac")
+        .args(["-b:a", "320k"])
+        .args(["-y", "out.mp4"])
+        .spawn()
+        .unwrap();
+
+    let mut stdin = output.take_stdin().unwrap();
+    let (tx, rx) = flume::bounded::<Vec<u8>>(4);
+    let write_handle = std::thread::spawn(move || {
+        rx.iter().for_each(|frame| {
+            stdin.write_all(&frame).unwrap();
+        });
+        drop(stdin);
+    });
+    let log_handle = std::thread::spawn(move || {
+        for event in output.iter().unwrap() {
+            match event {
+                FfmpegEvent::Log(_, _) => (),
+                FfmpegEvent::Error(_e) => (),
+                FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
+                FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
+                _ => (),
+            }
+        }
+        output.wait().unwrap();
+    });
+    st.writer_handle = Some(write_handle);
+    st.logger_handle = Some(log_handle);
+    st.export_tx = Some(tx);
+    st.export_config.total_frames = total_frames as usize;
+}
+
 fn export_batched_frames(
     st: &mut AppState,
     p: &AudioPlayer,
@@ -49,64 +156,15 @@ fn export_batched_frames(
     let canvas_size = st.export_config.resolution.value();
     let (w, h) = (canvas_size.0, canvas_size.1);
 
-    let bloom_amt = st.stereo.bloom;
+    // Spawn writer thread for entire job
+    if st.writer_handle.is_none() {
+        spawn_ffmpeg_writer(st, p, fps, (w, h));
+    }
+
     let device = &wgpu_render_state.device;
     let queue = &wgpu_render_state.queue;
 
-    // Spawn writer thread for entire job
-    if st.writer_handle.is_none() {
-        let quality = st.export_config.quality.value();
-        let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
-
-        let mut output = FfmpegCommand::new()
-            .format("rawvideo")
-            .args(["-pixel_format", "bgra"])
-            .size(w, h)
-            .rate(fps as f32)
-            .input("-")
-            .input(p.contents.path.to_string_lossy())
-            .codec_video("libx264")
-            .crf(quality as u32)
-            .preset("veryfast")
-            .pix_fmt("yuv444p")
-            .codec_audio("aac")
-            .args(["-b:a", "320k"])
-            .args(["-y", "out.mp4"])
-            .spawn()
-            .unwrap();
-
-        let mut stdin = output.take_stdin().unwrap();
-        let (tx, rx) = flume::bounded::<Vec<u8>>(4);
-        let write_handle = std::thread::spawn(move || {
-            rx.iter().for_each(|frame| {
-                stdin.write_all(&frame).unwrap();
-            });
-            drop(stdin);
-        });
-        let log_handle = std::thread::spawn(move || {
-            for event in output.iter().unwrap() {
-                match event {
-                    FfmpegEvent::Log(_, _) => (),
-                    FfmpegEvent::Error(_e) => (),
-                    FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
-                    FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
-                    _ => (),
-                }
-            }
-            output.wait().unwrap();
-        });
-        st.writer_handle = Some(write_handle);
-        st.logger_handle = Some(log_handle);
-        st.export_tx = Some(tx);
-        st.export_config.total_frames = total_frames as usize;
-    }
-
     for _ in 0..BATCH_SIZE {
-        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("export command encoder"),
-        });
-
-        st.cur_frame_idx += 1;
         if st.cur_frame_idx >= st.export_config.total_frames || st.export_canceled {
             drop(std::mem::take(&mut st.export_tx));
             st.writer_handle.take().unwrap().join().unwrap();
@@ -121,76 +179,9 @@ fn export_batched_frames(
             println!("Finished");
             break;
         }
-        let frac = st.cur_frame_idx as f32 / fps as f32;
-        let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
-
-        st.stereo.draw(p, Some(export_sample_idx));
-
-        let render_data = RendererCallback {
-            gen_kind: st.gen_kind,
-            canvas_size: vec2(w as f32, h as f32),
-
-            render_mode: st.stereo.render_mode,
-            live_pos: std::mem::take(&mut st.stereo.live_buffer),
-            trace_pos: st.stereo.trace_buffer.clone().into(),
-
-            live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
-            live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
-            live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
-            trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
-            trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
-            trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
-
-            fs_color: st.stereo.fs_color.into(),
-            lb_color: st.stereo.mb_color[0].into(),
-            mb_color: st.stereo.mb_color[1].into(),
-            hb_color: st.stereo.mb_color[2].into(),
-
-            // particle_pos: Vec::new(),
-            particle_pos: 0.0,
-            frame_time: 0.0,
-
-            g: st.fwave.gravity,
-            pm: st.fwave.pressure_multiplier,
-            td: st.fwave.target_density,
-            r: st.fwave.smoothing_radius,
-            npm: st.fwave.near_pressure_multiplier,
-            vs: st.fwave.viscosity_strength,
-        };
-
-        let texture_view = get_texture_view(&mut st.resources, device, (w, h), st.gen_kind);
-
-        let meter_res = st.resources.get::<StereometerRenderResources>().unwrap();
-        let fluid_res = st.resources.get::<FluidRenderResources>().unwrap();
-        // Main pipeline
-        main_render_pipeline(
-            &render_data,
-            device,
-            queue,
-            &mut command_encoder,
-            meter_res,
-            fluid_res,
-            texture_view,
-        );
-
-        let bloom_res = st.resources.get::<BloomRenderResources>().unwrap();
-        // Effects pipeline
-        let (tex_size, bloom_bind_group) =
-            prep_meter_resources_for_effects(device, meter_res, bloom_res);
-
-        let out_res = st.resources.get_mut::<OutputResources>().unwrap();
-        let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
-
-        let bloom_res = st.resources.get_mut::<BloomRenderResources>().unwrap();
-        prep_bloom_resources_for_effects(device, bloom_res, queue, bloom_bind_group, bloom_amt);
-        effects_render_pipeline(device, &mut command_encoder, dst_view, bloom_res);
-
-        // Output
-        let out_res = st.resources.get::<OutputResources>().unwrap();
-        output_render_pipeline(&mut command_encoder, out_res);
-        queue.submit(Some(command_encoder.finish()));
-        let frame = get_gpu_frame(device, out_res);
+        let frame = render_wgpu_frame(st, p, device, queue, fps, (w, h));
         st.export_tx.as_ref().unwrap().send(frame).unwrap();
+        st.cur_frame_idx += 1;
     }
 }
 

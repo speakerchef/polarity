@@ -37,12 +37,15 @@
 ### V2 Roadmap (In Progress)
 
 - [ ] Build/packaging system to get `.app`
-- [ ] Particle / Fluid simulation motion generator
-  - [ ] No-gravity based fluid Canvas
-  - [ ] 2 modes:
-    - [ ] Transient/impact based wave generator
-    - [ ] Visualize waves through particle compression and expansion
-    - [ ] Have dynamic velocity based color generation
+- [x] Particle / Fluid simulation motion generator
+  - [x] No-gravity based fluid Canvas
+  - [ ] Multiple force generator positions
+    - [x] Centered
+    - [ ] From sides
+    - [ ] Corners
+  - [x] Envelope follower based force generator
+  - [x] Visualize waves through particle compression and expansion
+  - [x] Have dynamic velocity based color generation
 - [ ] Live/RT mode
 - [ ] Preferences pane with adjustable defaults
   - [ ] audio input options for live mode

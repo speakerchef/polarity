@@ -2,14 +2,15 @@
 use std::ops::{Div, Mul};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Pos2};
+use eframe::egui::{self, Pos2, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
+use crate::generators::fluidwave::EnergyTransferMode;
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::ui::canvas_widgets::fullscreen_button;
 use crate::ui::timeline_widgets::{SHARP, border};
-use crate::{GeneratorKind, points_to_quad_vertices};
+use crate::{GeneratorKind, envelope_follower, points_to_quad_vertices};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
@@ -34,7 +35,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
         });
 }
 
-pub const NUM_PARTICLES: i32 = 50;
+pub const NUM_PARTICLES: i32 = 70;
 pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] {
     let mut pos =
         [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; (NUM_PARTICLES * NUM_PARTICLES) as usize];
@@ -43,16 +44,9 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     while i < NUM_PARTICLES {
         let mut j = 0;
         while j < NUM_PARTICLES {
-            pos[idx] = [
-                i as f32 / NUM_PARTICLES as f32,
-                j as f32 / NUM_PARTICLES as f32,
-                -i as f32 / NUM_PARTICLES as f32,
-                -j as f32 / NUM_PARTICLES as f32,
-                -i as f32 / NUM_PARTICLES as f32,
-                j as f32 / NUM_PARTICLES as f32,
-                i as f32 / NUM_PARTICLES as f32,
-                -j as f32 / NUM_PARTICLES as f32,
-            ];
+            let x = (i as f32 + 0.5) / NUM_PARTICLES as f32 * 0.9;
+            let y = (j as f32 + 0.5) / NUM_PARTICLES as f32 * 0.9;
+            pos[idx] = [x, y, -x, -y, x, -y, -x, y];
             idx += 1;
             j += 1;
         }
@@ -61,23 +55,80 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     pos
 }
 
-pub const fn generate_rand_particles() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] {
-    let mut pos = [[0.0f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize];
-    let mut seed: u64 = 0xDEADBEEF;
-    let mut idx = 0;
-    while idx < (NUM_PARTICLES * NUM_PARTICLES) as usize {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        let x = (seed as i64 % 1000) as f32 / 1000.0;
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        let y = (seed as i64 % 1000) as f32 / 1000.0;
-        pos[idx] = [x, y, -x, -y, -x, y, x, -y];
-        idx += 1;
-    }
-    pos
+pub fn get_render_callback_data(
+    st: &mut AppState,
+    canvas_size: Vec2,
+    live: bool,
+    fps: usize,
+) -> RendererCallback {
+    let now = Instant::now();
+    let dat = RendererCallback {
+        canvas_size,
+        gen_kind: st.gen_kind,
+
+        // stereometer params
+        render_mode: st.stereo.render_mode,
+        live_pos: std::mem::take(&mut st.stereo.live_buffer),
+        trace_pos: st.stereo.trace_buffer.clone().into(),
+
+        live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
+        live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
+        live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
+        trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
+        trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
+        trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
+
+        fs_color: st.stereo.fs_color.into(),
+        lb_color: st.stereo.mb_color[0].into(),
+        mb_color: st.stereo.mb_color[1].into(),
+        hb_color: st.stereo.mb_color[2].into(),
+
+        // Fluidwave params
+        uniform_color: st.fwave.uniform_color,
+        color_mode: st.fwave.color_mode,
+        energy_transfer_mode: st.fwave.energy_transfer_mode,
+        force_direction: st.fwave.force_direction,
+        frame_time: if live {
+            now.duration_since(st.fwave.last_frame)
+                .as_secs_f32()
+                .min(0.016)
+                / 8.0
+        } else {
+            (1. / fps as f32) / 8.0
+        },
+        particle_pos: st.fwave.envelope_last_sample.div(
+            if matches!(
+                st.fwave.energy_transfer_mode,
+                EnergyTransferMode::ForceField
+            ) {
+                1.5
+            } else {
+                2.0
+            },
+        ),
+        gravity: st.fwave.gravity,
+        pressure_multiplier: st.fwave.pressure_multiplier,
+        target_density: st.fwave.target_density,
+        smoothing_radius: st.fwave.smoothing_radius,
+        near_pressure_multiplier: st.fwave.near_pressure_multiplier,
+        viscosity_strength: st.fwave.viscosity_strength,
+        point_size: st.fwave.point_size,
+    };
+    st.fwave.last_frame = now;
+    dat
+}
+
+fn effects_callback(ui: &mut egui::Ui, st: &mut AppState, rect: egui::Rect) {
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        EffectsCallback {
+            top_left: rect.left_top(),
+            bloom_amt: match st.gen_kind {
+                GeneratorKind::Stereometer => st.stereo.bloom,
+                GeneratorKind::Fluidwave => st.fwave.bloom,
+            },
+        },
+    ));
 }
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
@@ -93,111 +144,22 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             egui::Sense::focusable_noninteractive(),
         )
         .rect;
+
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
+
     let Some(pl) = pl else {
         return;
     };
     match st.gen_kind {
         GeneratorKind::Stereometer => st.stereo.draw(pl, None),
-        GeneratorKind::Fluidwave => (),
+        GeneratorKind::Fluidwave => envelope_follower(pl, st, true, 0),
     }
 
-    let num_channels = pl.contents.num_channels as usize;
-
-    let sample_pos = pl.position().as_secs_f64();
-    let sample_idx = (sample_pos * pl.contents.sample_rate as f64) as usize;
-    let live_window = pl
-        .contents
-        .samples
-        .get(sample_idx * num_channels..sample_idx * num_channels + 50 * 50)
-        .unwrap_or_default();
-
-    // Envelope follower
-    const WINDOW: u64 = 100; // ms 
-    const ATT: f32 = 0.75;
-    const REL: f32 = 0.5;
-    if pl.position() <= Duration::from_millis(WINDOW) {
-        return;
-    }
-
-    let start = pl
-        .position()
-        .saturating_sub(Instant::now().duration_since(st.fwave.last_frame));
-    let start = (start.as_secs_f64() * pl.contents.sample_rate as f64) as usize;
-    let end = (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize;
-    let ef_window = &pl.contents.samples[start * num_channels..end * num_channels];
-    let mut ls = st.env_follower_last_sample;
-
-    for s in ef_window.chunks_exact(2) {
-        let l = s.first().unwrap_or(&0.0);
-        let abs = l.abs();
-        if abs > ls {
-            ls = ls * ATT + (1.0 - ATT) * abs;
-        } else {
-            ls = ls * REL + (1.0 - REL) * abs;
-        }
-    }
-    st.env_follower_last_sample = ls;
-    // println!("ENV: {}", st.env_follower_last_sample);
-
-    // let speaker_pos: Vec<_> = live_window
-    //     .chunks_exact(2)
-    //     .map(|x| pos2(*x.first().unwrap(), *x.last().unwrap_or(x.first().unwrap())).mul(0.1))
-    //     .collect();
-
-    let now = Instant::now();
-    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-        rect,
-        RendererCallback {
-            canvas_size,
-            gen_kind: st.gen_kind,
-
-            render_mode: st.stereo.render_mode,
-            live_pos: std::mem::take(&mut st.stereo.live_buffer),
-            trace_pos: st.stereo.trace_buffer.clone().into(),
-
-            live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
-            live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
-            live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
-            trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
-            trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
-            trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
-
-            fs_color: st.stereo.fs_color.into(),
-            lb_color: st.stereo.mb_color[0].into(),
-            mb_color: st.stereo.mb_color[1].into(),
-            hb_color: st.stereo.mb_color[2].into(),
-
-            // particle_pos: vec![pos2(-st.env_follower_last_sample / 2.0, 0.0)],
-            // particle_pos: st.env_follower_last_sample / 8.0,
-            //particle_pos: st.env_follower_last_sample.div(1.25).powf(2.0),
-            particle_pos: st.env_follower_last_sample.div(2.),
-
-            frame_time: now
-                .duration_since(st.fwave.last_frame)
-                .as_secs_f32()
-                .min(0.016)
-                / 8.0,
-            // frame_time: 1. / 120.,
-            g: st.fwave.gravity,
-            pm: st.fwave.pressure_multiplier,
-            td: st.fwave.target_density,
-            r: st.fwave.smoothing_radius,
-            npm: st.fwave.near_pressure_multiplier,
-            vs: st.fwave.viscosity_strength,
-        },
-    ));
-    st.fwave.last_frame = now;
-    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-        rect,
-        EffectsCallback {
-            top_left: rect.left_top(),
-            // bloom_amt: st.stereo.bloom,
-            bloom_amt: 0.0,
-        },
-    ));
-
+    let rcb_dat = get_render_callback_data(st, rect.size(), true, 0);
+    ui.painter()
+        .add(egui_wgpu::Callback::new_paint_callback(rect, rcb_dat));
+    effects_callback(ui, st, rect);
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         OutputCallback,

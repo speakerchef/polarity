@@ -7,6 +7,11 @@ struct Params {
     @size(16) near_pressure_multiplier: f32,
     @size(16) viscosity_strength: f32,
     @size(16) envelope: f32,
+    @size(16) point_size: f32,
+    @size(16) is_gradient_mode: u32, // !0 == true, 0 == false
+    @size(16) uniform_color: vec4f,
+    @size(16) is_obstacle: u32,
+    @size(16) is_force_outward: u32,
 }
 
 @group(0) @binding(0)
@@ -24,19 +29,13 @@ var<storage, read_write> predicted_positions: array<vec2f>;
 @group(0) @binding(6)
 var<storage, read> speaker_position: array<f32>;
 
-var<private> damp: f32 = 0.9;
-
+const damp: f32 = 0.5;
 const PI: f32 = 3.14159265;
 const mass: f32 = 1.0;
-//const smoothing_radius: f32 = 0.1;
-//const target_density: f32 = 200.0;
-//const pressure_multiplier: f32 = 5.0;
-//const g: f32 = 0.0;
 
 fn density_2_pressure(density: f32) -> f32 {
-    let delta = density - params.target_density;
-    let pressure = delta * params.pressure_multiplier;
-    return pressure;
+    let delta = max(0.0, density - params.target_density);
+    return delta * params.pressure_multiplier;
 }
 
 fn near_density_smoothing_kernel(radius: f32, dist: f32) -> f32 {
@@ -128,7 +127,8 @@ fn calculate_viscosity(point_idx: u32) -> vec2f {
     return viscosity_force;
 }
 
-@compute @workgroup_size(128)
+const WORKGROUP_SIZE: u32 = 200;
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
@@ -137,17 +137,14 @@ fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
     predicted_positions[i] = positions[i] + velocities[i] * prediction_factor;
 }
 
-@compute @workgroup_size(128)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_densities(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     //densities[i] = calculate_density(positions[i]);
     densities[i] = calculate_density(predicted_positions[i]);
-    if i == 0u {
-        debug[0] = densities[0].x;
-    }
 }
 
-@compute @workgroup_size(128)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_pressure(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
@@ -158,7 +155,7 @@ fn cs_calculate_pressure(@builtin(global_invocation_id) id: vec3u) {
     velocities[i] += accel * params.dt;
 }
 
-@compute @workgroup_size(128)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_viscosity(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
@@ -166,45 +163,39 @@ fn cs_calculate_viscosity(@builtin(global_invocation_id) id: vec3u) {
     velocities[i] += calculate_viscosity(i) * params.viscosity_strength * params.dt;
 }
 
-const obstacle: array<vec2f, 6> = array(vec2f(0.075, 0.5), vec2f(0.075, -0.5), vec2f(-0.075, -0.5), vec2f(0.075, 0.5), vec2f(-0.075, 0.5), vec2f(-0.075, -0.5));
-//const obstacle_w: f32 = 0.0025;
 const obstacle_w: f32 = 0.0025;
 const obstacle_h: f32 = 0.0025;
-@compute @workgroup_size(128)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
 
     positions[i] += velocities[i] * params.dt;
-
     let xpos = positions[i].x;
     let ypos = positions[i].y;
 
-    //let speaker_pos = speaker_position[i / 6u];
     let speaker_pos = params.envelope;
-    // obstacle sides
-    if (ypos < (obstacle_h + speaker_pos) && ypos > -(obstacle_h + speaker_pos)) && (xpos < (obstacle_w + speaker_pos) && xpos > -(obstacle_w + speaker_pos)) {
-        let x_pos_delta = (speaker_pos + obstacle_w) - xpos;
-        let x_neg_delta = xpos + (speaker_pos + obstacle_w);
-        let y_pos_delta = (speaker_pos + obstacle_h) - ypos;
-        let y_neg_delta = ypos + (speaker_pos + obstacle_h);
+    var boundary = obstacle_w + speaker_pos;
 
-        let min_pos = min(min(x_pos_delta, x_neg_delta), min(y_pos_delta, y_neg_delta));
-        if min_pos == x_pos_delta {
-            positions[i].x = obstacle_w + speaker_pos;
-            velocities[i].x = -velocities[i].x * damp;
-        } else if min_pos == x_neg_delta {
-            positions[i].x = -(obstacle_w + speaker_pos);
-            velocities[i].x = -velocities[i].x * damp;
-        } else if min_pos == y_pos_delta {
-            positions[i].y = obstacle_h + speaker_pos;
-            velocities[i].y = -velocities[i].y * damp;
+    // obstacle sides
+    var radius = boundary;
+
+    let dist = length(positions[i]);
+
+    if dist < radius {
+        let n = positions[i] / dist;
+        let dir = dot(positions[i], n) * n;
+        if params.is_obstacle != 0 {
+            positions[i] = n * radius;
+        }
+        if params.is_force_outward != 0 {
+            velocities[i] += 2 * n * damp;
         } else {
-            positions[i].y = -(obstacle_h + speaker_pos);
-            velocities[i].y = -velocities[i].y * damp;
+            // inward force
+            velocities[i] -= 2 * n * damp;
         }
     }
-
+    // bounce off borders
     if ypos < -0.9 {
         positions[i].y = -0.9;
         velocities[i].y = -velocities[i].y * damp;

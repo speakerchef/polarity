@@ -1,6 +1,8 @@
+use crate::generators::fluidwave::{ColorMode, EnergyTransferMode, ForceDirection};
 use crate::generators::stereometer::{
     FilterMode, LiveDensity, RenderMode, StereometerKind, TraceDensity,
 };
+use crate::ui::canvas::NUM_PARTICLES;
 use crate::ui::{control_panel_widgets::*, palette as plt};
 use crate::{GeneratorKind, state::*};
 use eframe::egui::{self, vec2};
@@ -8,20 +10,53 @@ use eframe::egui::{self, vec2};
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     section_header_submenu(ui, "RENDER", &mut st.render_open);
     if st.render_open {
-        dropdown_row(
-            ui,
-            "MODE",
-            &mut st.stereo.render_mode,
-            RenderMode::ALL,
-            &mut st.render_mode_options_open,
-        );
-        dropdown_row(
-            ui,
-            "STYLE",
-            &mut st.stereo.kind,
-            StereometerKind::ALL,
-            &mut st.stereo_kind_options_open,
-        );
+        match st.gen_kind {
+            GeneratorKind::Stereometer => {
+                dropdown_row(
+                    ui,
+                    "MODE",
+                    &mut st.stereo.render_mode,
+                    RenderMode::ALL,
+                    &mut st.render_mode_options_open,
+                );
+                dropdown_row(
+                    ui,
+                    "STYLE",
+                    &mut st.stereo.kind,
+                    StereometerKind::ALL,
+                    &mut st.stereo_kind_options_open,
+                );
+            }
+            GeneratorKind::Fluidwave => {
+                dropdown_row(
+                    ui,
+                    "ENERGY TRANSFER",
+                    &mut st.fwave.energy_transfer_mode,
+                    EnergyTransferMode::ALL,
+                    &mut st.energy_transfer_mode_options_open,
+                );
+                if matches!(
+                    st.fwave.energy_transfer_mode,
+                    EnergyTransferMode::ForceField
+                ) {
+                    dropdown_row(
+                        ui,
+                        "FORCE DIRECTION",
+                        &mut st.fwave.force_direction,
+                        ForceDirection::ALL,
+                        &mut st.force_direction_options_open,
+                    );
+                }
+
+                dropdown_row(
+                    ui,
+                    "COLOR MODE",
+                    &mut st.fwave.color_mode,
+                    ColorMode::ALL,
+                    &mut st.color_mode_options_open,
+                );
+            }
+        }
     }
     if matches!(st.stereo.render_mode, RenderMode::FullSpectrum) {
         section_header_submenu(ui, "FILTERING", &mut st.filtering_open);
@@ -47,49 +82,87 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
         }
     }
 
-    section_header_submenu(ui, "COLOR", &mut st.color_open);
-    if st.color_open {
-        match st.stereo.render_mode {
-            RenderMode::FullSpectrum => {
-                slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
-                slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
-                slider_row(ui, "BLUE", &mut st.stereo.fs_color.b, 0.0, 255.0, 0);
-            }
-            RenderMode::MultiBand => {
-                for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate() {
-                    static_label(ui, name);
-                    slider_row(ui, "RED", &mut st.stereo.mb_color[band].r, 0.0, 255.0, 0);
-                    slider_row(ui, "GREEN", &mut st.stereo.mb_color[band].g, 0.0, 255.0, 0);
-                    slider_row(ui, "BLUE", &mut st.stereo.mb_color[band].b, 0.0, 255.0, 0);
+    match st.gen_kind {
+        GeneratorKind::Stereometer => {
+            section_header_submenu(ui, "COLOR", &mut st.color_open);
+            if st.color_open {
+                match st.stereo.render_mode {
+                    RenderMode::FullSpectrum => {
+                        slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
+                        slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
+                        slider_row(ui, "BLUE", &mut st.stereo.fs_color.b, 0.0, 255.0, 0);
+                    }
+                    RenderMode::MultiBand => {
+                        for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate()
+                        {
+                            static_label(ui, name);
+                            slider_row(ui, "RED", &mut st.stereo.mb_color[band].r, 0.0, 255.0, 0);
+                            slider_row(ui, "GREEN", &mut st.stereo.mb_color[band].g, 0.0, 255.0, 0);
+                            slider_row(ui, "BLUE", &mut st.stereo.mb_color[band].b, 0.0, 255.0, 0);
+                        }
+                    }
                 }
             }
         }
+        GeneratorKind::Fluidwave => (),
     }
 
     section_header_submenu(ui, "VISUAL", &mut st.visual_open);
     if st.visual_open {
-        dropdown_row(
-            ui,
-            "DENSITY",
-            &mut st.stereo.live_density,
-            LiveDensity::ALL,
-            &mut st.density_open,
-        );
-        dropdown_row(
-            ui,
-            "TRACE",
-            &mut st.stereo.trace_density,
-            TraceDensity::ALL,
-            &mut st.trace_open,
-        );
-        slider_row(ui, "POINT", &mut st.stereo.point_size, 0.0005, 0.01, 4);
+        match st.gen_kind {
+            GeneratorKind::Stereometer => {
+                dropdown_row(
+                    ui,
+                    "DENSITY",
+                    &mut st.stereo.live_density,
+                    LiveDensity::ALL,
+                    &mut st.density_open,
+                );
+                dropdown_row(
+                    ui,
+                    "TRACE",
+                    &mut st.stereo.trace_density,
+                    TraceDensity::ALL,
+                    &mut st.trace_open,
+                );
+                slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
+            }
+            GeneratorKind::Fluidwave => {
+                slider_row(ui, "THICK", &mut st.fwave.viscosity_strength, 0.0, 0.05, 3);
+                slider_row(
+                    ui,
+                    "STABILITY",
+                    &mut st.fwave.target_density,
+                    0.0,
+                    (86.0 * NUM_PARTICLES as f32).round(),
+                    0,
+                );
+                slider_row(
+                    ui,
+                    "PRESSURE",
+                    &mut st.fwave.pressure_multiplier,
+                    0.0,
+                    400.0,
+                    0,
+                );
+                slider_row(ui, "EDGE", &mut st.fwave.smoothing_radius, 0.05, 0.25, 2);
+                slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.01, 4);
+            }
+        }
     }
 }
 
 fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
     section_header_submenu(ui, "BLOOM", &mut st.bloom_open);
     if st.bloom_open {
-        slider_row(ui, "AMOUNT", &mut st.stereo.bloom, 0.0, 10.0, 1);
+        match st.gen_kind {
+            GeneratorKind::Stereometer => {
+                slider_row(ui, "AMOUNT", &mut st.stereo.bloom, 0.0, 10.0, 1);
+            }
+            GeneratorKind::Fluidwave => {
+                slider_row(ui, "AMOUNT", &mut st.fwave.bloom, 0.0, 10.0, 1);
+            }
+        }
     }
 }
 
