@@ -167,8 +167,9 @@ fn cs_calculate_viscosity(@builtin(global_invocation_id) id: vec3u) {
 }
 
 const obstacle: array<vec2f, 6> = array(vec2f(0.075, 0.5), vec2f(0.075, -0.5), vec2f(-0.075, -0.5), vec2f(0.075, 0.5), vec2f(-0.075, 0.5), vec2f(-0.075, -0.5));
+//const obstacle_w: f32 = 0.0025;
 const obstacle_w: f32 = 0.0025;
-const obstacle_h: f32 = 1.0;
+const obstacle_h: f32 = 0.0025;
 @compute @workgroup_size(128)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
@@ -182,11 +183,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     //let speaker_pos = speaker_position[i / 6u];
     let speaker_pos = params.envelope;
     // obstacle sides
-    if (ypos < obstacle_h && ypos > -obstacle_h) && (xpos < (obstacle_w + speaker_pos) && xpos > -(obstacle_w + speaker_pos)) {
+    if (ypos < (obstacle_h + speaker_pos) && ypos > -(obstacle_h + speaker_pos)) && (xpos < (obstacle_w + speaker_pos) && xpos > -(obstacle_w + speaker_pos)) {
         let x_pos_delta = (speaker_pos + obstacle_w) - xpos;
         let x_neg_delta = xpos + (speaker_pos + obstacle_w);
-        let y_pos_delta = obstacle_h - ypos;
-        let y_neg_delta = ypos + obstacle_h;
+        let y_pos_delta = (speaker_pos + obstacle_h) - ypos;
+        let y_neg_delta = ypos + (speaker_pos + obstacle_h);
 
         let min_pos = min(min(x_pos_delta, x_neg_delta), min(y_pos_delta, y_neg_delta));
         if min_pos == x_pos_delta {
@@ -196,10 +197,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             positions[i].x = -(obstacle_w + speaker_pos);
             velocities[i].x = -velocities[i].x * damp;
         } else if min_pos == y_pos_delta {
-            positions[i].y = obstacle_h;
+            positions[i].y = obstacle_h + speaker_pos;
             velocities[i].y = -velocities[i].y * damp;
         } else {
-            positions[i].y = -obstacle_h;
+            positions[i].y = -(obstacle_h + speaker_pos);
             velocities[i].y = -velocities[i].y * damp;
         }
     }

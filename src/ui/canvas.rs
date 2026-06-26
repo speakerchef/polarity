@@ -116,7 +116,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     // Envelope follower
     const WINDOW: u64 = 100; // ms 
     const ATT: f32 = 0.75;
-    const REL: f32 = 0.999;
+    const REL: f32 = 0.5;
     if pl.position() <= Duration::from_millis(WINDOW) {
         return;
     }
@@ -171,7 +171,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
 
             // particle_pos: vec![pos2(-st.env_follower_last_sample / 2.0, 0.0)],
             // particle_pos: st.env_follower_last_sample / 8.0,
-            particle_pos: st.env_follower_last_sample.div(1.1).powf(2.0),
+            //particle_pos: st.env_follower_last_sample.div(1.25).powf(2.0),
+            particle_pos: st.env_follower_last_sample.div(2.),
 
             frame_time: now
                 .duration_since(st.fwave.last_frame)
