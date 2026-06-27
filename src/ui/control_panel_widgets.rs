@@ -422,29 +422,36 @@ pub fn dropdown_menu<T: Labeled>(
     options: &[T],
     open: &mut bool,
 ) {
-    let (inner, resp) = ui.allocate_exact_size(vec2(dim.0, dim.1), egui::Sense::click());
+    let (inner, mut resp) = ui.allocate_exact_size(vec2(dim.0, dim.1), egui::Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     if resp.clicked() {
         *open = !*open;
     }
+    let bc = if resp.hovered() {
+        plt::YELLO
+    } else {
+        plt::BORDER(ui.visuals().dark_mode)
+    };
+    let border = Stroke {
+        width: 1.0,
+        color: bc,
+    };
     ui.painter()
         .rect_filled(inner, SHARP, plt::VOID(ui.visuals().dark_mode));
-    ui.painter().rect_stroke(
-        inner,
-        SHARP,
-        border(ui.visuals().dark_mode),
-        egui::StrokeKind::Inside,
-    );
+    ui.painter()
+        .rect_stroke(inner, SHARP, border, egui::StrokeKind::Inside);
 
     let font = FontId {
         size: plt::font_size::TINY,
         family: egui::FontFamily::Name("inter_medium".into()),
     };
     let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
+    let offset = (dim.1 - th) / 1.25;
     custom_text(
         ui,
         &value.text().to_uppercase(),
         font.clone(),
-        inner.left_center() - vec2(-(dim.1 - th) / 1.25, th / 2.0),
+        inner.left_center() - vec2(-offset, th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::TEXT,
         Align::LEFT,
@@ -457,11 +464,12 @@ pub fn dropdown_menu<T: Labeled>(
     let (_, th) = get_text_size(ui, "\u{e5c5}", icon_font.clone()).into();
     const CHEVRON_UP: &str = "\u{e5c7}";
     const CHEVRON_DOWN: &str = "\u{e5c5}";
+    let offset = (dim.1 - th) / 1.25;
     custom_text(
         ui,
         if *open { CHEVRON_UP } else { CHEVRON_DOWN },
         icon_font,
-        inner.right_center() - vec2((dim.1 - th) * 1.75, th / 2.0),
+        inner.right_center() - vec2(offset, th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::YELLO,
         Align::RIGHT,

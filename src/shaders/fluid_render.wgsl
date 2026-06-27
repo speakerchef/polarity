@@ -67,8 +67,8 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
 
     if params.is_gradient_mode != 0 {
         // velocity gradient
-        let r = v.speed - 0.5;
-        let g = 1.0 - vel;
+        let g = v.speed - 0.5;
+        let r = 1.0 - vel;
         let b = 1.0 - vel / 4.0;
         return vec4f(r, g, b, 1);
     } else {

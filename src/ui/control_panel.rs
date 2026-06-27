@@ -146,7 +146,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     0,
                 );
                 slider_row(ui, "EDGE", &mut st.fwave.smoothing_radius, 0.05, 0.25, 2);
-                slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.01, 4);
+                slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.02, 4);
             }
         }
     }

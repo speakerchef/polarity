@@ -1,15 +1,21 @@
-use std::ops::{Add, Sub};
+use std::{
+    ops::{Add, Sub},
+    time::{Duration, Instant},
+};
 
 use crate::{
+    audio::audio_player::AudioPlayer,
     state::{AppState, ExportQuality, Fps, Resolution},
     ui::{
+        canvas, control_panel,
         control_panel_widgets::{dropdown_row, menu_bar_option},
-        custom_text, get_text_size, palette as plt,
+        custom_text, get_text_size, palette as plt, timeline,
         timeline_widgets::{SHARP, border},
     },
 };
 use eframe::egui::{self, pos2};
 use eframe::egui::{Align, FontId, Key, Pos2, StrokeKind, Vec2, vec2};
+use egui_winit::winit::dpi::LogicalSize;
 
 const MB_H: f32 = 24.0;
 const MB_GAP: f32 = 12.0;
@@ -100,6 +106,113 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                 });
             });
     });
+}
+
+pub fn main_window(
+    ui: &mut egui::Ui,
+    st: &mut AppState,
+    player: &mut Option<AudioPlayer>,
+    frame: &eframe::Frame,
+) {
+    let mut resp = egui::CentralPanel::default()
+        .frame(
+            egui::Frame::NONE
+                .inner_margin(if !st.fullscreen {
+                    egui::Margin {
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
+                        top: 0,
+                    }
+                } else {
+                    0.into()
+                })
+                .fill(plt::BG(st.dark_mode)),
+        )
+        .show_inside(ui, |ui| {
+            if !st.fullscreen {
+                timeline::draw(ui, st, player);
+                control_panel::draw(ui, st);
+                editor_window_behavior(frame);
+            } else {
+                ui.request_repaint_after(Duration::from_millis(16));
+                show_window_drag_tooltip_modal(st, ui);
+                fullscreen_window_behavior(ui, frame);
+            }
+
+            if st.show_export_modal {
+                export_modal(ui, st);
+            }
+            if st.show_preset_load_modal || st.show_preset_save_modal {
+                preset_modal(ui, st);
+            }
+
+            if st.rendering {
+                player.as_ref().unwrap().pause();
+            } else {
+                canvas::draw(ui, st, player);
+            }
+        })
+        .response;
+
+    if !st.fullscreen {
+        resp.rect = resp.rect.translate(vec2(0., -6.));
+        resp.rect = resp.rect.shrink2(vec2(12.0, 6.0));
+        ui.painter().rect_stroke(
+            resp.rect,
+            SHARP,
+            border(ui.style().visuals.dark_mode),
+            StrokeKind::Inside,
+        );
+    }
+}
+
+fn show_window_drag_tooltip_modal(st: &mut AppState, ui: &mut egui::Ui) {
+    if st.window_drag_tooltip_modal_deadline.is_none() {
+        st.window_drag_tooltip_modal_deadline = Some(Instant::now());
+        st.window_drag_tooltip_modal_open = true;
+    }
+
+    if st.window_drag_tooltip_modal_open {
+        window_drag_tooltip(ui);
+    }
+
+    if let Some(start_time) = st.window_drag_tooltip_modal_deadline
+        && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
+    {
+        st.window_drag_tooltip_modal_open = false;
+    }
+}
+
+fn editor_window_behavior(frame: &eframe::Frame) {
+    frame.winit_window().unwrap().set_decorations(true);
+    frame
+        .winit_window()
+        .unwrap()
+        .set_min_inner_size(Some(LogicalSize::new(720.0, 480.0)));
+}
+
+fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
+    // remove titlebar and corners
+    frame.winit_window().unwrap().set_decorations(false);
+    frame
+        .winit_window()
+        .unwrap()
+        .set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
+
+    // allow drag anywhere if any key is down
+    if ui.ctx().input(|i| {
+        (!i.keys_down.is_empty() && !i.key_down(Key::Space))
+            || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
+                || i.modifiers.matches_logically(egui::Modifiers::SHIFT)
+                || i.modifiers.matches_logically(egui::Modifiers::ALT))
+    }) {
+        frame
+            .winit_window()
+            .unwrap()
+            .drag_window()
+            .unwrap_or_default();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

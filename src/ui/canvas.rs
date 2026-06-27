@@ -96,16 +96,20 @@ pub fn get_render_callback_data(
         } else {
             (1. / fps as f32) / 8.0
         },
-        particle_pos: st.fwave.envelope_last_sample.div(
-            if matches!(
-                st.fwave.energy_transfer_mode,
-                EnergyTransferMode::ForceField
-            ) {
-                1.5
-            } else {
-                2.0
-            },
-        ),
+        particle_pos: st
+            .fwave
+            .envelope_last_sample
+            .div(
+                if matches!(
+                    st.fwave.energy_transfer_mode,
+                    EnergyTransferMode::ForceField
+                ) {
+                    0.8
+                } else {
+                    1.25
+                },
+            )
+            .powf(1.25),
         gravity: st.fwave.gravity,
         pressure_multiplier: st.fwave.pressure_multiplier,
         target_density: st.fwave.target_density,

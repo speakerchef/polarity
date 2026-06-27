@@ -12,20 +12,27 @@ pub fn install_fonts(ctx: &egui::Context) {
     // Load fonts
     fonts.font_data.insert(
         "inter_regular".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/InterRegular.ttf")).into(),
+        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterRegular.ttf")).into(),
     );
     fonts.font_data.insert(
         "inter_medium".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/InterMedium.ttf")).into(),
+        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterMedium.ttf")).into(),
     );
     fonts.font_data.insert(
         "inter_bold".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/InterBold.ttf")).into(),
+        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterBold.ttf")).into(),
+    );
+    fonts.font_data.insert(
+        "mono".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../assets/fonts/sf-mono/SF-Mono-Regular.otf"
+        ))
+        .into(),
     );
     fonts.font_data.insert(
         "icons".into(),
         FontData::from_static(include_bytes!(
-            "../../assets/fonts/MaterialSymbolsOutlined.ttf"
+            "../../assets/fonts/material-symbols/MaterialSymbolsOutlined.ttf"
         ))
         .into(),
     );
@@ -48,6 +55,8 @@ pub fn install_fonts(ctx: &egui::Context) {
         vec!["inter_bold".to_owned()],
     );
     fonts.families.append(&mut newfam);
+    let mut newfam = BTreeMap::new();
+    newfam.insert(FontFamily::Name("mono".into()), vec!["mono".to_owned()]);
     let mut newfam = BTreeMap::new();
     newfam.insert(FontFamily::Name("icons".into()), vec!["icons".to_owned()]);
     fonts.families.append(&mut newfam);

@@ -131,6 +131,7 @@ pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool, fps: u
     let num_channels = pl.contents.num_channels as usize;
     const ATT: f32 = 0.75;
     const REL: f32 = 0.90;
+
     let start = if live {
         (pl.position()
             .saturating_sub(Instant::now().duration_since(st.fwave.last_frame))
