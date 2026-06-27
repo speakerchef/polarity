@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    GeneratorKind,
+    GeneratorKind, Preset,
     audio::{StereoFilter, audio_player::*},
     envelope_follower,
     generators::{
@@ -19,7 +19,7 @@ use crate::{
             EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
             get_texture_view, main_render_pipeline, output_render_pipeline,
         },
-        stereometer::{FilterMode, Stereometer},
+        stereometer::FilterMode,
     },
     state::PlaybackMode,
     ui::{
@@ -182,6 +182,18 @@ fn export_batched_frames(
     }
 }
 
+fn update_preset_path(new_path: PathBuf, dst_path: &mut Option<PathBuf>, modal_open: &mut bool) {
+    if let Some(oldpath) = &dst_path {
+        if *oldpath != new_path {
+            *dst_path = Some(new_path);
+            *modal_open = true;
+        }
+    } else {
+        *dst_path = Some(new_path);
+        *modal_open = true;
+    }
+}
+
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         // debug_window(ui, &mut self.st);
@@ -340,7 +352,7 @@ impl PolarityApp {
     fn handle_audio_import(&mut self, ctx: &egui::Context) {
         // Open audio import dialog
         if self.st.import_open {
-            self.st.file_dialog.pick_file();
+            self.st.audio_file_dialog.pick_file();
             self.st.import_open = false;
             self.st.start_render = false;
         }
@@ -348,7 +360,7 @@ impl PolarityApp {
         // Check if user picked an audio file
         if let Some(path) = self
             .st
-            .file_dialog
+            .audio_file_dialog
             .update(ctx)
             .picked()
             .map(|p| p.to_path_buf())
@@ -358,90 +370,80 @@ impl PolarityApp {
     }
 
     fn handle_preset_state(&mut self, ctx: &egui::Context) {
-        // save dialog
+        let fd = &mut self.st.preset_file_dialog;
         if self.st.open_preset_save_file_picker {
-            self.st.dir_dialog.pick_directory();
-            self.st.file_picked = true;
+            fd.pick_directory();
             self.st.open_preset_save_file_picker = false;
             self.st.show_preset_save_modal = false;
             self.st.picked_preset_save_dir = true;
         }
-        // load dialog
         if self.st.open_preset_load_file_picker {
-            self.st.dir_dialog.pick_file();
-            self.st.file_picked = true;
+            fd.pick_file();
             self.st.open_preset_load_file_picker = false;
             self.st.show_preset_load_modal = false;
             self.st.picked_preset_load_file = true;
         }
 
-        // check if user picked save directory
-        if let Some(path) = self
-            .st
-            .dir_dialog
-            .update(ctx)
-            .picked()
-            .map(|p| p.to_path_buf())
-            && (!self.st.save_preset && self.st.picked_preset_save_dir)
-        {
-            if let Some(oldpath) = &self.st.preset_save_path {
-                if *oldpath != path {
-                    self.st.preset_save_path = Some(path);
-                    self.st.show_preset_save_modal = true;
-                }
-            } else {
-                self.st.preset_save_path = Some(path);
-                self.st.show_preset_save_modal = true;
-            }
+        if self.st.picked_preset_save_dir {
+            let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
+                return;
+            };
+            update_preset_path(
+                newpath,
+                &mut self.st.preset_save_path,
+                &mut self.st.show_preset_save_modal,
+            );
             self.st.picked_preset_save_dir = false;
         };
-
-        // check if user picked load directory
-        if let Some(path) = self
-            .st
-            .dir_dialog
-            .update(ctx)
-            .picked()
-            .map(|p| p.to_path_buf())
-            && (!self.st.load_preset && self.st.picked_preset_load_file)
-        {
-            if let Some(oldpath) = &self.st.preset_load_path {
-                if *oldpath != path {
-                    self.st.preset_load_path = Some(path);
-                    self.st.show_preset_load_modal = true;
-                }
-            } else {
-                self.st.preset_load_path = Some(path);
-                self.st.show_preset_load_modal = true;
-            }
+        if self.st.picked_preset_load_file {
+            let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
+                return;
+            };
+            update_preset_path(
+                newpath,
+                &mut self.st.preset_load_path,
+                &mut self.st.show_preset_load_modal,
+            );
             self.st.picked_preset_load_file = false;
         };
 
         if self.st.save_preset {
-            let Ok(data) = serde_json::to_vec(&self.st.stereo) else {
-                return;
-            };
-            let Some(path) = &self.st.preset_save_path else {
-                return;
-            };
-            std::fs::write(path.join(format!("{}.json", self.st.preset_name)), data)
-                .unwrap_or_else(|e| println!("Error saving preset: {e}"));
+            self.save_preset();
             self.st.save_preset = false;
             self.st.show_preset_save_modal = false;
-            println!("Saved Preset");
         }
-
         if self.st.load_preset {
-            let Some(path) = &self.st.preset_load_path else {
-                return;
-            };
-            let fstr = std::fs::read_to_string(path).unwrap();
-            let stereometer: Stereometer = serde_json::from_str(&fstr).unwrap();
+            self.load_preset();
             self.st.load_preset = false;
             self.st.show_preset_load_modal = false;
-            self.st.stereo = stereometer;
-            println!("Loaded Preset");
         }
+    }
+
+    fn save_preset(&mut self) {
+        let Ok(data) = serde_json::to_vec(&Preset {
+            stereometer: self.st.stereo.clone(),
+            fluidwave: self.st.fwave.clone(),
+        }) else {
+            return;
+        };
+        let Some(path) = &self.st.preset_save_path else {
+            return;
+        };
+        std::fs::write(path.join(format!("{}.json", self.st.preset_name)), data)
+            .unwrap_or_else(|e| println!("Error saving preset: {e}"));
+    }
+    fn load_preset(&mut self) {
+        let Some(path) = &self.st.preset_load_path else {
+            return;
+        };
+        let fstr = std::fs::read_to_string(path)
+            .inspect_err(|e| println!("error opening preset: {e}"))
+            .unwrap_or_default();
+        let p: Preset = serde_json::from_str(&fstr)
+            .inspect_err(|e| println!("error parsing preset: {e}"))
+            .unwrap_or_default();
+        self.st.stereo = p.stereometer;
+        self.st.fwave = p.fluidwave;
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {

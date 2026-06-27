@@ -98,7 +98,7 @@ pub const VERTICES_PER_QUAD: usize = 6;
 const SQRT_3: f32 = 1.7320508;
 const LINEAR_BIPOLAR_SF: f32 = 0.5;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Stereometer {
     pub kind: StereometerKind,
     pub render_mode: RenderMode,
@@ -147,19 +147,18 @@ pub struct Stereometer {
 
 impl Default for Stereometer {
     fn default() -> Self {
-        // default preset
-        let fstr = std::fs::read_to_string("presets/lsd_flames.json").unwrap();
-        serde_json::from_str(&fstr).unwrap_or_else(|_err| Self {
+        // synthwave preset
+        Self {
             filter_freq: 1.0,
             last_freq: 1.0,
-            bloom: 4.5,
+            bloom: 3.0,
             fs_color: Rgba::new(0, 255, 0, 255),
             mb_color: [
                 Rgba::new(110, 0, 255, 255),
                 Rgba::new(0, 155, 255, 255),
                 Rgba::new(230, 0, 140, 255),
             ],
-            point_size: 0.0020,
+            point_size: 0.0025,
             kind: StereometerKind::default(),
             render_mode: RenderMode::MultiBand,
             live_density: LiveDensity::Ultra,
@@ -178,7 +177,7 @@ impl Default for Stereometer {
             trace_low_buffer: Default::default(),
             trace_mid_buffer: Default::default(),
             trace_high_buffer: Default::default(),
-        })
+        }
     }
 }
 

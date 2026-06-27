@@ -121,8 +121,8 @@ pub struct ExportConfig {
 }
 
 pub struct AppState {
-    pub file_dialog: FileDialog,
-    pub dir_dialog: FileDialog,
+    pub audio_file_dialog: FileDialog,
+    pub preset_file_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
     pub gen_kind: GeneratorKind,
     pub stereo: Stereometer,
@@ -164,7 +164,6 @@ pub struct AppState {
     pub open_preset_load_file_picker: bool,
     pub picked_preset_save_dir: bool,
     pub picked_preset_load_file: bool,
-    pub file_picked: bool,
     pub preset_save_path: Option<PathBuf>,
     pub preset_load_path: Option<PathBuf>,
     pub preset_name: String,
@@ -202,7 +201,7 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            file_dialog: FileDialog::new()
+            audio_file_dialog: FileDialog::new()
                 .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
                 .show_left_panel(true)
                 .show_pinned_folders(true)
@@ -217,7 +216,7 @@ impl Default for AppState {
                 .allow_file_overwrite(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
 
-            dir_dialog: FileDialog::new()
+            preset_file_dialog: FileDialog::new()
                 .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
                 .show_left_panel(true)
                 .show_pinned_folders(true)
@@ -266,7 +265,6 @@ impl Default for AppState {
             picked_preset_save_dir: false,
             picked_preset_load_file: false,
             open_preset_save_file_picker: false,
-            file_picked: false,
             open_preset_load_file_picker: false,
             preset_save_path: None,
             preset_load_path: None,

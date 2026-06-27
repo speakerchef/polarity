@@ -34,7 +34,7 @@ impl Labeled for ForceDirection {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Fluidwave {
     pub color_mode: ColorMode,
     pub energy_transfer_mode: EnergyTransferMode,
@@ -86,7 +86,7 @@ impl Default for Fluidwave {
             target_density: (NUM_PARTICLES as f32 * 86.0).round(),
             smoothing_radius: 0.08,
             near_pressure_multiplier: 7.0,
-            viscosity_strength: 0.05,
+            viscosity_strength: 0.003,
             point_size: 0.01,
             bloom: 0.0,
         }

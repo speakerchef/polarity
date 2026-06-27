@@ -14,13 +14,14 @@ use eframe::egui::{Pos2, pos2};
 
 use crate::{
     audio::audio_player::AudioPlayer,
+    generators::{fluidwave::Fluidwave, stereometer::Stereometer},
     state::{AppState, Labeled},
 };
 
 #[macro_export]
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
-        #[derive(Clone, Copy, PartialEq, Eq, Debug,serde::Serialize, serde::Deserialize)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
         pub enum $name { $($variant),+ }
         impl $name {
             pub const ALL: &'static [$name] = &[$($name::$variant),+];
@@ -33,6 +34,13 @@ macro_rules! labeled_enum {
         }
     };
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct Preset {
+    pub stereometer: Stereometer,
+    pub fluidwave: Fluidwave,
+}
+
 #[derive(Default, Clone, Copy)]
 pub struct LinearRgba {
     pub r: f32,

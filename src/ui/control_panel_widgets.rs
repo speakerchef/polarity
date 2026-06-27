@@ -174,7 +174,7 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
 pub fn menu_bar_option(
     ui: &mut egui::Ui,
     label: &str,
-    width: f32,
+    width: Option<f32>,
     font: egui::FontId,
     open: &mut bool,
     opts: &[&str],
@@ -182,6 +182,8 @@ pub fn menu_bar_option(
     h: f32,
     reverse_dropdown_pos: bool,
 ) -> egui::Response {
+    let (tw, th) = get_text_size(ui, &label.to_uppercase(), font.clone()).into();
+    let width = width.unwrap_or(tw + 24.0);
     let (rect, mut resp) = ui.allocate_exact_size(vec2(width, h - 4.0), Sense::click());
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     if resp.clicked() {
@@ -205,7 +207,6 @@ pub fn menu_bar_option(
         border(ui.style().visuals.dark_mode),
         StrokeKind::Inside,
     );
-    let (_, th) = get_text_size(ui, &label.to_uppercase(), font.clone()).into();
     custom_text(
         ui,
         &label.to_uppercase(),
@@ -238,7 +239,6 @@ pub fn menu_bar_option(
                 egui::Frame::new().show(ui, |ui| {
                     for (i, label) in opts.iter().enumerate() {
                         ui.spacing_mut().item_spacing = Vec2::ZERO;
-                        // if menu_bar_popup(ui, label, width, padding).clicked() {
                         if menu_bar_popup(ui, label, max_label_w.max(width), padding).clicked() {
                             *open = false;
                             if let Some(state) = states.get_mut(i) {
@@ -366,12 +366,13 @@ pub fn dropdown_row<T: Labeled>(
     open: &mut bool,
 ) {
     const SEL_W: f32 = 150.0;
-    const PAD: f32 = 10.0;
+    const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
         .allocate_ui_with_layout(
-            vec2(ui.available_width(), plt::height::MENU_ITEM),
+            // vec2(ui.available_width(), plt::height::MENU_ITEM),
+            vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
             egui::Layout::left_to_right(Align::Center),
             |ui| {
                 ui.add_space(PAD);
@@ -504,7 +505,7 @@ pub fn dropdown_menu<T: Labeled>(
 }
 
 fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 10.0), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 5.0), Sense::click_and_drag());
     if let Some(p) = resp.interact_pointer_pos() {
         let t = ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
         *value = min + t * (max - min);
@@ -525,7 +526,7 @@ fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
     let x = rect.left() + t * (rect.width() - tw);
     let thumb = Rect::from_min_size(pos2(x, rect.top() - 6.0), vec2(tw, rect.height() + 12.0));
     ui.painter()
-        .rect_filled(thumb, CornerRadius::from(2), plt::TEXT);
+        .rect_filled(thumb, CornerRadius::from(2), plt::YELLO);
     ui.painter().rect_stroke(
         thumb,
         CornerRadius::from(2),
@@ -553,8 +554,8 @@ fn value_box(
 
     let sty = ui.style_mut();
     let fonts = FontId {
-        size: plt::font_size::BODY,
-        family: FontFamily::Name("inter_bold".into()),
+        size: plt::font_size::META,
+        family: FontFamily::Name("inter_medium".into()),
     };
     sty.override_font_id = Some(fonts);
 
@@ -574,11 +575,12 @@ fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
         size: plt::font_size::TINY,
         family: FontFamily::Name("inter_regular".into()),
     };
+    let (_, th) = get_text_size(ui, s, fonts.clone()).into();
     custom_text(
         ui,
         s,
         fonts.clone(),
-        pos2(rect.left() + 2.0, rect.center().y - 7.0),
+        rect.left_center() + vec2(0.0, -th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::TEXT,
         Align::LEFT,
@@ -597,11 +599,11 @@ pub fn slider_row(
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
         .allocate_ui_with_layout(
-            vec2(ui.available_width(), plt::height::MENU_ITEM),
+            vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
             Layout::left_to_right(Align::Center),
             |ui| {
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
-                ui.add_space(10.0);
+                ui.add_space(12.0);
                 label_text(ui, label, 65.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
                 ui.add_space(13.0);

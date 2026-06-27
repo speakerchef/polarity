@@ -25,7 +25,7 @@ pub fn install_fonts(ctx: &egui::Context) {
     fonts.font_data.insert(
         "mono".to_owned(),
         FontData::from_static(include_bytes!(
-            "../../assets/fonts/sf-mono/SF-Mono-Regular.otf"
+            "../../assets/fonts/mono/JetBrainsMonoNL-Regular.ttf"
         ))
         .into(),
     );
@@ -55,8 +55,11 @@ pub fn install_fonts(ctx: &egui::Context) {
         vec!["inter_bold".to_owned()],
     );
     fonts.families.append(&mut newfam);
+
     let mut newfam = BTreeMap::new();
     newfam.insert(FontFamily::Name("mono".into()), vec!["mono".to_owned()]);
+    fonts.families.append(&mut newfam);
+
     let mut newfam = BTreeMap::new();
     newfam.insert(FontFamily::Name("icons".into()), vec!["icons".to_owned()]);
     fonts.families.append(&mut newfam);

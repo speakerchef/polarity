@@ -6,6 +6,7 @@ use eframe::egui::{
     pos2, vec2,
 };
 
+use crate::ui::get_text_size;
 use crate::{
     audio::audio_player::AudioPlayer,
     state::{AppState, PlaybackMode},
@@ -69,30 +70,36 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
 }
 
 pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
-    let (rect, _) = ui.allocate_exact_size(vec2(96.0, h), Sense::click());
-    ui.painter().rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    let w = 96.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::click());
     ui.painter()
-        .line_segment([rect.left_bottom(), rect.left_top()], border(ui.style().visuals.dark_mode));
-    ui.painter()
-        .line_segment([rect.right_bottom(), rect.right_top()], border(ui.style().visuals.dark_mode));
+        .rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    ui.painter().line_segment(
+        [rect.left_bottom(), rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [rect.right_bottom(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
     let font = FontId {
         size: plt::font_size::BODY,
-        family: FontFamily::Name("inter_regular".into()),
+        family: FontFamily::Name("mono".into()),
     };
     let esecs = elapsed.as_secs_f64();
     let (emins, esecs) = ((esecs / 60.0) as u64, (esecs % 60.0) as u64);
     let dsecs = dur.as_secs_f64();
     let (dmins, dsecs) = ((dsecs / 60.0) as u64, (dsecs % 60.0) as u64);
-    let timeposl = pos2(rect.left() + 7.0, rect.left_center().y - (h / 4.0));
-    let timeposr = pos2(rect.right() - 7.0, rect.left_center().y - (h / 4.0));
+    let (_, th) = get_text_size(ui, &format!("{emins:02}:{esecs:02}"), font.clone()).into();
     custom_text(
         ui,
         &format!("{emins:02}:{esecs:02}"),
         font.clone(),
-        timeposl,
-        plt::letter_spacing::MINIMAL,
+        // timeposl,
+        rect.left_center() + vec2(w / 4.0, -th / 2.0),
+        0.,
         plt::BRIGHT,
-        Align::LEFT,
+        Align::Center,
     );
     custom_text(
         ui,
@@ -110,10 +117,10 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
         ui,
         &format!("{dmins:02}:{dsecs:02}"),
         font,
-        timeposr,
-        plt::letter_spacing::MINIMAL,
+        rect.right_center() - vec2(w / 4.0, th / 2.0),
+        0.,
         plt::BRIGHT,
-        Align::RIGHT,
+        Align::Center,
     );
 }
 pub fn file_info(ui: &mut egui::Ui, info: &str, h: f32) {
@@ -169,10 +176,14 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
         bg
     };
     ui.painter().rect_filled(resp.rect, SHARP, bg);
-    ui.painter()
-        .line_segment([resp.rect.left_bottom(), resp.rect.left_top()], border(ui.style().visuals.dark_mode));
-    ui.painter()
-        .line_segment([resp.rect.right_bottom(), resp.rect.right_top()], border(ui.style().visuals.dark_mode));
+    ui.painter().line_segment(
+        [resp.rect.left_bottom(), resp.rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [resp.rect.right_bottom(), resp.rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
     let font_text = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
