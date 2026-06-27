@@ -357,7 +357,7 @@ fn build_output_render_resources(
     });
     let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("output buffer"),
-        size: (2160 * 2160 * size_of::<u32>()) as u64,
+        size: (4320 * 4320 * size_of::<u32>()) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
