@@ -1,5 +1,5 @@
 #![allow(dead_code, unused)]
-use std::ops::{Div, Mul};
+use std::ops::Div;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Pos2, Vec2};
@@ -61,6 +61,8 @@ pub fn get_render_callback_data(
     live: bool,
     fps: usize,
 ) -> RendererCallback {
+    const MAX_RANGE: f32 = 0.95;
+    const DAMP_FACTOR: f32 = 1.25;
     let now = Instant::now();
     let dat = RendererCallback {
         canvas_size,
@@ -104,19 +106,23 @@ pub fn get_render_callback_data(
                     st.fwave.energy_transfer_mode,
                     EnergyTransferMode::ForceField
                 ) {
-                    0.8
+                    100.0 / st.fwave.range
                 } else {
                     1.25
                 },
             )
-            .powf(1.25),
+            .powf(DAMP_FACTOR)
+            .min((100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE)
+            + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE),
         gravity: st.fwave.gravity,
         pressure_multiplier: st.fwave.pressure_multiplier,
         target_density: st.fwave.target_density,
         smoothing_radius: st.fwave.smoothing_radius,
+        edge_damping_factor: st.fwave.edge_damping_factor,
         near_pressure_multiplier: st.fwave.near_pressure_multiplier,
-        viscosity_strength: st.fwave.viscosity_strength,
+        viscosity_amount: st.fwave.viscosity_amount,
         point_size: st.fwave.point_size,
+        vignette: st.fwave.vignette,
     };
     st.fwave.last_frame = now;
     dat

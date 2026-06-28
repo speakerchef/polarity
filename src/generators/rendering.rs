@@ -136,39 +136,59 @@ pub struct FluidRenderResources {
 
 #[allow(clippy::too_many_arguments)]
 impl FluidRenderResources {
-    fn prepare(
-        &self,
-        queue: &wgpu::Queue,
-        dt: f32,
-        g: f32,
-        pm: f32,
-        td: f32,
-        r: f32,
-        npm: f32,
-        vs: f32,
-        pos: f32,
-        p_sz: f32,
-        col_mode: ColorMode,
-        col: crate::Rgba,
-        et_mode: EnergyTransferMode,
-        force_dir: ForceDirection,
-    ) {
-        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[dt]));
-        queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[g]));
-        queue.write_buffer(&self.params_buffer, 32, bytemuck::cast_slice(&[pm]));
-        queue.write_buffer(&self.params_buffer, 48, bytemuck::cast_slice(&[td]));
-        queue.write_buffer(&self.params_buffer, 64, bytemuck::cast_slice(&[r]));
-        queue.write_buffer(&self.params_buffer, 80, bytemuck::cast_slice(&[npm]));
-        queue.write_buffer(&self.params_buffer, 96, bytemuck::cast_slice(&[vs]));
-        queue.write_buffer(&self.params_buffer, 112, bytemuck::cast_slice(&[pos]));
-        queue.write_buffer(&self.params_buffer, 128, bytemuck::cast_slice(&[p_sz]));
+    fn prepare(&self, queue: &wgpu::Queue, dat: &RendererCallback) {
+        queue.write_buffer(
+            &self.params_buffer,
+            0,
+            bytemuck::cast_slice(&[dat.frame_time]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            16,
+            bytemuck::cast_slice(&[dat.gravity]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            32,
+            bytemuck::cast_slice(&[dat.pressure_multiplier]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            48,
+            bytemuck::cast_slice(&[dat.target_density]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            64,
+            bytemuck::cast_slice(&[dat.smoothing_radius]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            80,
+            bytemuck::cast_slice(&[dat.near_pressure_multiplier]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            96,
+            bytemuck::cast_slice(&[dat.viscosity_amount]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            112,
+            bytemuck::cast_slice(&[dat.particle_pos]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            128,
+            bytemuck::cast_slice(&[dat.point_size]),
+        );
         queue.write_buffer(
             &self.params_buffer,
             144,
-            bytemuck::cast_slice(&[matches!(col_mode, ColorMode::VelocityGradient) as u32]),
+            bytemuck::cast_slice(&[matches!(dat.color_mode, ColorMode::VelocityGradient) as u32]),
         );
 
-        let (r, g, b, a) = col.as_tuple();
+        let (r, g, b, a) = dat.uniform_color.as_tuple();
         let col = LinearRgba::from_u8rgb(r, g, b, a);
         queue.write_buffer(
             &self.params_buffer,
@@ -178,12 +198,24 @@ impl FluidRenderResources {
         queue.write_buffer(
             &self.params_buffer,
             176,
-            bytemuck::cast_slice(&[matches!(et_mode, EnergyTransferMode::Obstacle) as u32]),
+            bytemuck::cast_slice(&[
+                matches!(dat.energy_transfer_mode, EnergyTransferMode::Obstacle) as u32,
+            ]),
         );
         queue.write_buffer(
             &self.params_buffer,
             192,
-            bytemuck::cast_slice(&[matches!(force_dir, ForceDirection::Out) as u32]),
+            bytemuck::cast_slice(&[matches!(dat.force_direction, ForceDirection::Out) as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            208,
+            bytemuck::cast_slice(&[dat.vignette]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            224,
+            bytemuck::cast_slice(&[dat.edge_damping_factor]),
         );
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
@@ -246,11 +278,13 @@ pub struct RendererCallback {
     pub pressure_multiplier: f32,
     pub target_density: f32,
     pub smoothing_radius: f32,
+    pub edge_damping_factor: f32,
     pub near_pressure_multiplier: f32,
-    pub viscosity_strength: f32,
+    pub viscosity_amount: f32,
     pub point_size: f32,
     pub energy_transfer_mode: EnergyTransferMode,
     pub force_direction: ForceDirection,
+    pub vignette: f32,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
@@ -294,23 +328,7 @@ pub fn main_render_pipeline(
         live_mb_len as u32,
         trace_mb_len as u32,
     );
-    fluid_res.prepare(
-        queue,
-        // data.particle_pos.iter().map(|pos| pos.x).collect(),
-        data.frame_time,
-        data.gravity,
-        data.pressure_multiplier,
-        data.target_density,
-        data.smoothing_radius,
-        data.near_pressure_multiplier,
-        data.viscosity_strength,
-        data.particle_pos,
-        data.point_size,
-        data.color_mode,
-        data.uniform_color,
-        data.energy_transfer_mode,
-        data.force_direction,
-    );
+    fluid_res.prepare(queue, data);
     let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
         label: Some("fluid compute pass"),
         timestamp_writes: None,

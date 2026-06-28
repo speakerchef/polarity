@@ -76,7 +76,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             size: plt::font_size::TINY,
                         },
                         &mut st.show_preset_options,
-                        &["save", "load"],
+                        &["Save", "Load"],
                         &mut [
                             &mut st.show_preset_save_modal,
                             &mut st.show_preset_load_modal,
@@ -95,11 +95,21 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             size: plt::font_size::TINY,
                         },
                         &mut st.show_settings,
-                        &[&format!(
-                            "{} Theme",
-                            if st.dark_mode { "Graphite" } else { "Midnight" }
-                        )],
-                        &mut [&mut st.dark_mode],
+                        &[
+                            &format!(
+                                "{} Theme",
+                                if st.dark_mode { "Graphite" } else { "Midnight" }
+                            ),
+                            &format!(
+                                "{} Mode",
+                                if st.advanced_mode {
+                                    "Simple"
+                                } else {
+                                    "Advanced"
+                                }
+                            ),
+                        ],
+                        &mut [&mut st.dark_mode, &mut st.advanced_mode],
                         MB_H,
                         true,
                     );
@@ -813,7 +823,7 @@ pub fn window_drag_tooltip(ui: &mut egui::Ui) {
                 },
                 pos2(resp.rect.left(), resp.rect.left_center().y - 9.0),
                 plt::letter_spacing::BASE,
-                plt::BORDER(ui.style().visuals.dark_mode),
+                plt::YELLO,
                 Align::LEFT,
             );
         });

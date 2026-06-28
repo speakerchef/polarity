@@ -37,7 +37,7 @@
 ### V2 Roadmap (In Progress)
 
 - [ ] Build/packaging system to get `.app`
-- [ ] Simple and Advanced mode toggle
+- [x] Simple and Advanced mode toggle
 - [x] Particle / Fluid simulation motion generator
   - [x] No-gravity based fluid Canvas
   - [ ] Multiple force generator positions
@@ -45,10 +45,14 @@
     - [ ] From sides
     - [ ] Corners
   - [x] Envelope follower based force generator
-  - [ ] Tunable attack/release for EF
+  - [x] Tunable envelope controls
   - [x] Visualize waves through particle compression and expansion
   - [x] Have dynamic velocity based color generation
+  - [ ] Color gradient ordering options
+  - [x] Vignette effect
+  - [ ] Different particle counts
 - [ ] Live/RT mode
+- [ ] Multi-generator views (not priority)
 - [ ] Preferences pane with adjustable defaults
   - [ ] audio input options for live mode
   - [ ] Undo levels

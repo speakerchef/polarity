@@ -127,13 +127,14 @@ pub fn file_info(ui: &mut egui::Ui, info: &str, h: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(info.len() as f32 * 6., h), Sense::click());
     let font = FontId {
         size: plt::font_size::META,
-        family: FontFamily::Name("inter_regular".into()),
+        family: FontFamily::Name("mono".into()),
     };
+    let (_, th) = get_text_size(ui, info, font.clone()).into();
     custom_text(
         ui,
         info,
         font,
-        pos2(rect.left() + 1.0, rect.left_center().y - h / 4.0),
+        rect.left_center() + vec2(0.0, -th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::DIM,
         Align::LEFT,
@@ -142,7 +143,6 @@ pub fn file_info(ui: &mut egui::Ui, info: &str, h: f32) {
 
 pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
     let loop_icon = "\u{e042}";
-    // let (rect, mut resp) = ui.allocate_exact_size(vec2(72.0, h - 1.0), Sense::click());
     const W: f32 = 72.0;
     let mut resp = ui.allocate_rect(
         egui::Rect::from_min_size(

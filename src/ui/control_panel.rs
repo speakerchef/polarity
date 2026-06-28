@@ -125,43 +125,89 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     TraceDensity::ALL,
                     &mut st.trace_open,
                 );
+                if matches!(
+                    st.stereo.kind,
+                    StereometerKind::ScaledBipolar | StereometerKind::ScaledLissajous
+                ) {
+                    slider_row(
+                        ui,
+                        "RADIUS",
+                        &mut st.stereo.radial_scale_factor,
+                        0.0,
+                        1.0,
+                        3,
+                    );
+                }
                 slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
             GeneratorKind::Fluidwave => {
-                slider_row(ui, "THICK", &mut st.fwave.viscosity_strength, 0.0, 0.05, 3);
-                slider_row(
-                    ui,
-                    "STABILITY",
-                    &mut st.fwave.target_density,
-                    0.0,
-                    (86.0 * NUM_PARTICLES as f32).round(),
-                    0,
-                );
-                slider_row(
-                    ui,
-                    "PRESSURE",
-                    &mut st.fwave.pressure_multiplier,
-                    0.0,
-                    400.0,
-                    0,
-                );
-                slider_row(ui, "EDGE", &mut st.fwave.smoothing_radius, 0.05, 0.25, 2);
+                slider_row(ui, "THICK", &mut st.fwave.viscosity_amount, 0.0, 0.05, 3);
                 slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.02, 4);
+                if st.advanced_mode {
+                    static_label(ui, "ADVANCED SETTINGS");
+                    slider_row(
+                        ui,
+                        "STABILITY",
+                        &mut st.fwave.target_density,
+                        0.0,
+                        (86.0 * NUM_PARTICLES as f32).round(),
+                        0,
+                    );
+                    slider_row(
+                        ui,
+                        "PRESSURE",
+                        &mut st.fwave.pressure_multiplier,
+                        0.0,
+                        400.0,
+                        0,
+                    );
+                    slider_row(
+                        ui,
+                        "DAMPING",
+                        &mut st.fwave.edge_damping_factor,
+                        0.0,
+                        1.0,
+                        2,
+                    );
+                    slider_row(
+                        ui,
+                        "F-BOUNDS",
+                        &mut st.fwave.smoothing_radius,
+                        0.05,
+                        0.25,
+                        2,
+                    );
+                }
             }
+        }
+    }
+
+    if matches!(st.gen_kind, GeneratorKind::Fluidwave) {
+        section_header_submenu(ui, "REACTIVITY", &mut st.envelope_follower_open);
+        if st.envelope_follower_open {
+            slider_row(ui, "ATTACK", &mut st.fwave.attack, 0.01, 1.0, 2);
+            slider_row(ui, "RELEASE", &mut st.fwave.release, 0.01, 1.0, 2);
+            slider_row(ui, "RANGE", &mut st.fwave.range, 0.0, 100.0, 0);
+            slider_row(
+                ui,
+                "AMOUNT",
+                &mut st.fwave.envelope_sensitivity,
+                0.0,
+                200.0,
+                0,
+            );
         }
     }
 }
 
 fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
-    section_header_submenu(ui, "BLOOM", &mut st.bloom_open);
-    if st.bloom_open {
-        match st.gen_kind {
-            GeneratorKind::Stereometer => {
-                slider_row(ui, "AMOUNT", &mut st.stereo.bloom, 0.0, 10.0, 1);
-            }
-            GeneratorKind::Fluidwave => {
-                slider_row(ui, "AMOUNT", &mut st.fwave.bloom, 0.0, 10.0, 1);
-            }
+    match st.gen_kind {
+        GeneratorKind::Stereometer => {
+            slider_row(ui, "BLOOM", &mut st.stereo.bloom, 0.0, 10.0, 1);
+        }
+        GeneratorKind::Fluidwave => {
+            slider_row(ui, "BLOOM", &mut st.fwave.bloom, 0.0, 10.0, 1);
+            slider_row(ui, "VIGNETTE", &mut st.fwave.vignette, 0.0, 1.0, 2);
         }
     }
 }

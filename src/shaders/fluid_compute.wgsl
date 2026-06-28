@@ -12,6 +12,8 @@ struct Params {
     @size(16) uniform_color: vec4f,
     @size(16) is_obstacle: u32,
     @size(16) is_force_outward: u32,
+    @size(16) vignette: f32,
+    @size(16) edge_damping_factor: f32,
 }
 
 @group(0) @binding(0)
@@ -29,7 +31,7 @@ var<storage, read_write> predicted_positions: array<vec2f>;
 @group(0) @binding(6)
 var<storage, read> speaker_position: array<f32>;
 
-const damp: f32 = 0.5;
+const force_damping_factor: f32 = 0.80;
 const PI: f32 = 3.14159265;
 const mass: f32 = 1.0;
 
@@ -140,7 +142,6 @@ fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_densities(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
-    //densities[i] = calculate_density(positions[i]);
     densities[i] = calculate_density(predicted_positions[i]);
 }
 
@@ -163,25 +164,18 @@ fn cs_calculate_viscosity(@builtin(global_invocation_id) id: vec3u) {
     velocities[i] += calculate_viscosity(i) * params.viscosity_strength * params.dt;
 }
 
-const obstacle_w: f32 = 0.0025;
-const obstacle_h: f32 = 0.0025;
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
 
     positions[i] += velocities[i] * params.dt;
-    let xpos = positions[i].x;
-    let ypos = positions[i].y;
 
-    let speaker_pos = params.envelope;
-    var boundary = obstacle_w + speaker_pos;
-
-    // obstacle sides
-    var radius = boundary;
-
+    let damp = 1.0 - params.edge_damping_factor; // df is inverse in front end
+    var radius = params.envelope;
     let dist = length(positions[i]);
 
+    // obstacle / forcefield
     if dist < radius {
         let n = positions[i] / dist;
         let dir = dot(positions[i], n) * n;
@@ -189,13 +183,15 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             positions[i] = n * radius;
         }
         if params.is_force_outward != 0 {
-            velocities[i] += 2 * n * damp;
+            velocities[i] += 2 * n * force_damping_factor;
         } else {
             // inward force
-            velocities[i] -= 2 * n * damp;
+            velocities[i] -= 2 * n * force_damping_factor * 0.5;
         }
     }
     // bounce off borders
+    let xpos = positions[i].x;
+    let ypos = positions[i].y;
     if ypos < -0.9 {
         positions[i].y = -0.9;
         velocities[i].y = -velocities[i].y * damp;

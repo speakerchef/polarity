@@ -11,7 +11,7 @@ use eframe::{
 use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::{
-    GeneratorKind,
+    GeneratorKind, Preset,
     generators::{
         fluidwave::Fluidwave,
         rendering::{
@@ -152,6 +152,7 @@ pub struct AppState {
     pub export_elapsed_time: Option<Duration>,
 
     pub dark_mode: bool,
+    pub advanced_mode: bool,
     pub fullscreen: bool,
     pub import_open: bool,
 
@@ -182,9 +183,11 @@ pub struct AppState {
     pub energy_transfer_mode_options_open: bool,
     pub force_direction_options_open: bool,
     pub color_mode_options_open: bool,
+    pub envelope_follower_open: bool,
 
     pub stereo_kind_options_open: bool,
     pub filtering_open: bool,
+    pub set_default_freqs: bool,
     pub filter_mode_options_open: bool,
     pub mode_open: bool,
     pub color_open: bool,
@@ -192,14 +195,14 @@ pub struct AppState {
     pub density_open: bool,
     pub trace_open: bool,
 
-    pub set_default_freqs: bool,
-
     pub postfx_open: bool,
-    pub bloom_open: bool,
 }
 
 impl Default for AppState {
     fn default() -> Self {
+        let fstr = std::fs::read_to_string("presets/synthwave.json").unwrap_or_default();
+        let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
+        let (stereo, fwave) = (preset.stereometer, preset.fluidwave);
         Self {
             audio_file_dialog: FileDialog::new()
                 .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
@@ -247,12 +250,14 @@ impl Default for AppState {
             export_canceled: false,
 
             playback_mode: PlaybackMode::default(),
-            stereo: Stereometer::default(),
-            fwave: Fluidwave::default(),
+            stereo,
+            fwave,
 
             dark_mode: true,
+            advanced_mode: false,
             fullscreen: false,
             import_open: false,
+
             show_file_options: false,
             show_preset_options: false,
             window_drag_tooltip_modal_deadline: None,
@@ -281,6 +286,7 @@ impl Default for AppState {
             energy_transfer_mode_options_open: false,
             force_direction_options_open: false,
             color_mode_options_open: false,
+            envelope_follower_open: false,
 
             stereo_kind_options_open: false,
             filtering_open: false,
@@ -293,7 +299,6 @@ impl Default for AppState {
             set_default_freqs: true,
 
             postfx_open: false,
-            bloom_open: false,
         }
     }
 }

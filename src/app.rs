@@ -228,7 +228,6 @@ impl PolarityApp {
     fn load_file(&mut self, path: PathBuf) {
         if let Some(old_player) = &self.player {
             if *old_player.contents.path != path {
-                println!("Diff");
                 self.spawn_audio_player(path, true);
             }
         } else {
@@ -243,7 +242,7 @@ impl PolarityApp {
         self.st.stereo.clear_trace_buffers();
 
         self.player = AudioPlayer::new(path, paused)
-            .inspect_err(|err| println!("{}", err))
+            .inspect_err(|err| println!("error creating audio player: {}", err))
             .ok();
     }
 
@@ -255,19 +254,16 @@ impl PolarityApp {
             ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
         }
 
-        if ctx.input(|i| i.key_pressed(Key::Space)) {
-            if let Some(player) = &mut self.player {
-                player.toggle_playback();
-            } else {
-                println!("No audio player loaded");
-            }
+        if ctx.input(|i| i.key_pressed(Key::Space))
+            && let Some(player) = &mut self.player
+        {
+            player.toggle_playback();
         }
 
         // Check if playback has ended
         if let Some(player) = &self.player
             && player.ended()
         {
-            println!("Respawning player");
             let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
             self.spawn_audio_player(player.contents.path.to_path_buf(), paused);
         }
@@ -485,7 +481,7 @@ fn debug_window(ui: &mut egui::Ui, st: &mut AppState) {
                 .text("near pressure multiplier"),
         );
         ui.add(
-            egui::Slider::new(&mut st.fwave.viscosity_strength, 0.00..=0.05)
+            egui::Slider::new(&mut st.fwave.viscosity_amount, 0.00..=0.05)
                 .text("viscosity_strength"),
         );
     });

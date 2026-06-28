@@ -115,6 +115,7 @@ pub struct Stereometer {
 
     pub bloom: f32,
     pub point_size: f32,
+    pub radial_scale_factor: f32,
 
     pub last_sample_idx: usize,
 
@@ -152,6 +153,7 @@ impl Default for Stereometer {
             filter_freq: 1.0,
             last_freq: 1.0,
             bloom: 3.0,
+            radial_scale_factor: 0.6,
             fs_color: Rgba::new(0, 255, 0, 255),
             mb_color: [
                 Rgba::new(110, 0, 255, 255),
@@ -239,12 +241,8 @@ impl Stereometer {
     }
 
     fn radial_scale(&self, x: f32, y: f32) -> f32 {
-        let sf = match self.render_mode {
-            RenderMode::FullSpectrum => 0.325,
-            RenderMode::MultiBand => 0.275,
-        };
         let mag = (x * x + y * y).sqrt();
-        let scaled = mag.powf(sf);
+        let scaled = mag.powf(1.0 - self.radial_scale_factor);
         if mag > 1e-6 { scaled / mag } else { 0.0 }
     }
 

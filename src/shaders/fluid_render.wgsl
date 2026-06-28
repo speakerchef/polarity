@@ -11,6 +11,8 @@ struct Params {
     @size(16) is_gradient_mode: u32, // !0 == true, 0 == false
     @size(16) uniform_color: vec4f,
     @size(16) is_obstacle: u32,
+    @size(16) is_force_outward: u32,
+    @size(16) vignette: f32,
 }
 
 struct VertOut {
@@ -18,6 +20,8 @@ struct VertOut {
     @location(0) uv: vec2f,
     @location(1) speed: f32,
     @location(2) speaker_pos: f32,
+    @location(3) is_edge: u32,
+    @location(4) edge_bounds_diff: f32,
 }
 
 @group(0) @binding(0)
@@ -50,6 +54,19 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     }
     out.uv = quad_pos[corner];
     out.speed = length(velocities[particle_id]);
+    let absx = abs(positions[particle_id] + quad_pos[corner]).x;
+    let absy = abs(positions[particle_id] + quad_pos[corner]).y;
+    let edge_bounds = 0.97 - params.smoothing_radius;
+
+    // Edge antialiasing
+    var edge_diff = 0.0;
+    if absx >= edge_bounds {
+        edge_diff = smoothstep(0.0, edge_bounds, absx);
+    } else if absy >= edge_bounds {
+        edge_diff = smoothstep(0.0, edge_bounds, absy);
+    }
+    // add vignette
+    out.edge_bounds_diff = max(smoothstep(edge_bounds - params.vignette, edge_bounds, max(absx, absy)), edge_diff);
 
     return out;
 }
@@ -62,15 +79,15 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     if len > params.point_size {
         discard;
     }
-    // let vel = pow(v.speed, 4.0);
-    let vel = v.speed;
-
     if params.is_gradient_mode != 0 {
         // velocity gradient
-        let g = v.speed - 0.5;
-        let r = 1.0 - vel;
-        let b = 1.0 - vel / 4.0;
-        return vec4f(r, g, b, 1);
+        //let g = v.speed - 0.5;
+        //let r = 1.0 - v.speed;
+        //let b = 1.0 - v.speed / 4.0;
+        let r = v.speed - 0.5;
+        let g = 1.0 - v.speed;
+        let b = 1.0 - v.speed / 4.0;
+        return vec4f(r, g, b, 1 - v.edge_bounds_diff);
     } else {
         return params.uniform_color;
     }

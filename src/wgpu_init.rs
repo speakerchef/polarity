@@ -386,7 +386,7 @@ fn build_fluid_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/fluid_compute.wgsl").into()),
     });
 
-    let num_params = 13;
+    let num_params = 15;
 
     let render_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fluid render bgl"),
@@ -597,11 +597,9 @@ fn build_fluid_render_resources(
         cache: None,
     });
     static POS: [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] = generate_particle_grid();
-    // println!("{:?}", POS.as_flattened());
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("fluid vertex buffer"),
         contents: bytemuck::cast_slice(POS.as_flattened()),
-        // contents: bytemuck::cast_slice(&square),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
     });
     let density_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

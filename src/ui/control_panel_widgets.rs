@@ -84,7 +84,7 @@ pub fn section_header(ui: &mut egui::Ui, index: usize, name: &str, open: &mut bo
 }
 
 /// One level below section headers
-pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
+pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) -> Response {
     let w = ui.available_width();
     let (rect, mut resp) =
         ui.allocate_exact_size(vec2(w, plt::height::DROPDOWN_ITEM), Sense::click());
@@ -134,12 +134,13 @@ pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) {
     if resp.clicked() {
         *open = !*open;
     }
+    resp
 }
 
 /// Non-interactive Label
 pub fn static_label(ui: &mut egui::Ui, name: &str) {
     let w = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(vec2(w, plt::height::MENU_ITEM), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, SHARP, plt::GRAY);
     p.line_segment(
@@ -283,21 +284,16 @@ pub fn popup_item(
         (plt::VOID(ui.style().visuals.dark_mode), plt::BRIGHT)
     };
     let p = ui.painter();
-    // p.rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
     p.rect_filled(rect, SHARP, bg);
     p.rect_stroke(
         rect,
         SHARP,
-        // Stroke {
-        //     width: 1.0,
-        //     color: bc,
-        // },
         border(ui.visuals().dark_mode),
         StrokeKind::Inside,
     );
     let fonts = FontId {
         size: font_size,
-        family: FontFamily::Name("inter_regular".into()),
+        family: FontFamily::Name("mono_medium".into()),
     };
     let (_, th) = get_text_size(ui, &label.to_uppercase(), fonts.clone()).into();
     custom_text(
@@ -347,10 +343,10 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
 
     custom_text(
         ui,
-        &label.to_uppercase(),
+        label,
         fonts.clone(),
         rect.left_center() + vec2(8.0, -th / 2.0),
-        plt::letter_spacing::BASE,
+        plt::letter_spacing::MINIMAL,
         fg,
         Align::LEFT,
     );
@@ -444,7 +440,7 @@ pub fn dropdown_menu<T: Labeled>(
 
     let font = FontId {
         size: plt::font_size::TINY,
-        family: egui::FontFamily::Name("inter_medium".into()),
+        family: egui::FontFamily::Name("mono_medium".into()),
     };
     let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
     let offset = (dim.1 - th) / 1.25;
@@ -452,7 +448,7 @@ pub fn dropdown_menu<T: Labeled>(
         ui,
         &value.text().to_uppercase(),
         font.clone(),
-        inner.left_center() - vec2(-offset, th / 2.0),
+        inner.left_center() - vec2(-offset, (th / 2.0) + 1.0),
         plt::letter_spacing::MINIMAL,
         plt::TEXT,
         Align::LEFT,
@@ -555,7 +551,7 @@ fn value_box(
     let sty = ui.style_mut();
     let fonts = FontId {
         size: plt::font_size::META,
-        family: FontFamily::Name("inter_medium".into()),
+        family: FontFamily::Name("mono_medium".into()),
     };
     sty.override_font_id = Some(fonts);
 
@@ -573,7 +569,8 @@ fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::hover());
     let fonts = FontId {
         size: plt::font_size::TINY,
-        family: FontFamily::Name("inter_regular".into()),
+        family: FontFamily::Name("inter_medium".into()),
+        // family: FontFamily::Name("mono_medium".into()),
     };
     let (_, th) = get_text_size(ui, s, fonts.clone()).into();
     custom_text(
@@ -582,7 +579,7 @@ fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
         fonts.clone(),
         rect.left_center() + vec2(0.0, -th / 2.0),
         plt::letter_spacing::MINIMAL,
-        plt::TEXT,
+        plt::BRIGHT,
         Align::LEFT,
     );
 }

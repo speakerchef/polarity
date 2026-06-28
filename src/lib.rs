@@ -137,9 +137,6 @@ pub fn points_to_quad_vertices(s: f32, l: f32, r: f32) -> [Pos2; 6] {
 
 pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool, fps: usize) {
     let num_channels = pl.contents.num_channels as usize;
-    const ATT: f32 = 0.75;
-    const REL: f32 = 0.90;
-
     let start = if live {
         (pl.position()
             .saturating_sub(Instant::now().duration_since(st.fwave.last_frame))
@@ -160,9 +157,9 @@ pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool, fps: u
         let l = s.first().unwrap_or(&0.0);
         let abs = l.abs();
         if abs > ls {
-            ls = ls * ATT + (1.0 - ATT) * abs;
+            ls = ls * st.fwave.attack + (1.0 - st.fwave.attack) * abs;
         } else {
-            ls = ls * REL + (1.0 - REL) * abs;
+            ls = ls * st.fwave.release + (1.0 - st.fwave.release) * abs;
         }
     }
     st.fwave.envelope_last_sample = ls;

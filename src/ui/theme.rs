@@ -25,7 +25,14 @@ pub fn install_fonts(ctx: &egui::Context) {
     fonts.font_data.insert(
         "mono".to_owned(),
         FontData::from_static(include_bytes!(
-            "../../assets/fonts/mono/JetBrainsMonoNL-Regular.ttf"
+            "../../assets/fonts/mono/SourceCodePro-Regular.ttf"
+        ))
+        .into(),
+    );
+    fonts.font_data.insert(
+        "mono_medium".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../assets/fonts/mono/SourceCodePro-Medium.ttf"
         ))
         .into(),
     );
@@ -61,6 +68,13 @@ pub fn install_fonts(ctx: &egui::Context) {
     fonts.families.append(&mut newfam);
 
     let mut newfam = BTreeMap::new();
+    newfam.insert(
+        FontFamily::Name("mono_medium".into()),
+        vec!["mono_medium".to_owned()],
+    );
+    fonts.families.append(&mut newfam);
+
+    let mut newfam = BTreeMap::new();
     newfam.insert(FontFamily::Name("icons".into()), vec!["icons".to_owned()]);
     fonts.families.append(&mut newfam);
 
@@ -81,7 +95,7 @@ pub fn apply_theme(ctx: &egui::Context, dark: bool) {
     v.window_fill = p::BG_DARK(dark);
     v.extreme_bg_color = p::VOID(dark);
     v.faint_bg_color = p::SURFACE(dark);
-    v.override_text_color = Some(p::TEXT);
+    v.override_text_color = Some(p::BRIGHT);
     v.window_stroke = bdr;
     v.window_corner_radius = CornerRadius::ZERO;
     v.selection.bg_fill = p::SURFACE_HOVER(dark);
