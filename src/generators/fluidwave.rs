@@ -59,6 +59,8 @@ pub struct Fluidwave {
     pub last_frame: Instant,
     #[serde(skip)]
     pub envelope_last_sample: f32,
+    #[serde(skip)]
+    pub last_idx: usize,
 }
 
 fn instant_default() -> Instant {
@@ -94,6 +96,9 @@ impl Default for Fluidwave {
             last_frame: Instant::now(),
             color_mode: ColorMode::VelocityGradient,
             uniform_color: crate::Rgba::new(255, 25, 255, 255),
+            envelope_last_sample: 0.0,
+            last_idx: 0,
+
             attack: 0.10,
             release: 0.01,
             // range: 80.0,
@@ -101,7 +106,6 @@ impl Default for Fluidwave {
             envelope_sensitivity: 110.0,
             energy_transfer_mode: EnergyTransferMode::ForceField,
             force_direction: ForceDirection::Out,
-            envelope_last_sample: 0.0,
             gravity: 0.0,
             // pressure_multiplier: 400.0,
             pressure_multiplier: 150.0,

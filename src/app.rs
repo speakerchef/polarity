@@ -58,7 +58,7 @@ fn render_wgpu_frame(
 
     match st.gen_kind {
         GeneratorKind::Stereometer => st.stereo.draw(p, Some(st.export_sample_idx)),
-        GeneratorKind::Fluidwave => envelope_follower(p, st, false, fps),
+        GeneratorKind::Fluidwave => envelope_follower(p, st, false),
     }
 
     let render_data = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);

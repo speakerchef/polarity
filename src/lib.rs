@@ -7,8 +7,6 @@ mod state;
 mod ui;
 mod wgpu_init;
 
-use std::time::Instant;
-
 pub use app::PolarityApp;
 use eframe::egui::{Pos2, pos2};
 
@@ -135,32 +133,42 @@ pub fn points_to_quad_vertices(s: f32, l: f32, r: f32) -> [Pos2; 6] {
     ]
 }
 
-pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool, fps: usize) {
+pub fn envelope_follower(pl: &AudioPlayer, st: &mut AppState, live: bool) {
     let num_channels = pl.contents.num_channels as usize;
-    let start = if live {
-        (pl.position()
-            .saturating_sub(Instant::now().duration_since(st.fwave.last_frame))
-            .as_secs_f64()
-            * pl.contents.sample_rate as f64) as usize
+    let mut last_idx = st.fwave.last_idx;
+    let sample_idx = if live {
+        (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize
     } else {
         st.export_sample_idx
     };
-    let end = if live {
-        (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize
-    } else {
-        start + (1. / fps as f64 * pl.contents.sample_rate as f64) as usize
-    };
-    let ef_window = &pl.contents.samples[start * num_channels..end * num_channels];
-    let mut ls = st.fwave.envelope_last_sample;
+    if last_idx > sample_idx {
+        last_idx = sample_idx;
+    }
 
+    let ef_window = &pl
+        .contents
+        .samples
+        .get(last_idx * num_channels..sample_idx * num_channels)
+        .unwrap_or_default();
+    let mut ls = st.fwave.envelope_last_sample;
     for s in ef_window.chunks_exact(2) {
         let l = s.first().unwrap_or(&0.0);
-        let abs = l.abs();
-        if abs > ls {
-            ls = ls * st.fwave.attack + (1.0 - st.fwave.attack) * abs;
+        let r = s.last().unwrap_or(l);
+        let absl = l.abs();
+        let absr = r.abs();
+        let (left, right) = if (absl + absr) / 2.0 > ls {
+            (
+                ls * st.fwave.attack + (1.0 - st.fwave.attack) * absl,
+                ls * st.fwave.attack + (1.0 - st.fwave.attack) * absr,
+            )
         } else {
-            ls = ls * st.fwave.release + (1.0 - st.fwave.release) * abs;
-        }
+            (
+                ls * st.fwave.release + (1.0 - st.fwave.release) * absl,
+                ls * st.fwave.release + (1.0 - st.fwave.release) * absr,
+            )
+        };
+        ls = (left + right) / 2.0;
     }
     st.fwave.envelope_last_sample = ls;
+    st.fwave.last_idx = sample_idx;
 }

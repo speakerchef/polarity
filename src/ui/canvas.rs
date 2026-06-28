@@ -156,11 +156,14 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     let Some(pl) = pl else {
         return;
     };
+    let frame_time = Instant::now()
+        .duration_since(st.fwave.last_frame)
+        .as_secs_f32()
+        .max(1. / 60.);
     match st.gen_kind {
         GeneratorKind::Stereometer => st.stereo.draw(pl, None),
-        GeneratorKind::Fluidwave => envelope_follower(pl, st, true, 0),
+        GeneratorKind::Fluidwave => envelope_follower(pl, st, true),
     }
-
     let rcb_dat = get_render_callback_data(st, rect.size(), true, 0);
     ui.painter()
         .add(egui_wgpu::Callback::new_paint_callback(rect, rcb_dat));
