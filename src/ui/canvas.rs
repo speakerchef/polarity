@@ -64,6 +64,22 @@ pub fn get_render_callback_data(
     const MAX_RANGE: f32 = 0.95;
     const DAMP_FACTOR: f32 = 1.25;
     let now = Instant::now();
+    let env_val = st
+        .fwave
+        .envelope_last_sample
+        .div(
+            if matches!(
+                st.fwave.energy_transfer_mode,
+                EnergyTransferMode::ForceField
+            ) {
+                100.0 / st.fwave.range
+            } else {
+                1.25
+            },
+        )
+        .powf(DAMP_FACTOR)
+        .min((100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE)
+        + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE);
     let dat = RendererCallback {
         canvas_size,
         gen_kind: st.gen_kind,
@@ -90,32 +106,11 @@ pub fn get_render_callback_data(
         color_mode: st.fwave.color_mode,
         energy_transfer_mode: st.fwave.energy_transfer_mode,
         force_direction: st.fwave.force_direction,
-        frame_time: if live {
-            now.duration_since(st.fwave.last_frame)
-                .as_secs_f32()
-                .min(0.016)
-                / 8.0
-        } else {
-            (1. / fps as f32) / 8.0
-        },
-        particle_pos: st
-            .fwave
-            .envelope_last_sample
-            .div(
-                if matches!(
-                    st.fwave.energy_transfer_mode,
-                    EnergyTransferMode::ForceField
-                ) {
-                    100.0 / st.fwave.range
-                } else {
-                    1.25
-                },
-            )
-            .powf(DAMP_FACTOR)
-            .min((100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE)
-            + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE),
+        frame_time: 1. / 60. / 6.,
+        particle_pos: env_val,
         gravity: st.fwave.gravity,
-        pressure_multiplier: st.fwave.pressure_multiplier,
+        pressure_multiplier: st.fwave.pressure_multiplier
+            - (400.0 * st.fwave.envelope_last_sample.div(1.0).powf(DAMP_FACTOR)),
         target_density: st.fwave.target_density,
         smoothing_radius: st.fwave.smoothing_radius,
         edge_damping_factor: st.fwave.edge_damping_factor,

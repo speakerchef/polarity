@@ -52,6 +52,7 @@
   - [x] Vignette effect
   - [ ] Different particle counts
 - [ ] Live/RT mode
+- [ ] FPS counter
 - [ ] Multi-generator views (not priority)
 - [ ] Preferences pane with adjustable defaults
   - [ ] audio input options for live mode

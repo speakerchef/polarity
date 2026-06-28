@@ -200,7 +200,7 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        let fstr = std::fs::read_to_string("presets/synthwave.json").unwrap_or_default();
+        let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
         let (stereo, fwave) = (preset.stereometer, preset.fluidwave);
         Self {

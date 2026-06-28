@@ -84,9 +84,9 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
         //let g = v.speed - 0.5;
         //let r = 1.0 - v.speed;
         //let b = 1.0 - v.speed / 4.0;
-        let r = v.speed - 0.5;
-        let g = 1.0 - v.speed;
-        let b = 1.0 - v.speed / 4.0;
+        let b = v.speed - 0.5;
+        let r = 1.0 - v.speed;
+        let g = 1.0 - v.speed / 4.0;
         return vec4f(r, g, b, 1 - v.edge_bounds_diff);
     } else {
         return params.uniform_color;

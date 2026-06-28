@@ -134,8 +134,9 @@ const WORKGROUP_SIZE: u32 = 200;
 fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
-    velocities[i].y -= -params.g * params.dt;
-    let prediction_factor = 1.0 / 120.0;
+    velocities[i].y -= params.g * params.dt;
+    //let prediction_factor = 1.0 / 120.0;
+    let prediction_factor = params.dt;
     predicted_positions[i] = positions[i] + velocities[i] * prediction_factor;
 }
 
