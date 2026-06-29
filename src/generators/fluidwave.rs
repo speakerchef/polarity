@@ -58,6 +58,8 @@ pub struct Fluidwave {
     #[serde(skip, default = "instant_default")]
     pub last_frame: Instant,
     #[serde(skip)]
+    pub frame_time_accumulator: f32,
+    #[serde(skip)]
     pub envelope_last_sample: f32,
     #[serde(skip)]
     pub last_idx: usize,
@@ -94,6 +96,7 @@ impl Default for Fluidwave {
         // damp = 0.75
         Self {
             last_frame: Instant::now(),
+            frame_time_accumulator: 0.0,
             color_mode: ColorMode::VelocityGradient,
             uniform_color: crate::Rgba::new(255, 25, 255, 255),
             envelope_last_sample: 0.0,

@@ -15,6 +15,10 @@ use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
+pub const TARGET_FPS: f32 = 45.0;
+pub const SUBSTEP_DIV: f32 = 6.0;
+pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
+
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     ui.ctx().request_repaint();
     egui::CentralPanel::default()
@@ -63,6 +67,7 @@ pub fn get_render_callback_data(
 ) -> RendererCallback {
     const MAX_RANGE: f32 = 0.95;
     const DAMP_FACTOR: f32 = 1.25;
+    const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
     let now = Instant::now();
     let env_val = st
         .fwave
@@ -80,11 +85,18 @@ pub fn get_render_callback_data(
         .powf(DAMP_FACTOR)
         .min((100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE)
         + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE);
+
+    let frame_time = if live {
+        now.duration_since(st.fwave.last_frame).as_secs_f32() / SUBSTEP_DIV
+    } else {
+        1. / fps as f32 / SUBSTEP_DIV
+    };
+    st.fwave.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
     let dat = RendererCallback {
         canvas_size,
         gen_kind: st.gen_kind,
 
-        // stereometer params
+        /* stereometer params */
         render_mode: st.stereo.render_mode,
         live_pos: std::mem::take(&mut st.stereo.live_buffer),
         trace_pos: st.stereo.trace_buffer.clone().into(),
@@ -101,12 +113,12 @@ pub fn get_render_callback_data(
         mb_color: st.stereo.mb_color[1].into(),
         hb_color: st.stereo.mb_color[2].into(),
 
-        // Fluidwave params
+        /* Fluidwave params */
         uniform_color: st.fwave.uniform_color,
         color_mode: st.fwave.color_mode,
         energy_transfer_mode: st.fwave.energy_transfer_mode,
         force_direction: st.fwave.force_direction,
-        frame_time: 1. / 60. / 6.,
+        frame_time_accumulator: st.fwave.frame_time_accumulator,
         particle_pos: env_val,
         gravity: st.fwave.gravity,
         pressure_multiplier: st.fwave.pressure_multiplier
@@ -120,6 +132,7 @@ pub fn get_render_callback_data(
         vignette: st.fwave.vignette,
     };
     st.fwave.last_frame = now;
+    st.fwave.frame_time_accumulator %= TARGET_DT; // leftover frametime
     dat
 }
 

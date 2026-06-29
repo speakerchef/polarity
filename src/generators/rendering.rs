@@ -5,7 +5,7 @@ use pollster::FutureExt;
 
 use crate::GeneratorKind;
 use crate::generators::fluidwave::{ColorMode, EnergyTransferMode, ForceDirection};
-use crate::ui::canvas::NUM_PARTICLES;
+use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
     generators::stereometer::{MAX_TRACE_POINT_DENSITY, RenderMode, VERTICES_PER_QUAD},
@@ -140,7 +140,8 @@ impl FluidRenderResources {
         queue.write_buffer(
             &self.params_buffer,
             0,
-            bytemuck::cast_slice(&[dat.frame_time]),
+            // bytemuck::cast_slice(&[dat.frame_time]),
+            bytemuck::cast_slice(&[TARGET_DT]),
         );
         queue.write_buffer(
             &self.params_buffer,
@@ -273,7 +274,7 @@ pub struct RendererCallback {
     pub uniform_color: crate::Rgba,
 
     pub particle_pos: f32,
-    pub frame_time: f32,
+    pub frame_time_accumulator: f32,
     pub gravity: f32,
     pub pressure_multiplier: f32,
     pub target_density: f32,
@@ -333,7 +334,13 @@ pub fn main_render_pipeline(
         label: Some("fluid compute pass"),
         timestamp_writes: None,
     });
-    fluid_res.compute(&mut compute_pass);
+
+    // maintain sim behavior across diff fps
+    let mut accum = data.frame_time_accumulator;
+    while accum >= TARGET_DT {
+        fluid_res.compute(&mut compute_pass);
+        accum -= TARGET_DT;
+    }
     drop(compute_pass);
 
     let mut main_render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

@@ -135,7 +135,6 @@ fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
     if i >= arrayLength(&positions) { return; }
     velocities[i].y -= params.g * params.dt;
-    //let prediction_factor = 1.0 / 120.0;
     let prediction_factor = params.dt;
     predicted_positions[i] = positions[i] + velocities[i] * prediction_factor;
 }
@@ -175,6 +174,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let damp = 1.0 - params.edge_damping_factor; // df is inverse in front end
     var radius = params.envelope;
     let dist = length(positions[i]);
+    const TARGET_FPS: f32 = 45.0;
+    const SUBSTEP_DIV: f32 = 6.0;
 
     // obstacle / forcefield
     if dist < radius {
@@ -184,7 +185,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             positions[i] = n * radius;
         }
         if params.is_force_outward != 0 {
-            velocities[i] += 2 * n * force_damping_factor;
+            velocities[i] += 2 * n * params.dt * SUBSTEP_DIV * TARGET_FPS;
         } else {
             // inward force
             velocities[i] -= 2 * n * force_damping_factor * 0.5;
