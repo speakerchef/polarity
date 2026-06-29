@@ -51,17 +51,20 @@
   - [x] Color gradient ordering options
   - [x] Extra color options (added inversion and luminance mode)
   - [x] Vignette effect
+  - [x] Variable simulation speed
   - [ ] Different particle counts
 - [ ] Live/RT mode
+- [ ] Automation LFOs
+  - [ ] 4 wave types: sine/saw/square/triangle
+  - [ ] Attachable to most parameters
+  - [ ] Muxable and state managed (multiple params per LFO or multiple LFOs per param)
+  - [ ] Rate, depth controls
+  - [ ] Include audio envelope in advanced mode (basically use audio to control other params)
+    - [ ] Tunable ADSR.
+    - [ ] Audio envelope muxable to feed different params
 - [ ] FPS counter
-- [ ] Multi-generator views (not priority)
-- [ ] Preferences pane with adjustable defaults
-  - [ ] audio input options for live mode
-  - [ ] Undo levels
-  - [ ] Selectable themes
 - [ ] Project save/load ability with custom format:
   - [ ] container that also stores the audio file path (or audio copied into project container)
-- [ ] Undo/Redo system
 - [ ] Post-FX
   - [ ] Chromatic aberration
   - [ ] Phosphor

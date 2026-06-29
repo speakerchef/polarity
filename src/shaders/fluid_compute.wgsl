@@ -14,7 +14,11 @@ struct Params {
     @size(16) is_force_outward: u32,
     @size(16) vignette: f32,
     @size(16) edge_damping_factor: f32,
+    @size(16) color_invert: u32,
     @size(16) color_arrangement: u32,
+    @size(16) luminance_mode: u32,
+    @size(16) luminance_floor: f32,
+    @size(16) substeps: f32,
 }
 
 @group(0) @binding(0)
@@ -130,7 +134,7 @@ fn calculate_viscosity(point_idx: u32) -> vec2f {
     return viscosity_force;
 }
 
-const WORKGROUP_SIZE: u32 = 200;
+const WORKGROUP_SIZE: u32 = 256;
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
@@ -175,8 +179,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let damp = 1.0 - params.edge_damping_factor; // df is inverse in front end
     var radius = params.envelope;
     let dist = length(positions[i]);
-    const TARGET_FPS: f32 = 45.0;
-    const SUBSTEP_DIV: f32 = 6.0;
+    const TARGET_FPS: f32 = 30.0;
+    let SUBSTEP_DIV: f32 = clamp(params.substeps, 3.0, 100.0);
 
     // obstacle / forcefield
     if dist < radius {

@@ -18,6 +18,7 @@ struct Params {
     @size(16) color_arrangement: u32,
     @size(16) luminance_mode: u32,
     @size(16) luminance_floor: f32,
+    @size(16) substeps: f32,
 }
 
 struct VertOut {
@@ -92,7 +93,7 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     if params.luminance_mode != 0 {
         r = v.speed - 0.5;
         g = v.speed / 4.0;
-        b = pow(min(v.speed, 0.999), max(1.0, pow(params.luminance_floor / 100.0, 3.0) * LUM_FLOOR_MAX));
+        b = pow(min(v.speed, 0.999), max(1.0, pow(params.luminance_floor / 100.0, 6.5) * LUM_FLOOR_MAX));
     }
     if params.color_invert != 0 {
         r = 1.0 - r;

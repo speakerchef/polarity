@@ -168,6 +168,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
             GeneratorKind::Fluidwave => {
+                slider_row(ui, "SIM SPEED", &mut st.fwave.sim_speed, 1.0, 200.0, 1);
                 slider_row(
                     ui,
                     "VISCOSITY",

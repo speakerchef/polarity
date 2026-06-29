@@ -235,9 +235,14 @@ impl FluidRenderResources {
             288,
             bytemuck::cast_slice(&[dat.luminance_floor]),
         );
+        queue.write_buffer(
+            &self.params_buffer,
+            304,
+            bytemuck::cast_slice(&[dat.substeps]),
+        );
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
-        const WORKGROUP_SIZE: u32 = 200;
+        const WORKGROUP_SIZE: u32 = 256;
         compute_pass.set_pipeline(&self.positions_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
         compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
@@ -307,6 +312,7 @@ pub struct RendererCallback {
     pub color_invert: bool,
     pub luminance_mode: bool,
     pub luminance_floor: f32,
+    pub substeps: f32,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
@@ -318,51 +324,57 @@ pub fn main_render_pipeline(
 ) {
     let stereometer_res: &StereometerRenderResources = res.get().unwrap();
     let fluid_res: &FluidRenderResources = res.get().unwrap();
-    let pos = match data.render_mode {
-        RenderMode::FullSpectrum => {
-            let mut pos = data.live_pos.clone();
-            pos.extend(&data.trace_pos);
-            pos
+    match data.gen_kind {
+        GeneratorKind::Stereometer => {
+            let pos = match data.render_mode {
+                RenderMode::FullSpectrum => {
+                    let mut pos = data.live_pos.clone();
+                    pos.extend(&data.trace_pos);
+                    pos
+                }
+                RenderMode::MultiBand => {
+                    let mut pos = data.live_low_pos.clone();
+                    pos.extend(&data.live_mid_pos);
+                    pos.extend(&data.live_high_pos);
+                    pos.extend(&data.trace_low_pos);
+                    pos.extend(&data.trace_mid_pos);
+                    pos.extend(&data.trace_high_pos);
+                    pos
+                }
+            };
+            let (live_len, trace_len) = (data.live_pos.len(), data.trace_pos.len());
+            let (live_mb_len, trace_mb_len) = (data.live_low_pos.len(), data.trace_low_pos.len());
+            stereometer_res.prepare(
+                device,
+                queue,
+                pos,
+                data.fs_color,
+                data.lb_color,
+                data.mb_color,
+                data.hb_color,
+                matches!(data.render_mode, RenderMode::MultiBand),
+                live_len as u32,
+                trace_len as u32,
+                live_mb_len as u32,
+                trace_mb_len as u32,
+            );
         }
-        RenderMode::MultiBand => {
-            let mut pos = data.live_low_pos.clone();
-            pos.extend(&data.live_mid_pos);
-            pos.extend(&data.live_high_pos);
-            pos.extend(&data.trace_low_pos);
-            pos.extend(&data.trace_mid_pos);
-            pos.extend(&data.trace_high_pos);
-            pos
-        }
-    };
-    let (live_len, trace_len) = (data.live_pos.len(), data.trace_pos.len());
-    let (live_mb_len, trace_mb_len) = (data.live_low_pos.len(), data.trace_low_pos.len());
-    stereometer_res.prepare(
-        device,
-        queue,
-        pos,
-        data.fs_color,
-        data.lb_color,
-        data.mb_color,
-        data.hb_color,
-        matches!(data.render_mode, RenderMode::MultiBand),
-        live_len as u32,
-        trace_len as u32,
-        live_mb_len as u32,
-        trace_mb_len as u32,
-    );
-    fluid_res.prepare(queue, data);
-    let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-        label: Some("fluid compute pass"),
-        timestamp_writes: None,
-    });
+        GeneratorKind::Fluidwave => {
+            fluid_res.prepare(queue, data);
+            let mut compute_pass =
+                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("fluid compute pass"),
+                    timestamp_writes: None,
+                });
 
-    // maintain sim behavior across diff fps
-    let mut accum = data.frame_time_accumulator;
-    while accum >= TARGET_DT {
-        fluid_res.compute(&mut compute_pass);
-        accum -= TARGET_DT;
+            // maintain sim behavior across diff fps
+            let mut accum = data.frame_time_accumulator;
+            while accum >= TARGET_DT {
+                fluid_res.compute(&mut compute_pass);
+                accum -= TARGET_DT;
+            }
+        }
     }
-    drop(compute_pass);
 
     let mut main_render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("main pass"),
@@ -406,7 +418,8 @@ pub fn main_render_pipeline(
     }
     drop(main_render_pass);
 
-    if data.gen_kind == GeneratorKind::Fluidwave {
+    // for debug printing
+    if matches!(data.gen_kind, GeneratorKind::Fluidwave) {
         command_encoder.copy_buffer_to_buffer(
             &fluid_res.debug_storage,
             0,

@@ -15,8 +15,9 @@ use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
-pub const TARGET_FPS: f32 = 45.0;
+pub const TARGET_FPS: f32 = 30.0;
 pub const SUBSTEP_DIV: f32 = 6.0;
+pub const MIN_SUBSTEP_DIV: f32 = 3.0;
 pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
@@ -68,6 +69,10 @@ pub fn get_render_callback_data(
     const MAX_RANGE: f32 = 0.95;
     const DAMP_FACTOR: f32 = 1.25;
     const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
+    let sim_speed_scale = 100.0 / st.fwave.sim_speed.max(1.0);
+    let sim_speed = (sim_speed_scale * SUBSTEP_DIV) /* higher == slower */
+        .clamp(MIN_SUBSTEP_DIV, 100.0)
+        .round();
     let now = Instant::now();
     let env_val = st
         .fwave
@@ -87,9 +92,11 @@ pub fn get_render_callback_data(
         + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE);
 
     let frame_time = if live {
-        now.duration_since(st.fwave.last_frame).as_secs_f32() / SUBSTEP_DIV
+        // now.duration_since(st.fwave.last_frame).as_secs_f32() / SUBSTEP_DIV
+        now.duration_since(st.fwave.last_frame).as_secs_f32() / sim_speed
     } else {
-        1. / fps as f32 / SUBSTEP_DIV
+        // 1. / fps as f32 / SUBSTEP_DIV
+        1. / fps as f32 / sim_speed
     };
     st.fwave.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
     let dat = RendererCallback {
@@ -122,6 +129,7 @@ pub fn get_render_callback_data(
         particle_pos: env_val,
         gravity: st.fwave.gravity,
 
+        substeps: sim_speed,
         pressure_multiplier: st.fwave.pressure_multiplier
             - if st.fwave.envelope_pressure_link {
                 (400.0 * st.fwave.envelope_last_sample.div(1.0).powf(DAMP_FACTOR))

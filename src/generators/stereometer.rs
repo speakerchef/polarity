@@ -259,12 +259,7 @@ impl Stereometer {
             }
             StereometerKind::LinearLissajous => (l, r),
             StereometerKind::ScaledLissajous => {
-                let rscale = self.radial_scale(l, r)
-                    * if self.render_mode == RenderMode::MultiBand {
-                        1.1
-                    } else {
-                        1.0
-                    };
+                let rscale = self.radial_scale(l, r);
                 (l * rscale, r * rscale)
             }
         };

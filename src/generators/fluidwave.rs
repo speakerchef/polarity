@@ -65,6 +65,7 @@ impl ColorArrangement {
 pub struct Fluidwave {
     pub color_mode: ColorMode,
     pub color_invert: bool,
+    pub sim_speed: f32,
     pub luminance_mode: bool,
     pub luminance_floor: f32,
     pub color_arrangement: ColorArrangement,
@@ -127,6 +128,7 @@ impl Default for Fluidwave {
 
         // damp = 0.75
         Self {
+            sim_speed: 100.0,
             last_frame: Instant::now(),
             frame_time_accumulator: 0.0,
             color_mode: ColorMode::VelocityGradient,
