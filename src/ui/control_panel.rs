@@ -76,29 +76,62 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
         }
     }
 
-    match st.gen_kind {
-        GeneratorKind::Stereometer => {
-            section_header_submenu(ui, "COLOR", &mut st.color_open);
-            if st.color_open {
-                match st.stereo.render_mode {
-                    RenderMode::FullSpectrum => {
-                        slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
-                        slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
-                        slider_row(ui, "BLUE", &mut st.stereo.fs_color.b, 0.0, 255.0, 0);
+    section_header_submenu(ui, "COLOR", &mut st.color_open);
+    if st.color_open {
+        match st.gen_kind {
+            GeneratorKind::Stereometer => match st.stereo.render_mode {
+                RenderMode::FullSpectrum => {
+                    slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
+                    slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
+                    slider_row(ui, "BLUE", &mut st.stereo.fs_color.b, 0.0, 255.0, 0);
+                }
+                RenderMode::MultiBand => {
+                    for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate() {
+                        static_label(ui, name);
+                        slider_row(ui, "RED", &mut st.stereo.mb_color[band].r, 0.0, 255.0, 0);
+                        slider_row(ui, "GREEN", &mut st.stereo.mb_color[band].g, 0.0, 255.0, 0);
+                        slider_row(ui, "BLUE", &mut st.stereo.mb_color[band].b, 0.0, 255.0, 0);
                     }
-                    RenderMode::MultiBand => {
-                        for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate()
-                        {
-                            static_label(ui, name);
-                            slider_row(ui, "RED", &mut st.stereo.mb_color[band].r, 0.0, 255.0, 0);
-                            slider_row(ui, "GREEN", &mut st.stereo.mb_color[band].g, 0.0, 255.0, 0);
-                            slider_row(ui, "BLUE", &mut st.stereo.mb_color[band].b, 0.0, 255.0, 0);
+                }
+            },
+            GeneratorKind::Fluidwave => {
+                dropdown_row(
+                    ui,
+                    "COLOR MODE",
+                    &mut st.fwave.color_mode,
+                    ColorMode::ALL,
+                    &mut st.color_mode_options_open,
+                );
+                match st.fwave.color_mode {
+                    ColorMode::VelocityGradient => {
+                        dropdown_row(
+                            ui,
+                            "COLOR ORDER",
+                            &mut st.fwave.color_arrangement,
+                            ColorArrangement::ALL,
+                            &mut st.color_arrangement_options_open,
+                        );
+                        toggle_button_row(ui, "INVERT COLOR", &mut st.fwave.color_invert);
+                        toggle_button_row(ui, "LUMINANCE MODE", &mut st.fwave.luminance_mode);
+                        if st.fwave.luminance_mode {
+                            slider_row(
+                                ui,
+                                "LUM FLOOR",
+                                &mut st.fwave.luminance_floor,
+                                0.0,
+                                100.0,
+                                0,
+                            );
                         }
+                    }
+                    ColorMode::Uniform => {
+                        slider_row(ui, "RED", &mut st.fwave.uniform_color.r, 0.0, 255.0, 0);
+                        slider_row(ui, "GREEN", &mut st.fwave.uniform_color.g, 0.0, 255.0, 0);
+                        slider_row(ui, "BLUE", &mut st.fwave.uniform_color.b, 0.0, 255.0, 0);
                     }
                 }
             }
         }
-        GeneratorKind::Fluidwave => (),
     }
 
     section_header_submenu(ui, "VISUAL", &mut st.visual_open);
@@ -135,35 +168,6 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
             GeneratorKind::Fluidwave => {
-                dropdown_row(
-                    ui,
-                    "COLOR MODE",
-                    &mut st.fwave.color_mode,
-                    ColorMode::ALL,
-                    &mut st.color_mode_options_open,
-                );
-                if matches!(st.fwave.color_mode, ColorMode::VelocityGradient) {
-                    dropdown_row(
-                        ui,
-                        "COLOR ORDER",
-                        &mut st.fwave.color_arrangement,
-                        ColorArrangement::ALL,
-                        &mut st.color_arrangement_options_open,
-                    );
-                    toggle_button_row(ui, "INVERT COLOR", &mut st.fwave.color_invert);
-                    toggle_button_row(ui, "LUMINANCE MODE", &mut st.fwave.luminance_mode);
-                    if st.fwave.luminance_mode {
-                        slider_row(
-                            ui,
-                            "LUM FLOOR",
-                            &mut st.fwave.luminance_floor,
-                            0.0,
-                            100.0,
-                            0,
-                        );
-                    }
-                }
-
                 slider_row(
                     ui,
                     "VISCOSITY",
