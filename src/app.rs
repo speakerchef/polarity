@@ -13,8 +13,8 @@ use std::{
 use crate::{
     GeneratorKind, Preset,
     audio::{StereoFilter, audio_player::*},
-    envelope_follower,
     generators::{
+        envelope_follower,
         rendering::{
             EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
             get_texture_view, main_render_pipeline, output_render_pipeline,

@@ -49,21 +49,6 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.force_direction_options_open,
                     );
                 }
-
-                dropdown_row(
-                    ui,
-                    "COLOR MODE",
-                    &mut st.fwave.color_mode,
-                    ColorMode::ALL,
-                    &mut st.color_mode_options_open,
-                );
-                dropdown_row(
-                    ui,
-                    "COLOR ORDER",
-                    &mut st.fwave.color_arrangement,
-                    ColorArrangement::ALL,
-                    &mut st.color_arrangement_options_open,
-                );
             }
         }
     }
@@ -150,10 +135,51 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
             GeneratorKind::Fluidwave => {
-                slider_row(ui, "THICK", &mut st.fwave.viscosity_amount, 0.0, 0.05, 3);
+                dropdown_row(
+                    ui,
+                    "COLOR MODE",
+                    &mut st.fwave.color_mode,
+                    ColorMode::ALL,
+                    &mut st.color_mode_options_open,
+                );
+                if matches!(st.fwave.color_mode, ColorMode::VelocityGradient) {
+                    dropdown_row(
+                        ui,
+                        "COLOR ORDER",
+                        &mut st.fwave.color_arrangement,
+                        ColorArrangement::ALL,
+                        &mut st.color_arrangement_options_open,
+                    );
+                    toggle_button_row(ui, "INVERT COLOR", &mut st.fwave.color_invert);
+                    toggle_button_row(ui, "LUMINANCE MODE", &mut st.fwave.luminance_mode);
+                    if st.fwave.luminance_mode {
+                        slider_row(
+                            ui,
+                            "LUM FLOOR",
+                            &mut st.fwave.luminance_floor,
+                            0.0,
+                            100.0,
+                            0,
+                        );
+                    }
+                }
+
+                slider_row(
+                    ui,
+                    "VISCOSITY",
+                    &mut st.fwave.viscosity_amount,
+                    0.0,
+                    0.05,
+                    3,
+                );
                 slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.02, 4);
                 if st.advanced_mode {
                     static_label(ui, "ADVANCED SETTINGS");
+                    toggle_button_row(
+                        ui,
+                        "ENVELOPE-PRESSURE LINK",
+                        &mut st.fwave.envelope_pressure_link,
+                    );
                     slider_row(
                         ui,
                         "STABILITY",

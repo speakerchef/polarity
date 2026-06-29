@@ -5,7 +5,7 @@ use eframe::egui::{Align, vec2};
 
 use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
-use crate::ui::{palette as plt, timeline_widgets::*};
+use crate::ui::{SHARP, palette as plt, timeline_widgets::*};
 const SKIP_START: &str = "\u{e045}";
 const PLAY: &str = "\u{e037}";
 const PAUSE: &str = "\u{e034}";

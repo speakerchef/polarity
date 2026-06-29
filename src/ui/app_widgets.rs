@@ -7,10 +7,10 @@ use crate::{
     audio::audio_player::AudioPlayer,
     state::{AppState, ExportQuality, Fps, Resolution},
     ui::{
-        canvas, control_panel,
+        SHARP, canvas, control_panel,
         control_panel_widgets::{dropdown_row, menu_bar_option},
         custom_text, get_text_size, palette as plt, timeline,
-        timeline_widgets::{SHARP, border},
+        timeline_widgets::border,
     },
 };
 use eframe::egui::{self, pos2};

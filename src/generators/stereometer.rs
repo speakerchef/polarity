@@ -1,4 +1,6 @@
-use crate::{Rgba, audio::StereoFilter, labeled_enum, points_to_quad_vertices, state::Labeled};
+use crate::{
+    Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum, state::Labeled,
+};
 use eframe::egui::Pos2;
 use std::collections::VecDeque;
 

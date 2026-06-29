@@ -6,14 +6,12 @@ use eframe::egui::{
     pos2, vec2,
 };
 
-use crate::ui::get_text_size;
+use crate::ui::{SHARP, get_text_size};
 use crate::{
     audio::audio_player::AudioPlayer,
     state::{AppState, PlaybackMode},
     ui::{custom_text, palette as plt},
 };
-
-pub const SHARP: CornerRadius = CornerRadius::ZERO;
 
 pub fn border(dark: bool) -> Stroke {
     Stroke::new(plt::FRAME_WIDTH, plt::BORDER(dark))

@@ -6,11 +6,11 @@ use eframe::egui::{self, Pos2, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
+use crate::GeneratorKind;
+use crate::generators::envelope_follower;
 use crate::generators::fluidwave::EnergyTransferMode;
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
-use crate::ui::canvas_widgets::fullscreen_button;
-use crate::ui::timeline_widgets::{SHARP, border};
-use crate::{GeneratorKind, envelope_follower, points_to_quad_vertices};
+use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
@@ -121,8 +121,14 @@ pub fn get_render_callback_data(
         frame_time_accumulator: st.fwave.frame_time_accumulator,
         particle_pos: env_val,
         gravity: st.fwave.gravity,
+
         pressure_multiplier: st.fwave.pressure_multiplier
-            - (400.0 * st.fwave.envelope_last_sample.div(1.0).powf(DAMP_FACTOR)),
+            - if st.fwave.envelope_pressure_link {
+                (400.0 * st.fwave.envelope_last_sample.div(1.0).powf(DAMP_FACTOR))
+            } else {
+                0.0
+            },
+
         target_density: st.fwave.target_density,
         smoothing_radius: st.fwave.smoothing_radius,
         edge_damping_factor: st.fwave.edge_damping_factor,
@@ -131,6 +137,9 @@ pub fn get_render_callback_data(
         point_size: st.fwave.point_size,
         vignette: st.fwave.vignette,
         color_arrangement: st.fwave.color_arrangement,
+        color_invert: st.fwave.color_invert,
+        luminance_mode: st.fwave.luminance_mode,
+        luminance_floor: st.fwave.luminance_floor,
     };
     st.fwave.last_frame = now;
     st.fwave.frame_time_accumulator %= TARGET_DT; // leftover frametime

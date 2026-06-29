@@ -48,7 +48,8 @@
   - [x] Tunable envelope controls
   - [x] Visualize waves through particle compression and expansion
   - [x] Have dynamic velocity based color generation
-  - [ ] Color gradient ordering options
+  - [x] Color gradient ordering options
+  - [x] Extra color options (added inversion and luminance mode)
   - [x] Vignette effect
   - [ ] Different particle counts
 - [ ] Live/RT mode

@@ -14,7 +14,10 @@ struct Params {
     @size(16) is_force_outward: u32,
     @size(16) vignette: f32,
     @size(16) edge_damping_factor: f32,
+    @size(16) color_invert: u32,
     @size(16) color_arrangement: u32,
+    @size(16) luminance_mode: u32,
+    @size(16) luminance_floor: f32,
 }
 
 struct VertOut {
@@ -81,50 +84,49 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     if len > params.point_size {
         discard;
     }
-    var r: f32;
-    var g: f32;
-    var b: f32;
+
+    const LUM_FLOOR_MAX: f32 = 1000;
+    var r: f32 = v.speed;
+    var g: f32 = v.speed / 4.0;
+    var b: f32 = 1.0 - v.speed;
+    if params.luminance_mode != 0 {
+        r = v.speed - 0.5;
+        g = v.speed / 4.0;
+        b = pow(min(v.speed, 0.999), max(1.0, pow(params.luminance_floor / 100.0, 3.0) * LUM_FLOOR_MAX));
+    }
+    if params.color_invert != 0 {
+        r = 1.0 - r;
+        g = 1.0 - g;
+        b = 1.0 - b;
+    }
+
+    let alpha = 1.0 - v.edge_bounds_diff;
     if params.is_gradient_mode != 0 {
         // velocity gradient
         switch params.color_arrangement {
             case 0: {
-                r = v.speed - 0.5;
-                g = 1.0 - v.speed;
-                b = 1.0 - v.speed / 4.0;
+                return vec4f(r, g, b, alpha);
             }
             case 1: {
-                g = v.speed - 0.5;
-                r = 1.0 - v.speed;
-                b = 1.0 - v.speed / 4.0;
+                return vec4f(g, r, b, alpha);
             }
             case 2: {
-                g = v.speed - 0.5;
-                b = 1.0 - v.speed;
-                r = 1.0 - v.speed / 4.0;
+                return vec4f(g, b, r, alpha);
             }
             case 3: {
-                b = v.speed - 0.5;
-                g = 1.0 - v.speed;
-                r = 1.0 - v.speed / 4.0;
+                return vec4f(b, g, r, alpha);
             }
             case 4: {
-                b = v.speed - 0.5;
-                r = 1.0 - v.speed;
-                g = 1.0 - v.speed / 4.0;
+                return vec4f(b, r, g, alpha);
             }
             case 5: {
-                r = v.speed - 0.5;
-                b = 1.0 - v.speed;
-                g = 1.0 - v.speed / 4.0;
+                return vec4f(r, b, g, alpha);
             }
             default: {
-                r = v.speed - 0.5;
-                g = 1.0 - v.speed;
-                b = 1.0 - v.speed / 4.0;
+                return vec4f(r, g, b, alpha);
             }
         }
-        return vec4f(r, g, b, 1 - v.edge_bounds_diff);
     } else {
-        return params.uniform_color;
+        return vec4f(params.uniform_color.rgb, alpha);
     }
 }

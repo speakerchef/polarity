@@ -218,7 +218,22 @@ impl FluidRenderResources {
         queue.write_buffer(
             &self.params_buffer,
             240,
+            bytemuck::cast_slice(&[dat.color_invert as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            256,
             bytemuck::cast_slice(&[dat.color_arrangement.to_value()]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            272,
+            bytemuck::cast_slice(&[dat.luminance_mode as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            288,
+            bytemuck::cast_slice(&[dat.luminance_floor]),
         );
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
@@ -289,6 +304,9 @@ pub struct RendererCallback {
     pub force_direction: ForceDirection,
     pub vignette: f32,
     pub color_arrangement: ColorArrangement,
+    pub color_invert: bool,
+    pub luminance_mode: bool,
+    pub luminance_floor: f32,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,

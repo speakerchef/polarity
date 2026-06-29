@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use eframe::egui::{self, Vec2};
+use eframe::egui::{self, CornerRadius, Vec2};
 use eframe::egui::{Align, Color32, FontId, Pos2};
 
 pub mod app_widgets;
@@ -12,6 +12,13 @@ pub mod palette;
 pub mod theme;
 pub mod timeline;
 pub mod timeline_widgets;
+pub const SHARP: CornerRadius = CornerRadius::ZERO;
+pub const ROUND_MAX: CornerRadius = CornerRadius {
+    nw: 100,
+    ne: 100,
+    sw: 100,
+    se: 100,
+};
 
 pub fn get_text_size(ui: &mut egui::Ui, text: &str, font_id: FontId) -> Vec2 {
     let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font_id, Color32::default()));

@@ -183,6 +183,7 @@ pub struct AppState {
     pub energy_transfer_mode_options_open: bool,
     pub force_direction_options_open: bool,
     pub color_mode_options_open: bool,
+    pub gradient_formula_options_open: bool,
     pub color_arrangement_options_open: bool,
     pub envelope_follower_open: bool,
 
@@ -287,6 +288,7 @@ impl Default for AppState {
             energy_transfer_mode_options_open: false,
             force_direction_options_open: false,
             color_mode_options_open: false,
+            gradient_formula_options_open: false,
             color_arrangement_options_open: false,
             envelope_follower_open: false,
 

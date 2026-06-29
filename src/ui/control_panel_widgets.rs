@@ -1,3 +1,4 @@
+use crate::ui::{ROUND_MAX, SHARP};
 use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
 
@@ -7,8 +8,7 @@ use eframe::egui::{
 };
 
 use crate::{state::Labeled, ui::palette as plt};
-
-const SHARP: CornerRadius = CornerRadius::ZERO;
+const TOGGLE_BUTTON_W: f32 = 34.0;
 
 fn border(dark: bool) -> Stroke {
     Stroke::new(plt::FRAME_WIDTH, plt::BORDER(dark))
@@ -353,6 +353,22 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
     resp
 }
 
+/// Creates `|____|` typa border
+fn apply_bucket_border(ui: &mut egui::Ui, rect: egui::Rect) {
+    ui.painter().line_segment(
+        [rect.left_bottom(), rect.right_bottom()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [rect.left_bottom(), rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [rect.right_bottom(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+}
+
 /// Menu item with `label        [ item ]` structure
 pub fn dropdown_row<T: Labeled>(
     ui: &mut egui::Ui,
@@ -367,7 +383,6 @@ pub fn dropdown_row<T: Labeled>(
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
         .allocate_ui_with_layout(
-            // vec2(ui.available_width(), plt::height::MENU_ITEM),
             vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
             egui::Layout::left_to_right(Align::Center),
             |ui| {
@@ -388,18 +403,7 @@ pub fn dropdown_row<T: Labeled>(
     );
     ui.painter().set(bg, bg_rect.clone());
     let br = bg_rect.visual_bounding_rect();
-    ui.painter().line_segment(
-        [br.left_bottom(), br.right_bottom()],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [br.left_bottom(), br.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [br.right_bottom(), br.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
+    apply_bucket_border(ui, br);
 
     // close dropdown if clicked elsewhere
     ui.ctx().input(|i| {
@@ -410,6 +414,77 @@ pub fn dropdown_row<T: Labeled>(
             *open = false;
         }
     });
+}
+
+/// Menu item with `On/Off` toggle button
+pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool) {
+    const PAD: f32 = 12.0;
+
+    let bg = ui.painter().add(egui::Shape::Noop);
+    let inner_rect = ui
+        .allocate_ui_with_layout(
+            vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
+            egui::Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.add_space(PAD);
+                label_text(ui, label, ui.available_width() - (TOGGLE_BUTTON_W + PAD));
+                ui.add_space(ui.available_width() - (TOGGLE_BUTTON_W + PAD + 1.0));
+                toggle_button(ui, value);
+            },
+        )
+        .response
+        .rect;
+    let bg_rect = egui::Shape::rect_filled(
+        egui::Rect::from_min_size(
+            inner_rect.left_top(),
+            vec2(ui.available_width(), inner_rect.height()),
+        ),
+        SHARP,
+        plt::INK,
+    );
+    ui.painter().set(bg, bg_rect.clone());
+    let br = bg_rect.visual_bounding_rect();
+    apply_bucket_border(ui, br);
+}
+
+pub fn toggle_button(ui: &mut egui::Ui, on: &mut bool) {
+    let (rect, mut resp) =
+        ui.allocate_exact_size(vec2(TOGGLE_BUTTON_W, 16.0), egui::Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+    let mut thumb = ui.allocate_rect(
+        egui::Rect::from_min_size(rect.left_top(), vec2(16.0, 16.0)),
+        egui::Sense::click(),
+    );
+    thumb = thumb.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+    let mut thumb_rect = thumb.rect;
+    if resp.clicked() || thumb.clicked() {
+        *on = !*on;
+    }
+    if *on {
+        thumb_rect = thumb_rect.translate(vec2(TOGGLE_BUTTON_W - thumb_rect.width(), 0.0));
+    }
+    let bg = if *on {
+        plt::YELLO
+    } else {
+        plt::SURFACE_HOVER(ui.visuals().dark_mode)
+    };
+    ui.painter().rect_filled(rect, ROUND_MAX, bg);
+    ui.painter().rect_stroke(
+        rect,
+        ROUND_MAX,
+        border(ui.visuals().dark_mode),
+        StrokeKind::Outside,
+    );
+    ui.painter().rect_filled(thumb_rect, ROUND_MAX, plt::BRIGHT);
+    ui.painter().rect_stroke(
+        thumb_rect,
+        ROUND_MAX,
+        Stroke {
+            width: 0.5,
+            color: plt::DIM,
+        },
+        StrokeKind::Outside,
+    );
 }
 
 pub fn dropdown_menu<T: Labeled>(
