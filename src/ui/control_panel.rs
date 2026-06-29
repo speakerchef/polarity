@@ -1,4 +1,6 @@
-use crate::generators::fluidwave::{ColorMode, EnergyTransferMode, ForceDirection};
+use crate::generators::fluidwave::{
+    ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
+};
 use crate::generators::stereometer::{
     FilterMode, LiveDensity, RenderMode, StereometerKind, TraceDensity,
 };
@@ -54,6 +56,13 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.fwave.color_mode,
                     ColorMode::ALL,
                     &mut st.color_mode_options_open,
+                );
+                dropdown_row(
+                    ui,
+                    "COLOR ORDER",
+                    &mut st.fwave.color_arrangement,
+                    ColorArrangement::ALL,
+                    &mut st.color_arrangement_options_open,
                 );
             }
         }

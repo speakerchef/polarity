@@ -34,9 +34,37 @@ impl Labeled for ForceDirection {
     }
 }
 
+labeled_enum!(ColorArrangement {
+    Rgb => "RGB",
+    Grb => "GRB",
+    Gbr => "GBR",
+    Bgr => "BGR",
+    Brg => "BRG",
+    Rbg => "RBG",
+}, Rgb);
+
+impl Labeled for ColorArrangement {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+impl ColorArrangement {
+    pub fn to_value(self) -> u32 {
+        match self {
+            ColorArrangement::Rgb => 0,
+            ColorArrangement::Grb => 1,
+            ColorArrangement::Gbr => 2,
+            ColorArrangement::Bgr => 3,
+            ColorArrangement::Brg => 4,
+            ColorArrangement::Rbg => 5,
+        }
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Fluidwave {
     pub color_mode: ColorMode,
+    pub color_arrangement: ColorArrangement,
     pub energy_transfer_mode: EnergyTransferMode,
     pub force_direction: ForceDirection,
     pub gravity: f32,
@@ -98,6 +126,7 @@ impl Default for Fluidwave {
             last_frame: Instant::now(),
             frame_time_accumulator: 0.0,
             color_mode: ColorMode::VelocityGradient,
+            color_arrangement: ColorArrangement::Rgb,
             uniform_color: crate::Rgba::new(255, 25, 255, 255),
             envelope_last_sample: 0.0,
             last_idx: 0,

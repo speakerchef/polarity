@@ -14,6 +14,7 @@ struct Params {
     @size(16) is_force_outward: u32,
     @size(16) vignette: f32,
     @size(16) edge_damping_factor: f32,
+    @size(16) color_arrangement: u32,
 }
 
 @group(0) @binding(0)

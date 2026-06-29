@@ -130,6 +130,7 @@ pub fn get_render_callback_data(
         viscosity_amount: st.fwave.viscosity_amount,
         point_size: st.fwave.point_size,
         vignette: st.fwave.vignette,
+        color_arrangement: st.fwave.color_arrangement,
     };
     st.fwave.last_frame = now;
     st.fwave.frame_time_accumulator %= TARGET_DT; // leftover frametime

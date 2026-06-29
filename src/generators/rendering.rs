@@ -4,7 +4,9 @@ use eframe::egui_wgpu;
 use pollster::FutureExt;
 
 use crate::GeneratorKind;
-use crate::generators::fluidwave::{ColorMode, EnergyTransferMode, ForceDirection};
+use crate::generators::fluidwave::{
+    ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
+};
 use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
@@ -137,12 +139,7 @@ pub struct FluidRenderResources {
 #[allow(clippy::too_many_arguments)]
 impl FluidRenderResources {
     fn prepare(&self, queue: &wgpu::Queue, dat: &RendererCallback) {
-        queue.write_buffer(
-            &self.params_buffer,
-            0,
-            // bytemuck::cast_slice(&[dat.frame_time]),
-            bytemuck::cast_slice(&[TARGET_DT]),
-        );
+        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[TARGET_DT]));
         queue.write_buffer(
             &self.params_buffer,
             16,
@@ -218,6 +215,11 @@ impl FluidRenderResources {
             224,
             bytemuck::cast_slice(&[dat.edge_damping_factor]),
         );
+        queue.write_buffer(
+            &self.params_buffer,
+            240,
+            bytemuck::cast_slice(&[dat.color_arrangement.to_value()]),
+        );
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
         const WORKGROUP_SIZE: u32 = 200;
@@ -286,6 +288,7 @@ pub struct RendererCallback {
     pub energy_transfer_mode: EnergyTransferMode,
     pub force_direction: ForceDirection,
     pub vignette: f32,
+    pub color_arrangement: ColorArrangement,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,

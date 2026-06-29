@@ -13,6 +13,8 @@ struct Params {
     @size(16) is_obstacle: u32,
     @size(16) is_force_outward: u32,
     @size(16) vignette: f32,
+    @size(16) edge_damping_factor: f32,
+    @size(16) color_arrangement: u32,
 }
 
 struct VertOut {
@@ -79,14 +81,48 @@ fn fs_main(v: VertOut) -> @location(0) vec4f {
     if len > params.point_size {
         discard;
     }
+    var r: f32;
+    var g: f32;
+    var b: f32;
     if params.is_gradient_mode != 0 {
         // velocity gradient
-        //let g = v.speed - 0.5;
-        //let r = 1.0 - v.speed;
-        //let b = 1.0 - v.speed / 4.0;
-        let b = v.speed - 0.5;
-        let r = 1.0 - v.speed;
-        let g = 1.0 - v.speed / 4.0;
+        switch params.color_arrangement {
+            case 0: {
+                r = v.speed - 0.5;
+                g = 1.0 - v.speed;
+                b = 1.0 - v.speed / 4.0;
+            }
+            case 1: {
+                g = v.speed - 0.5;
+                r = 1.0 - v.speed;
+                b = 1.0 - v.speed / 4.0;
+            }
+            case 2: {
+                g = v.speed - 0.5;
+                b = 1.0 - v.speed;
+                r = 1.0 - v.speed / 4.0;
+            }
+            case 3: {
+                b = v.speed - 0.5;
+                g = 1.0 - v.speed;
+                r = 1.0 - v.speed / 4.0;
+            }
+            case 4: {
+                b = v.speed - 0.5;
+                r = 1.0 - v.speed;
+                g = 1.0 - v.speed / 4.0;
+            }
+            case 5: {
+                r = v.speed - 0.5;
+                b = 1.0 - v.speed;
+                g = 1.0 - v.speed / 4.0;
+            }
+            default: {
+                r = v.speed - 0.5;
+                g = 1.0 - v.speed;
+                b = 1.0 - v.speed / 4.0;
+            }
+        }
         return vec4f(r, g, b, 1 - v.edge_bounds_diff);
     } else {
         return params.uniform_color;
