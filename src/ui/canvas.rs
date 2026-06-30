@@ -135,14 +135,17 @@ pub fn get_render_callback_data(
 }
 
 fn effects_callback(ui: &mut egui::Ui, st: &mut AppState, rect: egui::Rect) {
+    const MAX_VIGNETTE: f32 = 0.5;
+    let (bloom_amt, vignette) = match st.gen_kind {
+        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
+        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
+    };
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
-            bloom_amt: match st.gen_kind {
-                GenKindLabel::Stereometer => st.stereo.bloom,
-                GenKindLabel::Fluidwave => st.fwave.bloom,
-            },
+            bloom_amt,
+            vignette,
         },
     ));
 }

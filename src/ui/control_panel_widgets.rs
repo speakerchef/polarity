@@ -676,9 +676,9 @@ pub fn slider_row(
             |ui| {
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
                 ui.add_space(12.0);
-                label_text(ui, label, 65.0);
+                label_text(ui, label, 70.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
-                ui.add_space(13.0);
+                ui.add_space(8.0);
                 value_box(ui, value, decimals, min..=max, 54.0);
             },
         )

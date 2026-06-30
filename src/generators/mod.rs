@@ -26,9 +26,9 @@ impl Default for Envelope {
     fn default() -> Self {
         Self {
             attack: 0.01,
-            release: 0.01,
-            range: 50.0,
-            sensitivity: 105.0,
+            release: 0.20,
+            sensitivity: 65.0,
+            range: 70.0,
             last_idx: 0,
             envelope: 0.0,
         }
@@ -49,14 +49,14 @@ impl Envelope {
         self.envelope = new_value;
     }
     pub fn envelope(&self) -> f32 {
-        let range_scale = 100.0 / self.range;
-        let sens_scale = 100.0 / self.sensitivity.max(1.0);
+        let range_scale = 100.0 / self.range.max(1.0);
+        let sens_scale = (100.0 / self.sensitivity.max(1.0)).log10().exp();
         (self
             .envelope
             .div(range_scale)
             .powf(DAMP_FACTOR)
             .min(sens_scale * MAX_RANGE)
-            + (1.0 - sens_scale * MAX_RANGE))
+            + (1.0 - sens_scale.sqrt() * MAX_RANGE))
             .max(0.0)
     }
     pub fn run_detector(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {

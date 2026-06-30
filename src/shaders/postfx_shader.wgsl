@@ -1,5 +1,8 @@
 struct Params {
+    @size(16) use_bloom: u32,
     @size(16) bloom_amt: f32,
+    @size(16) use_vignette: u32,
+    @size(16) vignette: f32,
 }
 
 @group(0) @binding(0)
@@ -41,17 +44,40 @@ fn bloom_sample(uv: vec2f, pixel_size: vec2f, radius: i32) -> vec3f {
 }
 
 const RADIUS: i32 = 10;
+fn apply_vignette(uv: vec2f) -> f32 {
+    const EDGE: f32 = 0.97;
+    var diff_x = 0.0;
+    var diff_y = 0.0;
+    let absx = uv.x;
+    let absy = uv.y;
+    let v = min(params.vignette, 0.5);
+    if absx >= 1.0 - v {
+        diff_x = smoothstep(1.0 - v, EDGE, absx);
+    }
+    else if absx <= v {
+        diff_x = smoothstep(v, 0.0, absx);
+    }
+    if absy >= 1.0 - v {
+        diff_y = smoothstep(1.0 - v, EDGE, absy);
+    }
+    else if absy <= v {
+        diff_y = smoothstep(v, 0.0, absy);
+    }
+    return max(diff_x, diff_y);
+}
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4<f32> {
     let size = vec2f(textureDimensions(tex));
-    let uv = (pos.xy) / size;
+    let uv = pos.xy / size;
     let pixel_size = 1.0 / size;
 
     let src = textureSample(tex, tex_sampler, uv).rgb;
     let bloom = bloom_sample(uv, pixel_size, RADIUS);
 
     let color = src + bloom * params.bloom_amt;
-
-    return vec4f(color, 1.0);
+    let vignette_diff = apply_vignette(uv);
+    let alpha = 1.0 - vignette_diff;
+    return vec4f(color, alpha);
 }
+

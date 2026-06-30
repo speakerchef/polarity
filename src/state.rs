@@ -15,7 +15,8 @@ use crate::{
     generators::{
         fluidwave::Fluidwave,
         rendering::{
-            BloomRenderResources, FluidRenderResources, OutputResources, StereometerRenderResources,
+            EffectsRenderResources, FluidRenderResources, OutputResources,
+            StereometerRenderResources,
         },
         stereometer::Stereometer,
     },
@@ -129,7 +130,7 @@ pub struct AppState {
     pub fwave: Fluidwave,
     pub stereometer_render_resources: Option<StereometerRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
-    pub bloom_render_resources: Option<BloomRenderResources>,
+    pub bloom_render_resources: Option<EffectsRenderResources>,
     pub output_render_resources: Option<OutputResources>,
     pub resources: egui_wgpu::CallbackResources,
 

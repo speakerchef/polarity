@@ -6,7 +6,8 @@ use wgpu::{Device, util::DeviceExt};
 use crate::{
     generators::{
         rendering::{
-            BloomRenderResources, FluidRenderResources, OutputResources, StereometerRenderResources,
+            EffectsRenderResources, FluidRenderResources, OutputResources,
+            StereometerRenderResources,
         },
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
     },
@@ -161,11 +162,12 @@ fn init_stereometer_render_resources(
 fn build_bloom_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
-) -> BloomRenderResources {
+) -> EffectsRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("bloom"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/bloom_shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/postfx_shader.wgsl").into()),
     });
+    let num_params = 4;
 
     let bloom_bind_group_layout =
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -193,7 +195,7 @@ fn build_bloom_render_resources(
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
+                        min_binding_size: NonZeroU64::new(16 * num_params),
                     },
                     count: None,
                 },
@@ -231,7 +233,6 @@ fn build_bloom_render_resources(
         multiview_mask: None,
         cache: None,
     });
-
     let bloom_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("bloom sampler"),
         mag_filter: wgpu::FilterMode::Linear,
@@ -239,13 +240,14 @@ fn build_bloom_render_resources(
         mipmap_filter: wgpu::MipmapFilterMode::Linear,
         ..Default::default()
     });
-    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0f32; 4]), // 16 bytes aligned
+        size: 16 * num_params,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
     });
 
-    BloomRenderResources {
+    EffectsRenderResources {
         pipeline,
         bind_group_layout: bloom_bind_group_layout,
         sampler: bloom_sampler,

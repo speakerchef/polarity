@@ -70,12 +70,15 @@ fn render_wgpu_frame(
         texture_view,
     );
 
+    let (bloom_amt, vignette) = match st.gen_kind {
+        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette),
+        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette),
+    };
+
     let effects_data = EffectsCallback {
         top_left: Pos2::ZERO,
-        bloom_amt: match st.gen_kind {
-            GenKindLabel::Stereometer => st.stereo.bloom,
-            GenKindLabel::Fluidwave => st.fwave.bloom,
-        },
+        bloom_amt,
+        vignette,
     };
     effects_render_pipeline(
         &effects_data,

@@ -117,6 +117,7 @@ pub struct Stereometer {
     pub mb_color: [Rgba; 3],
 
     pub bloom: f32,
+    pub vignette: f32,
     pub point_size: f32,
     pub radial_scale_factor: f32,
 
@@ -162,6 +163,7 @@ impl Default for Stereometer {
             filter_freq: 1.0,
             last_freq: 1.0,
             bloom: 3.0,
+            vignette: 0.0,
             radial_scale_factor: 0.6,
             fs_color: Rgba::new(0, 255, 0, 255),
             mb_color: [

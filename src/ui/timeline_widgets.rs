@@ -125,7 +125,7 @@ pub fn file_info(ui: &mut egui::Ui, info: &str, h: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(info.len() as f32 * 6., h), Sense::click());
     let font = FontId {
         size: plt::font_size::META,
-        family: FontFamily::Name("mono".into()),
+        family: FontFamily::Name("inter_regular".into()),
     };
     let (_, th) = get_text_size(ui, info, font.clone()).into();
     custom_text(

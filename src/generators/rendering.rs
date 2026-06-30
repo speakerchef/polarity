@@ -537,28 +537,38 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
     }
 }
 
-pub struct BloomRenderResources {
+pub struct EffectsRenderResources {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub bind_group: Option<wgpu::BindGroup>,
     pub params_buffer: wgpu::Buffer,
 }
-impl BloomRenderResources {
-    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, bloom_amt: f32) {
-        queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[bloom_amt]));
+impl EffectsRenderResources {
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, dat: &EffectsCallback) {
+        queue.write_buffer(
+            &self.params_buffer,
+            16,
+            bytemuck::cast_slice(&[dat.bloom_amt]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            48,
+            bytemuck::cast_slice(&[dat.vignette]),
+        );
     }
 }
 
 pub struct EffectsCallback {
     pub top_left: Pos2,
     pub bloom_amt: f32,
+    pub vignette: f32,
 }
 
 fn prep_meter_resources_for_effects(
     device: &wgpu::Device,
     meter_res: &StereometerRenderResources,
-    bloom_res: &BloomRenderResources,
+    efx_res: &EffectsRenderResources,
 ) -> ((u32, u32), wgpu::BindGroup) {
     let tex = meter_res.tex.as_ref().unwrap();
     let tex_size = (tex.width(), tex.height());
@@ -568,9 +578,9 @@ fn prep_meter_resources_for_effects(
         mip_level_count: None,
         ..Default::default()
     });
-    let bloom_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let efx_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("bloom"),
-        layout: &bloom_res.bind_group_layout,
+        layout: &efx_res.bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -578,15 +588,15 @@ fn prep_meter_resources_for_effects(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Sampler(&bloom_res.sampler),
+                resource: wgpu::BindingResource::Sampler(&efx_res.sampler),
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: bloom_res.params_buffer.as_entire_binding(),
+                resource: efx_res.params_buffer.as_entire_binding(),
             },
         ],
     });
-    (tex_size, bloom_bind_group)
+    (tex_size, efx_bg)
 }
 
 fn prep_output_resources_for_effects(
@@ -653,35 +663,23 @@ fn prep_output_resources_for_effects(
     dst_view
 }
 
-fn prep_bloom_resources_for_effects(
-    device: &wgpu::Device,
-    bloom_res: &mut BloomRenderResources,
-    queue: &wgpu::Queue,
-    bloom_bind_group: wgpu::BindGroup,
-    bloom_amt: f32,
-) {
-    bloom_res.bind_group = Some(bloom_bind_group);
-    bloom_res.prepare(device, queue, bloom_amt);
-}
-
 pub fn effects_render_pipeline(
     data: &EffectsCallback,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
-    // bloom_res: &BloomRenderResources,
     res: &mut egui_wgpu::CallbackResources,
 ) {
     let meter_res = res.get::<StereometerRenderResources>().unwrap();
-    let bloom_res = res.get::<BloomRenderResources>().unwrap();
-    let (tex_size, bloom_bind_group) =
-        prep_meter_resources_for_effects(device, meter_res, bloom_res);
+    let efx_res = res.get::<EffectsRenderResources>().unwrap();
+    let (tex_size, efx_bind_group) = prep_meter_resources_for_effects(device, meter_res, efx_res);
 
     let out_res = res.get_mut::<OutputResources>().unwrap();
     let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
 
-    let bloom_res = res.get_mut::<BloomRenderResources>().unwrap();
-    prep_bloom_resources_for_effects(device, bloom_res, queue, bloom_bind_group, data.bloom_amt);
+    let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
+    efx_res.bind_group = Some(efx_bind_group);
+    efx_res.prepare(device, queue, data);
 
     let mut output_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("output pass"),
@@ -700,8 +698,8 @@ pub fn effects_render_pipeline(
         multiview_mask: None,
     });
 
-    output_pass.set_pipeline(&bloom_res.pipeline);
-    output_pass.set_bind_group(0, &bloom_res.bind_group, &[]);
+    output_pass.set_pipeline(&efx_res.pipeline);
+    output_pass.set_bind_group(0, &efx_res.bind_group, &[]);
     output_pass.draw(0..6, 0..1);
 }
 impl egui_wgpu::CallbackTrait for EffectsCallback {

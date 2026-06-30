@@ -26,7 +26,6 @@ struct VertOut {
     @location(0) uv: vec2f,
     @location(1) speed: f32,
     @location(2) speaker_pos: f32,
-    @location(3) is_edge: u32,
     @location(4) edge_bounds_diff: f32,
 }
 
@@ -72,7 +71,7 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
         edge_diff = smoothstep(0.0, edge_bounds, absy);
     }
     // add vignette
-    out.edge_bounds_diff = max(smoothstep(edge_bounds - params.vignette, edge_bounds, max(absx, absy)), edge_diff);
+    out.edge_bounds_diff = edge_diff;
 
     return out;
 }

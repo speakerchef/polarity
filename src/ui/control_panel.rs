@@ -165,7 +165,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                         3,
                     );
                 }
-                slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
+                slider_row(ui, "POINT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
             GenKindLabel::Fluidwave => {
                 slider_row(ui, "SIM SPEED", &mut st.fwave.sim_speed, 1.0, 200.0, 1);
@@ -177,7 +177,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     0.05,
                     3,
                 );
-                slider_row(ui, "DOT SIZE", &mut st.fwave.point_size, 0.0005, 0.02, 4);
+                slider_row(ui, "POINT SIZE", &mut st.fwave.point_size, 0.0005, 0.02, 4);
                 if st.advanced_mode {
                     static_label(ui, "ADVANCED SETTINGS");
                     toggle_button_row(
@@ -225,10 +225,19 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     if matches!(st.gen_kind, GenKindLabel::Fluidwave) {
         section_header_submenu(ui, "REACTIVITY", &mut st.envelope_follower_open);
         if st.envelope_follower_open {
-            slider_row(ui, "ATTACK", &mut st.fwave.env.attack, 0.01, 1.0, 2);
-            slider_row(ui, "RELEASE", &mut st.fwave.env.release, 0.01, 1.0, 2);
-            slider_row(ui, "RANGE", &mut st.fwave.env.range, 0.0, 100.0, 0);
-            slider_row(ui, "AMOUNT", &mut st.fwave.env.sensitivity, 0.0, 200.0, 0);
+            if st.advanced_mode {
+                slider_row(ui, "ATTACK", &mut st.fwave.env.attack, 0.01, 1.0, 2);
+                slider_row(ui, "RELEASE", &mut st.fwave.env.release, 0.01, 1.0, 2);
+                slider_row(
+                    ui,
+                    "SENSITIVITY",
+                    &mut st.fwave.env.sensitivity,
+                    0.0,
+                    200.0,
+                    0,
+                );
+            }
+            slider_row(ui, "DEPTH", &mut st.fwave.env.range, 0.0, 100.0, 0);
         }
     }
 }
@@ -237,6 +246,7 @@ fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
     match st.gen_kind {
         GenKindLabel::Stereometer => {
             slider_row(ui, "BLOOM", &mut st.stereo.bloom, 0.0, 10.0, 1);
+            slider_row(ui, "VIGNETTE", &mut st.stereo.vignette, 0.0, 1.0, 2);
         }
         GenKindLabel::Fluidwave => {
             slider_row(ui, "BLOOM", &mut st.fwave.bloom, 0.0, 10.0, 1);
