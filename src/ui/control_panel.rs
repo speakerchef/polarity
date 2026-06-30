@@ -6,14 +6,14 @@ use crate::generators::stereometer::{
 };
 use crate::ui::canvas::NUM_PARTICLES;
 use crate::ui::{control_panel_widgets::*, palette as plt};
-use crate::{GeneratorKind, state::*};
+use crate::{GenKindLabel, state::*};
 use eframe::egui::{self, vec2};
 
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     section_header_submenu(ui, "RENDER", &mut st.render_open);
     if st.render_open {
         match st.gen_kind {
-            GeneratorKind::Stereometer => {
+            GenKindLabel::Stereometer => {
                 dropdown_row(
                     ui,
                     "MODE",
@@ -29,7 +29,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.stereo_kind_options_open,
                 );
             }
-            GeneratorKind::Fluidwave => {
+            GenKindLabel::Fluidwave => {
                 dropdown_row(
                     ui,
                     "ENERGY TRANSFER",
@@ -79,7 +79,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     section_header_submenu(ui, "COLOR", &mut st.color_open);
     if st.color_open {
         match st.gen_kind {
-            GeneratorKind::Stereometer => match st.stereo.render_mode {
+            GenKindLabel::Stereometer => match st.stereo.render_mode {
                 RenderMode::FullSpectrum => {
                     slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
                     slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
@@ -94,7 +94,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     }
                 }
             },
-            GeneratorKind::Fluidwave => {
+            GenKindLabel::Fluidwave => {
                 dropdown_row(
                     ui,
                     "COLOR MODE",
@@ -137,7 +137,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     section_header_submenu(ui, "VISUAL", &mut st.visual_open);
     if st.visual_open {
         match st.gen_kind {
-            GeneratorKind::Stereometer => {
+            GenKindLabel::Stereometer => {
                 dropdown_row(
                     ui,
                     "DENSITY",
@@ -167,7 +167,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 }
                 slider_row(ui, "DOT SIZE", &mut st.stereo.point_size, 0.0005, 0.01, 4);
             }
-            GeneratorKind::Fluidwave => {
+            GenKindLabel::Fluidwave => {
                 slider_row(ui, "SIM SPEED", &mut st.fwave.sim_speed, 1.0, 200.0, 1);
                 slider_row(
                     ui,
@@ -222,30 +222,23 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
         }
     }
 
-    if matches!(st.gen_kind, GeneratorKind::Fluidwave) {
+    if matches!(st.gen_kind, GenKindLabel::Fluidwave) {
         section_header_submenu(ui, "REACTIVITY", &mut st.envelope_follower_open);
         if st.envelope_follower_open {
-            slider_row(ui, "ATTACK", &mut st.fwave.attack, 0.01, 1.0, 2);
-            slider_row(ui, "RELEASE", &mut st.fwave.release, 0.01, 1.0, 2);
-            slider_row(ui, "RANGE", &mut st.fwave.range, 0.0, 100.0, 0);
-            slider_row(
-                ui,
-                "AMOUNT",
-                &mut st.fwave.envelope_sensitivity,
-                0.0,
-                200.0,
-                0,
-            );
+            slider_row(ui, "ATTACK", &mut st.fwave.env.attack, 0.01, 1.0, 2);
+            slider_row(ui, "RELEASE", &mut st.fwave.env.release, 0.01, 1.0, 2);
+            slider_row(ui, "RANGE", &mut st.fwave.env.range, 0.0, 100.0, 0);
+            slider_row(ui, "AMOUNT", &mut st.fwave.env.sensitivity, 0.0, 200.0, 0);
         }
     }
 }
 
 fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
     match st.gen_kind {
-        GeneratorKind::Stereometer => {
+        GenKindLabel::Stereometer => {
             slider_row(ui, "BLOOM", &mut st.stereo.bloom, 0.0, 10.0, 1);
         }
-        GeneratorKind::Fluidwave => {
+        GenKindLabel::Fluidwave => {
             slider_row(ui, "BLOOM", &mut st.fwave.bloom, 0.0, 10.0, 1);
             slider_row(ui, "VIGNETTE", &mut st.fwave.vignette, 0.0, 1.0, 2);
         }
@@ -297,7 +290,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                                     ui,
                                                     (ITEM_W, ITEM_H),
                                                     &mut st.gen_kind,
-                                                    GeneratorKind::ALL,
+                                                    GenKindLabel::ALL,
                                                     &mut st.gen_kind_options_open,
                                                 );
                                             },

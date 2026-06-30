@@ -10,6 +10,7 @@ mod wgpu_init;
 pub use app::PolarityApp;
 
 use crate::{
+    audio::audio_player::AudioPlayer,
     generators::{fluidwave::Fluidwave, stereometer::Stereometer},
     state::Labeled,
 };
@@ -17,7 +18,7 @@ use crate::{
 #[macro_export]
 macro_rules! labeled_enum {
     ($name:ident { $($variant:ident => $label:literal),+ $(,)?}, $def:ident) => {
-        #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+        #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
         pub enum $name { $($variant),+ }
         impl $name {
             pub const ALL: &'static [$name] = &[$($name::$variant),+];
@@ -80,18 +81,22 @@ impl LinearRgba {
     }
 }
 
-labeled_enum!(GeneratorKind {
-    Stereometer => "Stereometer",
-    Fluidwave => "Fluidwave"
+pub trait Generator {
+    fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>);
+}
+
+labeled_enum!(GenKindLabel{
+    Stereometer=> "Stereometer",
+    Fluidwave => "Fluidwave",
 }, Stereometer);
 
-impl Labeled for GeneratorKind {
+impl Labeled for GenKindLabel {
     fn text(self) -> &'static str {
         self.label()
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Rgba {
     pub r: f32,
     pub g: f32,

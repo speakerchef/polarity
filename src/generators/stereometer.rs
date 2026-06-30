@@ -1,5 +1,6 @@
 use crate::{
-    Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum, state::Labeled,
+    Generator, Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum,
+    state::Labeled,
 };
 use eframe::egui::Pos2;
 use std::collections::VecDeque;
@@ -146,6 +147,12 @@ pub struct Stereometer {
     pub trace_mid_buffer: VecDeque<Pos2>,
     #[serde(skip)]
     pub trace_high_buffer: VecDeque<Pos2>,
+}
+
+impl Generator for Stereometer {
+    fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
+        self.draw(pl, export_sample_idx);
+    }
 }
 
 impl Default for Stereometer {

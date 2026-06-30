@@ -3,7 +3,7 @@ use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
 
-use crate::GeneratorKind;
+use crate::GenKindLabel;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
@@ -272,7 +272,7 @@ impl FluidRenderResources {
 
 pub struct RendererCallback {
     pub canvas_size: Vec2,
-    pub gen_kind: GeneratorKind,
+    pub gen_kind: GenKindLabel,
 
     // Stereometer fields
     pub render_mode: RenderMode,
@@ -325,7 +325,7 @@ pub fn main_render_pipeline(
     let stereometer_res: &StereometerRenderResources = res.get().unwrap();
     let fluid_res: &FluidRenderResources = res.get().unwrap();
     match data.gen_kind {
-        GeneratorKind::Stereometer => {
+        GenKindLabel::Stereometer => {
             let pos = match data.render_mode {
                 RenderMode::FullSpectrum => {
                     let mut pos = data.live_pos.clone();
@@ -359,7 +359,7 @@ pub fn main_render_pipeline(
                 trace_mb_len as u32,
             );
         }
-        GeneratorKind::Fluidwave => {
+        GenKindLabel::Fluidwave => {
             fluid_res.prepare(queue, data);
             let mut compute_pass =
                 command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -394,7 +394,7 @@ pub fn main_render_pipeline(
     });
 
     match data.gen_kind {
-        GeneratorKind::Stereometer => {
+        GenKindLabel::Stereometer => {
             let n = match data.render_mode {
                 RenderMode::FullSpectrum => (data.live_pos.len() + data.trace_pos.len()) as u32,
                 RenderMode::MultiBand => {
@@ -409,7 +409,7 @@ pub fn main_render_pipeline(
             };
             stereometer_res.paint(&mut main_render_pass, n);
         }
-        GeneratorKind::Fluidwave => {
+        GenKindLabel::Fluidwave => {
             fluid_res.paint(
                 &mut main_render_pass,
                 (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4,
@@ -419,7 +419,7 @@ pub fn main_render_pipeline(
     drop(main_render_pass);
 
     // for debug printing
-    if matches!(data.gen_kind, GeneratorKind::Fluidwave) {
+    if matches!(data.gen_kind, GenKindLabel::Fluidwave) {
         command_encoder.copy_buffer_to_buffer(
             &fluid_res.debug_storage,
             0,
@@ -437,18 +437,18 @@ pub fn get_texture_view(
     res: &mut egui_wgpu::CallbackResources,
     device: &wgpu::Device,
     dim: (u32, u32),
-    gen_kind: GeneratorKind,
+    gen_kind: GenKindLabel,
 ) -> wgpu::TextureView {
     let (w, h) = (dim.0, dim.1);
     let resized = match gen_kind {
-        GeneratorKind::Stereometer => res
+        GenKindLabel::Stereometer => res
             .get_mut::<StereometerRenderResources>()
             .unwrap()
             .tex
             .as_ref()
             .map(|t| t.width() != w || t.height() != h)
             .unwrap_or(true),
-        GeneratorKind::Fluidwave => res
+        GenKindLabel::Fluidwave => res
             .get_mut::<FluidRenderResources>()
             .unwrap()
             .tex
@@ -482,7 +482,7 @@ pub fn get_texture_view(
         res.get_mut::<FluidRenderResources>().unwrap().tex = Some(main_tex);
     }
     match gen_kind {
-        GeneratorKind::Stereometer => res
+        GenKindLabel::Stereometer => res
             .get_mut::<StereometerRenderResources>()
             .unwrap()
             .tex
@@ -494,7 +494,7 @@ pub fn get_texture_view(
                 mip_level_count: Some(1),
                 ..Default::default()
             }),
-        GeneratorKind::Fluidwave => res
+        GenKindLabel::Fluidwave => res
             .get_mut::<FluidRenderResources>()
             .unwrap()
             .tex

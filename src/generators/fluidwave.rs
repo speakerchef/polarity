@@ -1,6 +1,8 @@
 use std::time::Instant;
 
-use crate::{labeled_enum, state::Labeled, ui::canvas::NUM_PARTICLES};
+use crate::{
+    Generator, generators::Envelope, labeled_enum, state::Labeled, ui::canvas::NUM_PARTICLES,
+};
 
 labeled_enum!(ColorMode {
     Uniform => "Uniform",
@@ -81,10 +83,7 @@ pub struct Fluidwave {
     pub viscosity_amount: f32,
     pub point_size: f32,
     pub uniform_color: crate::Rgba,
-    pub attack: f32,
-    pub release: f32,
-    pub range: f32,
-    pub envelope_sensitivity: f32,
+    pub env: Envelope,
     pub bloom: f32,
     pub vignette: f32,
 
@@ -93,13 +92,21 @@ pub struct Fluidwave {
     #[serde(skip)]
     pub frame_time_accumulator: f32,
     #[serde(skip)]
-    pub envelope_last_sample: f32,
-    #[serde(skip)]
     pub last_idx: usize,
 }
 
 fn instant_default() -> Instant {
     Instant::now()
+}
+
+impl Generator for Fluidwave {
+    fn prepare(
+        &mut self,
+        pl: &crate::audio::audio_player::AudioPlayer,
+        export_sample_idx: Option<usize>,
+    ) {
+        self.env.run_detector(pl, export_sample_idx);
+    }
 }
 
 impl Default for Fluidwave {
@@ -137,18 +144,11 @@ impl Default for Fluidwave {
             luminance_floor: 2.0,
             color_arrangement: ColorArrangement::default(),
             uniform_color: crate::Rgba::new(255, 25, 255, 255),
-            envelope_last_sample: 0.0,
             last_idx: 0,
-
-            attack: 0.10,
-            release: 0.01,
-            // range: 80.0,
-            range: 60.0,
-            envelope_sensitivity: 110.0,
+            env: Envelope::default(),
             energy_transfer_mode: EnergyTransferMode::ForceField,
             force_direction: ForceDirection::Out,
             gravity: 0.0,
-            // pressure_multiplier: 400.0,
             pressure_multiplier: 150.0,
             envelope_pressure_link: true,
             // target_density: (NUM_PARTICLES as f32 * 86.0).round(),

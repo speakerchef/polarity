@@ -11,10 +11,9 @@ use std::{
 };
 
 use crate::{
-    GeneratorKind, Preset,
+    GenKindLabel, Preset,
     audio::{StereoFilter, audio_player::*},
     generators::{
-        envelope_follower,
         rendering::{
             EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
             get_texture_view, main_render_pipeline, output_render_pipeline,
@@ -54,12 +53,9 @@ fn render_wgpu_frame(
         label: Some("export command encoder"),
     });
     let frac = st.cur_frame_idx as f32 / fps as f32;
-    st.export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
+    let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
-    match st.gen_kind {
-        GeneratorKind::Stereometer => st.stereo.draw(p, Some(st.export_sample_idx)),
-        GeneratorKind::Fluidwave => envelope_follower(p, st, false),
-    }
+    st.active_gen().prepare(p, Some(export_sample_idx));
 
     let render_data = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);
     let texture_view = get_texture_view(&mut st.resources, device, (w, h), st.gen_kind);
@@ -77,8 +73,8 @@ fn render_wgpu_frame(
     let effects_data = EffectsCallback {
         top_left: Pos2::ZERO,
         bloom_amt: match st.gen_kind {
-            crate::GeneratorKind::Stereometer => st.stereo.bloom,
-            crate::GeneratorKind::Fluidwave => st.fwave.bloom,
+            GenKindLabel::Stereometer => st.stereo.bloom,
+            GenKindLabel::Fluidwave => st.fwave.bloom,
         },
     };
     effects_render_pipeline(

@@ -6,8 +6,8 @@ use eframe::egui::{self, Pos2, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
-use crate::GeneratorKind;
-use crate::generators::envelope_follower;
+use crate::GenKindLabel;
+use crate::generators::DAMP_FACTOR;
 use crate::generators::fluidwave::EnergyTransferMode;
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
@@ -66,36 +66,16 @@ pub fn get_render_callback_data(
     live: bool,
     fps: usize,
 ) -> RendererCallback {
-    const MAX_RANGE: f32 = 0.95;
-    const DAMP_FACTOR: f32 = 1.25;
     const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
     let sim_speed_scale = 100.0 / st.fwave.sim_speed.max(1.0);
     let sim_speed = (sim_speed_scale * SUBSTEP_DIV) /* higher == slower */
         .clamp(MIN_SUBSTEP_DIV, 100.0)
         .round();
     let now = Instant::now();
-    let env_val = st
-        .fwave
-        .envelope_last_sample
-        .div(
-            if matches!(
-                st.fwave.energy_transfer_mode,
-                EnergyTransferMode::ForceField
-            ) {
-                100.0 / st.fwave.range
-            } else {
-                1.25
-            },
-        )
-        .powf(DAMP_FACTOR)
-        .min((100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE)
-        + ((1.0 - 100.0 / st.fwave.envelope_sensitivity) * MAX_RANGE);
 
     let frame_time = if live {
-        // now.duration_since(st.fwave.last_frame).as_secs_f32() / SUBSTEP_DIV
         now.duration_since(st.fwave.last_frame).as_secs_f32() / sim_speed
     } else {
-        // 1. / fps as f32 / SUBSTEP_DIV
         1. / fps as f32 / sim_speed
     };
     st.fwave.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
@@ -126,13 +106,13 @@ pub fn get_render_callback_data(
         energy_transfer_mode: st.fwave.energy_transfer_mode,
         force_direction: st.fwave.force_direction,
         frame_time_accumulator: st.fwave.frame_time_accumulator,
-        particle_pos: env_val,
+        particle_pos: st.fwave.env.envelope(),
         gravity: st.fwave.gravity,
 
         substeps: sim_speed,
         pressure_multiplier: st.fwave.pressure_multiplier
             - if st.fwave.envelope_pressure_link {
-                (400.0 * st.fwave.envelope_last_sample.div(1.0).powf(DAMP_FACTOR))
+                (400.0 * st.fwave.env.envelope().powf(DAMP_FACTOR))
             } else {
                 0.0
             },
@@ -160,8 +140,8 @@ fn effects_callback(ui: &mut egui::Ui, st: &mut AppState, rect: egui::Rect) {
         EffectsCallback {
             top_left: rect.left_top(),
             bloom_amt: match st.gen_kind {
-                GeneratorKind::Stereometer => st.stereo.bloom,
-                GeneratorKind::Fluidwave => st.fwave.bloom,
+                GenKindLabel::Stereometer => st.stereo.bloom,
+                GenKindLabel::Fluidwave => st.fwave.bloom,
             },
         },
     ));
@@ -191,10 +171,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         .duration_since(st.fwave.last_frame)
         .as_secs_f32()
         .max(1. / 60.);
-    match st.gen_kind {
-        GeneratorKind::Stereometer => st.stereo.draw(pl, None),
-        GeneratorKind::Fluidwave => envelope_follower(pl, st, true),
-    }
+
+    st.active_gen().prepare(pl, None);
     let rcb_dat = get_render_callback_data(st, rect.size(), true, 0);
     ui.painter()
         .add(egui_wgpu::Callback::new_paint_callback(rect, rcb_dat));

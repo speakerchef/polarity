@@ -12,15 +12,25 @@ pub fn install_fonts(ctx: &egui::Context) {
     // Load fonts
     fonts.font_data.insert(
         "inter_regular".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterRegular.ttf")).into(),
+        // FontData::from_static(include_bytes!("../../assets/fonts/inter/InterRegular.ttf")).into(),
+        FontData::from_static(include_bytes!(
+            "../../assets/fonts/inter/SF-Pro-Display-Regular.otf"
+        ))
+        .into(),
     );
     fonts.font_data.insert(
         "inter_medium".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterMedium.ttf")).into(),
+        FontData::from_static(include_bytes!(
+            "../../assets/fonts/inter/SF-Pro-Display-Medium.otf"
+        ))
+        .into(),
     );
     fonts.font_data.insert(
         "inter_bold".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/inter/InterBold.ttf")).into(),
+        FontData::from_static(include_bytes!(
+            "../../assets/fonts/inter/SF-Pro-Display-Bold.otf"
+        ))
+        .into(),
     );
     fonts.font_data.insert(
         "mono".to_owned(),

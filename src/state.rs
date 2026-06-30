@@ -11,7 +11,7 @@ use eframe::{
 use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::{
-    GeneratorKind, Preset,
+    GenKindLabel, Generator, Preset,
     generators::{
         fluidwave::Fluidwave,
         rendering::{
@@ -29,7 +29,7 @@ pub enum PlaybackMode {
     Once,
 }
 
-pub trait Labeled: Copy + PartialEq {
+pub trait Labeled: PartialEq + Copy {
     fn text(self) -> &'static str;
 }
 
@@ -124,10 +124,9 @@ pub struct AppState {
     pub audio_file_dialog: FileDialog,
     pub preset_file_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
-    pub gen_kind: GeneratorKind,
+    pub gen_kind: GenKindLabel,
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
-
     pub stereometer_render_resources: Option<StereometerRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
     pub bloom_render_resources: Option<BloomRenderResources>,
@@ -200,6 +199,15 @@ pub struct AppState {
     pub postfx_open: bool,
 }
 
+impl AppState {
+    pub fn active_gen(&mut self) -> &mut dyn Generator {
+        match self.gen_kind {
+            GenKindLabel::Stereometer => &mut self.stereo,
+            GenKindLabel::Fluidwave => &mut self.fwave,
+        }
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
@@ -226,8 +234,7 @@ impl Default for AppState {
                 .show_left_panel(true)
                 .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
-
-            gen_kind: GeneratorKind::Fluidwave,
+            gen_kind: GenKindLabel::Fluidwave,
             show_fullscreen_button: true,
             stereometer_render_resources: None,
             fluid_render_resources: None,
@@ -254,7 +261,6 @@ impl Default for AppState {
             playback_mode: PlaybackMode::default(),
             stereo,
             fwave,
-
             dark_mode: true,
             advanced_mode: false,
             fullscreen: false,
