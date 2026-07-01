@@ -16,7 +16,7 @@ use crate::{
     generators::{
         rendering::{
             EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
-            get_texture_view, main_render_pipeline, output_render_pipeline,
+            main_render_pipeline, output_render_pipeline,
         },
         stereometer::FilterMode,
     },
@@ -56,18 +56,16 @@ fn render_wgpu_frame(
     let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
     st.active_gen().prepare(p, Some(export_sample_idx));
-
-    let render_data = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);
-    let texture_view = get_texture_view(&mut st.resources, device, (w, h), st.gen_kind);
+    let dat = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);
 
     // Main pipeline
     main_render_pipeline(
-        &render_data,
+        &dat,
         device,
         queue,
         &mut command_encoder,
         &mut st.resources,
-        texture_view,
+        dim,
     );
 
     let (bloom_amt, vignette) = match st.gen_kind {

@@ -712,11 +712,11 @@ fn build_fluid_render_resources(
         tex: None,
         render_bind_group,
         compute_bind_group,
-        vertex_buffer,
         params_buffer,
         speaker_position,
         debug_storage,
         debug_staging,
+        target_format: wgpu_render_state.target_format,
     }
 }
 

@@ -10,6 +10,7 @@ use crate::GenKindLabel;
 use crate::generators::DAMP_FACTOR;
 use crate::generators::fluidwave::EnergyTransferMode;
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
+use crate::traits::Generator;
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
 use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
@@ -19,6 +20,8 @@ pub const TARGET_FPS: f32 = 30.0;
 pub const SUBSTEP_DIV: f32 = 6.0;
 pub const MIN_SUBSTEP_DIV: f32 = 3.0;
 pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
+
+const MAX_VIGNETTE: f32 = 0.5;
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     ui.ctx().request_repaint();
@@ -66,88 +69,28 @@ pub fn get_render_callback_data(
     live: bool,
     fps: usize,
 ) -> RendererCallback {
-    const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
-    let sim_speed_scale = 100.0 / st.fwave.sim_speed.max(1.0);
-    let sim_speed = (sim_speed_scale * SUBSTEP_DIV) /* higher == slower */
-        .clamp(MIN_SUBSTEP_DIV, 100.0)
-        .round();
-    let now = Instant::now();
-
-    let frame_time = if live {
-        now.duration_since(st.fwave.last_frame).as_secs_f32() / sim_speed
-    } else {
-        1. / fps as f32 / sim_speed
-    };
-    st.fwave.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
-    let dat = RendererCallback {
+    let params = st.build_callback_params(live, fps);
+    RendererCallback {
         canvas_size,
         gen_kind: st.gen_kind,
-
-        /* stereometer params */
-        render_mode: st.stereo.render_mode,
-        live_pos: std::mem::take(&mut st.stereo.live_buffer),
-        trace_pos: st.stereo.trace_buffer.clone().into(),
-
-        live_low_pos: std::mem::take(&mut st.stereo.live_low_buffer),
-        live_mid_pos: std::mem::take(&mut st.stereo.live_mid_buffer),
-        live_high_pos: std::mem::take(&mut st.stereo.live_high_buffer),
-        trace_low_pos: st.stereo.trace_low_buffer.clone().into(),
-        trace_mid_pos: st.stereo.trace_mid_buffer.clone().into(),
-        trace_high_pos: st.stereo.trace_high_buffer.clone().into(),
-
-        fs_color: st.stereo.fs_color.into(),
-        lb_color: st.stereo.mb_color[0].into(),
-        mb_color: st.stereo.mb_color[1].into(),
-        hb_color: st.stereo.mb_color[2].into(),
-
-        /* Fluidwave params */
-        uniform_color: st.fwave.uniform_color,
-        color_mode: st.fwave.color_mode,
-        energy_transfer_mode: st.fwave.energy_transfer_mode,
-        force_direction: st.fwave.force_direction,
-        frame_time_accumulator: st.fwave.frame_time_accumulator,
-        particle_pos: st.fwave.env.envelope(),
-        gravity: st.fwave.gravity,
-
-        substeps: sim_speed,
-        pressure_multiplier: st.fwave.pressure_multiplier
-            - if st.fwave.envelope_pressure_link {
-                (400.0 * st.fwave.env.envelope().powf(DAMP_FACTOR))
-            } else {
-                0.0
-            },
-
-        target_density: st.fwave.target_density,
-        smoothing_radius: st.fwave.smoothing_radius,
-        edge_damping_factor: st.fwave.edge_damping_factor,
-        near_pressure_multiplier: st.fwave.near_pressure_multiplier,
-        viscosity_amount: st.fwave.viscosity_amount,
-        point_size: st.fwave.point_size,
-        vignette: st.fwave.vignette,
-        color_arrangement: st.fwave.color_arrangement,
-        color_invert: st.fwave.color_invert,
-        luminance_mode: st.fwave.luminance_mode,
-        luminance_floor: st.fwave.luminance_floor,
-    };
-    st.fwave.last_frame = now;
-    st.fwave.frame_time_accumulator %= TARGET_DT; // leftover frametime
-    dat
+        params,
+    }
 }
 
-fn effects_callback(ui: &mut egui::Ui, st: &mut AppState, rect: egui::Rect) {
-    const MAX_VIGNETTE: f32 = 0.5;
+fn get_effects_callback_data(
+    ui: &mut egui::Ui,
+    st: &mut AppState,
+    rect: egui::Rect,
+) -> EffectsCallback {
     let (bloom_amt, vignette) = match st.gen_kind {
         GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
         GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
     };
-    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-        rect,
-        EffectsCallback {
-            top_left: rect.left_top(),
-            bloom_amt,
-            vignette,
-        },
-    ));
+    EffectsCallback {
+        top_left: rect.left_top(),
+        bloom_amt,
+        vignette,
+    }
 }
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
@@ -176,10 +119,21 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         .max(1. / 60.);
 
     st.active_gen().prepare(pl, None);
+
+    let (bloom_amt, vignette) = match st.gen_kind {
+        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
+        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
+    };
+    let efx_dat = EffectsCallback {
+        top_left: rect.left_top(),
+        bloom_amt,
+        vignette,
+    };
     let rcb_dat = get_render_callback_data(st, rect.size(), true, 0);
     ui.painter()
         .add(egui_wgpu::Callback::new_paint_callback(rect, rcb_dat));
-    effects_callback(ui, st, rect);
+    ui.painter()
+        .add(egui_wgpu::Callback::new_paint_callback(rect, efx_dat));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         OutputCallback,

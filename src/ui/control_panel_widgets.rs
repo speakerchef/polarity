@@ -7,7 +7,8 @@ use eframe::egui::{
     Stroke, StrokeKind, Vec2, pos2, vec2,
 };
 
-use crate::{state::Labeled, ui::palette as plt};
+use crate::traits::Labeled;
+use crate::ui::palette as plt;
 const TOGGLE_BUTTON_W: f32 = 34.0;
 
 fn border(dark: bool) -> Stroke {

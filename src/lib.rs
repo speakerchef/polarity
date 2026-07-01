@@ -4,16 +4,14 @@ mod app;
 mod audio;
 mod generators;
 mod state;
+mod traits;
 mod ui;
 mod wgpu_init;
 
+use crate::traits::Labeled;
 pub use app::PolarityApp;
 
-use crate::{
-    audio::audio_player::AudioPlayer,
-    generators::{fluidwave::Fluidwave, stereometer::Stereometer},
-    state::Labeled,
-};
+use crate::generators::{fluidwave::Fluidwave, stereometer::Stereometer};
 
 #[macro_export]
 macro_rules! labeled_enum {
@@ -79,10 +77,6 @@ impl LinearRgba {
         let (r, g, b, a) = (self.r * max, self.g * max, self.b * max, self.a * max);
         (r as u8, g as u8, b as u8, a as u8)
     }
-}
-
-pub trait Generator {
-    fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>);
 }
 
 labeled_enum!(GenKindLabel{

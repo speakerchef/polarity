@@ -7,6 +7,7 @@ use crate::GenKindLabel;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
+use crate::traits::Textured;
 use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
@@ -14,6 +15,133 @@ use crate::{
 };
 
 const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
+
+pub struct StereoCbParams {
+    pub render_mode: RenderMode,
+    pub live_pos: Vec<Pos2>,
+    pub trace_pos: Vec<Pos2>,
+
+    pub live_low_pos: Vec<Pos2>,
+    pub live_mid_pos: Vec<Pos2>,
+    pub live_high_pos: Vec<Pos2>,
+    pub trace_low_pos: Vec<Pos2>,
+    pub trace_mid_pos: Vec<Pos2>,
+    pub trace_high_pos: Vec<Pos2>,
+
+    pub fs_color: LinearRgba,
+    pub lb_color: LinearRgba,
+    pub mb_color: LinearRgba,
+    pub hb_color: LinearRgba,
+}
+
+pub struct FluidCbParams {
+    pub color_mode: ColorMode,
+    pub uniform_color: crate::Rgba,
+
+    pub particle_pos: f32,
+    pub frame_time_accumulator: f32,
+    pub gravity: f32,
+    pub pressure_multiplier: f32,
+    pub target_density: f32,
+    pub smoothing_radius: f32,
+    pub edge_damping_factor: f32,
+    pub near_pressure_multiplier: f32,
+    pub viscosity_amount: f32,
+    pub point_size: f32,
+    pub energy_transfer_mode: EnergyTransferMode,
+    pub force_direction: ForceDirection,
+    pub vignette: f32,
+    pub color_arrangement: ColorArrangement,
+    pub color_invert: bool,
+    pub luminance_mode: bool,
+    pub luminance_floor: f32,
+    pub substeps: f32,
+}
+
+pub enum GenCbParams {
+    Stereo(StereoCbParams),
+    Fwave(FluidCbParams),
+}
+impl GenCbParams {
+    fn prepare_resources(
+        &self,
+        res: &mut egui_wgpu::CallbackResources,
+        queue: &wgpu::Queue,
+        command_encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let stereo_res: &StereometerRenderResources = res.get().unwrap();
+        let fluid_res: &FluidRenderResources = res.get().unwrap();
+        match self {
+            GenCbParams::Stereo(stereo) => {
+                stereo_res.prepare(queue, stereo);
+            }
+            GenCbParams::Fwave(fwave) => {
+                fluid_res.prepare(queue, fwave);
+                let mut compute_pass =
+                    command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("fluid compute pass"),
+                        timestamp_writes: None,
+                    });
+
+                // maintain sim behavior across diff fps
+                let mut accum = fwave.frame_time_accumulator;
+                while accum >= TARGET_DT {
+                    fluid_res.compute(&mut compute_pass);
+                    accum -= TARGET_DT;
+                }
+            }
+        }
+    }
+
+    fn paint(
+        &self,
+        res: &mut egui_wgpu::CallbackResources,
+        command_encoder: &mut wgpu::CommandEncoder,
+        target_texture_view: wgpu::TextureView,
+    ) {
+        let stereometer_res: &StereometerRenderResources = res.get().unwrap();
+        let fluid_res: &FluidRenderResources = res.get().unwrap();
+        let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("main pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &target_texture_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(CANVAS_BG),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        match self {
+            GenCbParams::Stereo(stereo) => {
+                let n = match stereo.render_mode {
+                    RenderMode::FullSpectrum => {
+                        (stereo.live_pos.len() + stereo.trace_pos.len()) as u32
+                    }
+                    RenderMode::MultiBand => {
+                        let live = stereo.live_low_pos.len()
+                            + stereo.live_mid_pos.len()
+                            + stereo.live_high_pos.len();
+                        let trace = stereo.trace_low_pos.len()
+                            + stereo.trace_mid_pos.len()
+                            + stereo.trace_high_pos.len();
+                        (live + trace) as u32
+                    }
+                };
+                stereometer_res.paint(&mut pass, n);
+            }
+            GenCbParams::Fwave(_) => {
+                fluid_res.paint(&mut pass, (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4);
+            }
+        }
+    }
+}
+
 pub struct StereometerRenderResources {
     pub target_format: wgpu::TextureFormat,
     pub pipeline: wgpu::RenderPipeline,
@@ -23,24 +151,40 @@ pub struct StereometerRenderResources {
     pub alpha_buffer: wgpu::Buffer,
     pub tex: Option<wgpu::Texture>,
 }
+impl Textured for StereometerRenderResources {
+    fn texture(&self) -> Option<&wgpu::Texture> {
+        self.tex.as_ref()
+    }
+    fn target_format(&self) -> wgpu::TextureFormat {
+        self.target_format
+    }
+    fn set_texture(&mut self, tex: wgpu::Texture) {
+        self.tex = Some(tex);
+    }
+}
 #[allow(clippy::too_many_arguments)]
 impl StereometerRenderResources {
-    fn prepare(
-        &self,
-        _device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pos: Vec<Pos2>,
-        fs_color: LinearRgba,
-        lb_color: LinearRgba,
-        mb_color: LinearRgba,
-        hb_color: LinearRgba,
-        is_mb: bool,
-        live_len: u32,
-        trace_len: u32,
-        live_mb_len: u32,
-        trace_mb_len: u32,
-    ) {
-        let alphas: Vec<f32> = if is_mb {
+    fn prepare(&self, queue: &wgpu::Queue, stereo: &StereoCbParams) {
+        let pos = match stereo.render_mode {
+            RenderMode::FullSpectrum => {
+                let mut pos = stereo.live_pos.clone();
+                pos.extend(&stereo.trace_pos);
+                pos
+            }
+            RenderMode::MultiBand => {
+                let mut pos = stereo.live_low_pos.clone();
+                pos.extend(&stereo.live_mid_pos);
+                pos.extend(&stereo.live_high_pos);
+                pos.extend(&stereo.trace_low_pos);
+                pos.extend(&stereo.trace_mid_pos);
+                pos.extend(&stereo.trace_high_pos);
+                pos
+            }
+        };
+        let (live_len, trace_len) = (stereo.live_pos.len(), stereo.trace_pos.len());
+        let (live_mb_len, trace_mb_len) = (stereo.live_low_pos.len(), stereo.trace_low_pos.len());
+
+        let alphas: Vec<f32> = if matches!(stereo.render_mode, RenderMode::MultiBand) {
             (0..trace_mb_len)
                 .map(|i| {
                     (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
@@ -53,6 +197,13 @@ impl StereometerRenderResources {
                 })
                 .collect()
         };
+        queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&pos));
+
+        let fs_color = stereo.fs_color;
+        let lb_color = stereo.lb_color;
+        let mb_color = stereo.mb_color;
+        let hb_color = stereo.hb_color;
 
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[live_len]));
         queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[trace_len]));
@@ -86,10 +237,11 @@ impl StereometerRenderResources {
             112,
             bytemuck::cast_slice(&[hb_color.r, hb_color.g, hb_color.b, hb_color.a]),
         );
-        queue.write_buffer(&self.params_buffer, 128, &[is_mb as u8, 0, 0, 0]);
-
-        queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
-        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&pos));
+        queue.write_buffer(
+            &self.params_buffer,
+            128,
+            bytemuck::cast_slice(&[matches!(stereo.render_mode, RenderMode::MultiBand) as u32]),
+        );
     }
 
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
@@ -128,17 +280,28 @@ pub struct FluidRenderResources {
     pub viscosity_pipeline: wgpu::ComputePipeline,
     pub render_bind_group: wgpu::BindGroup,
     pub compute_bind_group: wgpu::BindGroup,
-    pub vertex_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
     pub speaker_position: wgpu::Buffer,
     pub debug_storage: wgpu::Buffer,
     pub debug_staging: wgpu::Buffer,
     pub tex: Option<wgpu::Texture>,
+    pub target_format: wgpu::TextureFormat,
+}
+impl Textured for FluidRenderResources {
+    fn texture(&self) -> Option<&wgpu::Texture> {
+        self.tex.as_ref()
+    }
+    fn target_format(&self) -> wgpu::TextureFormat {
+        self.target_format
+    }
+    fn set_texture(&mut self, tex: wgpu::Texture) {
+        self.tex = Some(tex);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 impl FluidRenderResources {
-    fn prepare(&self, queue: &wgpu::Queue, dat: &RendererCallback) {
+    fn prepare(&self, queue: &wgpu::Queue, dat: &FluidCbParams) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[TARGET_DT]));
         queue.write_buffer(
             &self.params_buffer,
@@ -273,46 +436,7 @@ impl FluidRenderResources {
 pub struct RendererCallback {
     pub canvas_size: Vec2,
     pub gen_kind: GenKindLabel,
-
-    // Stereometer fields
-    pub render_mode: RenderMode,
-    pub live_pos: Vec<Pos2>,
-    pub trace_pos: Vec<Pos2>,
-
-    pub live_low_pos: Vec<Pos2>,
-    pub live_mid_pos: Vec<Pos2>,
-    pub live_high_pos: Vec<Pos2>,
-    pub trace_low_pos: Vec<Pos2>,
-    pub trace_mid_pos: Vec<Pos2>,
-    pub trace_high_pos: Vec<Pos2>,
-
-    pub fs_color: LinearRgba,
-    pub lb_color: LinearRgba,
-    pub mb_color: LinearRgba,
-    pub hb_color: LinearRgba,
-
-    // Fluidwave fields
-    pub color_mode: ColorMode,
-    pub uniform_color: crate::Rgba,
-
-    pub particle_pos: f32,
-    pub frame_time_accumulator: f32,
-    pub gravity: f32,
-    pub pressure_multiplier: f32,
-    pub target_density: f32,
-    pub smoothing_radius: f32,
-    pub edge_damping_factor: f32,
-    pub near_pressure_multiplier: f32,
-    pub viscosity_amount: f32,
-    pub point_size: f32,
-    pub energy_transfer_mode: EnergyTransferMode,
-    pub force_direction: ForceDirection,
-    pub vignette: f32,
-    pub color_arrangement: ColorArrangement,
-    pub color_invert: bool,
-    pub luminance_mode: bool,
-    pub luminance_floor: f32,
-    pub substeps: f32,
+    pub params: GenCbParams,
 }
 pub fn main_render_pipeline(
     data: &RendererCallback,
@@ -320,142 +444,34 @@ pub fn main_render_pipeline(
     queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
     res: &mut egui_wgpu::CallbackResources,
-    target_texture_view: wgpu::TextureView,
+    dim: (u32, u32),
 ) {
-    let stereometer_res: &StereometerRenderResources = res.get().unwrap();
-    let fluid_res: &FluidRenderResources = res.get().unwrap();
-    match data.gen_kind {
-        GenKindLabel::Stereometer => {
-            let pos = match data.render_mode {
-                RenderMode::FullSpectrum => {
-                    let mut pos = data.live_pos.clone();
-                    pos.extend(&data.trace_pos);
-                    pos
-                }
-                RenderMode::MultiBand => {
-                    let mut pos = data.live_low_pos.clone();
-                    pos.extend(&data.live_mid_pos);
-                    pos.extend(&data.live_high_pos);
-                    pos.extend(&data.trace_low_pos);
-                    pos.extend(&data.trace_mid_pos);
-                    pos.extend(&data.trace_high_pos);
-                    pos
-                }
-            };
-            let (live_len, trace_len) = (data.live_pos.len(), data.trace_pos.len());
-            let (live_mb_len, trace_mb_len) = (data.live_low_pos.len(), data.trace_low_pos.len());
-            stereometer_res.prepare(
-                device,
-                queue,
-                pos,
-                data.fs_color,
-                data.lb_color,
-                data.mb_color,
-                data.hb_color,
-                matches!(data.render_mode, RenderMode::MultiBand),
-                live_len as u32,
-                trace_len as u32,
-                live_mb_len as u32,
-                trace_mb_len as u32,
-            );
-        }
-        GenKindLabel::Fluidwave => {
-            fluid_res.prepare(queue, data);
-            let mut compute_pass =
-                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("fluid compute pass"),
-                    timestamp_writes: None,
-                });
-
-            // maintain sim behavior across diff fps
-            let mut accum = data.frame_time_accumulator;
-            while accum >= TARGET_DT {
-                fluid_res.compute(&mut compute_pass);
-                accum -= TARGET_DT;
-            }
-        }
-    }
-
-    let mut main_render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("main pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &target_texture_view,
-            depth_slice: None,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(CANVAS_BG),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-        multiview_mask: None,
-    });
-
-    match data.gen_kind {
-        GenKindLabel::Stereometer => {
-            let n = match data.render_mode {
-                RenderMode::FullSpectrum => (data.live_pos.len() + data.trace_pos.len()) as u32,
-                RenderMode::MultiBand => {
-                    let live = data.live_low_pos.len()
-                        + data.live_mid_pos.len()
-                        + data.live_high_pos.len();
-                    let trace = data.trace_low_pos.len()
-                        + data.trace_mid_pos.len()
-                        + data.trace_high_pos.len();
-                    (live + trace) as u32
-                }
-            };
-            stereometer_res.paint(&mut main_render_pass, n);
-        }
-        GenKindLabel::Fluidwave => {
-            fluid_res.paint(
-                &mut main_render_pass,
-                (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4,
-            );
-        }
-    }
-    drop(main_render_pass);
-
-    // for debug printing
-    if matches!(data.gen_kind, GenKindLabel::Fluidwave) {
-        command_encoder.copy_buffer_to_buffer(
-            &fluid_res.debug_storage,
-            0,
-            &fluid_res.debug_staging,
-            0,
-            64,
-        );
-        let fut = read_debug_buffer(fluid_res.debug_staging.slice(..), device);
-        fut.block_on();
-        fluid_res.debug_staging.unmap();
-    }
+    data.params.prepare_resources(res, queue, command_encoder);
+    let view = match data.gen_kind {
+        GenKindLabel::Stereometer => get_texture_view(
+            res.get_mut::<StereometerRenderResources>().unwrap(),
+            device,
+            dim,
+        ),
+        GenKindLabel::Fluidwave => get_texture_view(
+            res.get_mut::<StereometerRenderResources>().unwrap(),
+            device,
+            dim,
+        ),
+    };
+    data.params.paint(res, command_encoder, view);
 }
-
-pub fn get_texture_view(
-    res: &mut egui_wgpu::CallbackResources,
+fn get_texture_view<T: Textured>(
+    res: &mut T,
     device: &wgpu::Device,
     dim: (u32, u32),
-    gen_kind: GenKindLabel,
 ) -> wgpu::TextureView {
     let (w, h) = (dim.0, dim.1);
-    let resized = match gen_kind {
-        GenKindLabel::Stereometer => res
-            .get_mut::<StereometerRenderResources>()
-            .unwrap()
-            .tex
-            .as_ref()
-            .map(|t| t.width() != w || t.height() != h)
-            .unwrap_or(true),
-        GenKindLabel::Fluidwave => res
-            .get_mut::<FluidRenderResources>()
-            .unwrap()
-            .tex
-            .as_ref()
-            .map(|t| t.width() != w || t.height() != h)
-            .unwrap_or(true),
-    };
+    let resized = res
+        .texture()
+        .map(|t| t.width() != w || t.height() != h)
+        .unwrap_or(true);
+
     if resized {
         // Now we create the texture
         let main_tex = device.create_texture(&wgpu::TextureDescriptor {
@@ -468,45 +484,23 @@ pub fn get_texture_view(
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: res
-                .get_mut::<StereometerRenderResources>()
-                .unwrap()
-                .target_format,
+            format: res.target_format(),
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        res.get_mut::<StereometerRenderResources>().unwrap().tex = Some(main_tex.clone());
-        res.get_mut::<FluidRenderResources>().unwrap().tex = Some(main_tex);
+        res.set_texture(main_tex);
     }
-    match gen_kind {
-        GenKindLabel::Stereometer => res
-            .get_mut::<StereometerRenderResources>()
-            .unwrap()
-            .tex
-            .as_ref()
-            .unwrap()
-            .create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                ..Default::default()
-            }),
-        GenKindLabel::Fluidwave => res
-            .get_mut::<FluidRenderResources>()
-            .unwrap()
-            .tex
-            .as_ref()
-            .unwrap()
-            .create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                ..Default::default()
-            }),
-    }
+    res.texture()
+        .unwrap()
+        .create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            base_mip_level: 0,
+            mip_level_count: Some(1),
+            ..Default::default()
+        })
 }
 
 impl egui_wgpu::CallbackTrait for RendererCallback {
@@ -523,8 +517,7 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             (self.canvas_size.x * ppp) as u32,
             (self.canvas_size.y * ppp) as u32,
         );
-        let tex_view = get_texture_view(resources, device, (w, h), self.gen_kind);
-        main_render_pipeline(self, device, queue, command_encoder, resources, tex_view);
+        main_render_pipeline(self, device, queue, command_encoder, resources, (w, h));
         Vec::new()
     }
 

@@ -1,7 +1,10 @@
 use std::time::Instant;
 
 use crate::{
-    Generator, generators::Envelope, labeled_enum, state::Labeled, ui::canvas::NUM_PARTICLES,
+    generators::Envelope,
+    labeled_enum,
+    traits::{Generator, Labeled},
+    ui::canvas::NUM_PARTICLES,
 };
 
 labeled_enum!(ColorMode {

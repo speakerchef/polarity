@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::traits::{Generator, Labeled};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -11,16 +12,18 @@ use eframe::{
 use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::{
-    GenKindLabel, Generator, Preset,
+    GenKindLabel, Preset,
     generators::{
+        DAMP_FACTOR,
         fluidwave::Fluidwave,
         rendering::{
-            EffectsRenderResources, FluidRenderResources, OutputResources,
-            StereometerRenderResources,
+            EffectsRenderResources, FluidCbParams, FluidRenderResources, GenCbParams,
+            OutputResources, StereoCbParams, StereometerRenderResources,
         },
         stereometer::Stereometer,
     },
     labeled_enum,
+    ui::canvas::{MIN_SUBSTEP_DIV, SUBSTEP_DIV, TARGET_DT},
 };
 
 #[derive(Default)]
@@ -28,10 +31,6 @@ pub enum PlaybackMode {
     #[default]
     Loop,
     Once,
-}
-
-pub trait Labeled: PartialEq + Copy {
-    fn text(self) -> &'static str;
 }
 
 labeled_enum!(
@@ -205,6 +204,79 @@ impl AppState {
         match self.gen_kind {
             GenKindLabel::Stereometer => &mut self.stereo,
             GenKindLabel::Fluidwave => &mut self.fwave,
+        }
+    }
+
+    pub fn build_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
+        match self.gen_kind {
+            GenKindLabel::Stereometer => {
+                let s = &mut self.stereo;
+                GenCbParams::Stereo(StereoCbParams {
+                    render_mode: s.render_mode,
+                    live_pos: std::mem::take(&mut s.live_buffer),
+                    trace_pos: s.trace_buffer.iter().copied().collect(),
+
+                    live_low_pos: std::mem::take(&mut s.live_low_buffer),
+                    live_mid_pos: std::mem::take(&mut s.live_mid_buffer),
+                    live_high_pos: std::mem::take(&mut s.live_high_buffer),
+                    trace_low_pos: s.trace_low_buffer.iter().copied().collect(),
+                    trace_mid_pos: s.trace_mid_buffer.iter().copied().collect(),
+                    trace_high_pos: s.trace_high_buffer.iter().copied().collect(),
+
+                    fs_color: s.fs_color.into(),
+                    lb_color: s.mb_color[0].into(),
+                    mb_color: s.mb_color[1].into(),
+                    hb_color: s.mb_color[2].into(),
+                })
+            }
+            GenKindLabel::Fluidwave => {
+                const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
+                let f = &mut self.fwave;
+                let pressure_multiplier = f.pressure_multiplier
+                    - if f.envelope_pressure_link {
+                        400.0 * f.env.envelope().powf(DAMP_FACTOR)
+                    } else {
+                        0.0
+                    };
+
+                let sim_speed_scale = 100.0 / f.sim_speed.max(1.0);
+                let sim_speed = (sim_speed_scale * SUBSTEP_DIV) /* higher == slower */
+                    .clamp(MIN_SUBSTEP_DIV, 100.0)
+                    .round();
+
+                let now = Instant::now();
+                let frame_time = if live {
+                    now.duration_since(f.last_frame).as_secs_f32() / sim_speed
+                } else {
+                    1. / fps as f32 / sim_speed
+                };
+                f.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
+                let params = GenCbParams::Fwave(FluidCbParams {
+                    color_mode: f.color_mode,
+                    uniform_color: f.uniform_color,
+                    particle_pos: f.env.envelope(),
+                    frame_time_accumulator: f.frame_time_accumulator,
+                    gravity: f.gravity,
+                    pressure_multiplier,
+                    target_density: f.target_density,
+                    smoothing_radius: f.smoothing_radius,
+                    edge_damping_factor: f.edge_damping_factor,
+                    near_pressure_multiplier: f.near_pressure_multiplier,
+                    viscosity_amount: f.viscosity_amount,
+                    point_size: f.point_size,
+                    energy_transfer_mode: f.energy_transfer_mode,
+                    force_direction: f.force_direction,
+                    vignette: f.vignette,
+                    color_arrangement: f.color_arrangement,
+                    color_invert: f.color_invert,
+                    luminance_mode: f.luminance_mode,
+                    luminance_floor: f.luminance_floor,
+                    substeps: sim_speed,
+                });
+                f.last_frame = now;
+                f.frame_time_accumulator %= TARGET_DT; // leftover frametime
+                params
+            }
         }
     }
 }
