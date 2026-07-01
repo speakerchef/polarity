@@ -15,16 +15,13 @@ use crate::{
     audio::{StereoFilter, audio_player::*},
     generators::{
         rendering::{
-            EffectsCallback, OutputResources, effects_render_pipeline, get_gpu_frame,
-            main_render_pipeline, output_render_pipeline,
+            EffectsCallback, OutputResources, RendererCallback, get_gpu_frame,
+            run_effects_render_pipeline, run_output_render_pipeline, run_source_render_pipeline,
         },
         stereometer::FilterMode,
     },
     state::PlaybackMode,
-    ui::{
-        app_widgets::{main_window, menu_bar},
-        canvas::get_render_callback_data,
-    },
+    ui::app_widgets::{main_window, menu_bar},
     wgpu_init::setup_wgpu,
 };
 use eframe::egui;
@@ -56,11 +53,15 @@ fn render_wgpu_frame(
     let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
     st.active_gen().prepare(p, Some(export_sample_idx));
-    let dat = get_render_callback_data(st, vec2(w as f32, h as f32), false, fps);
+
+    let render_data = RendererCallback {
+        canvas_size: vec2(w as f32, h as f32),
+        params: st.build_callback_params(false, fps),
+    };
 
     // Main pipeline
-    main_render_pipeline(
-        &dat,
+    run_source_render_pipeline(
+        &render_data,
         device,
         queue,
         &mut command_encoder,
@@ -78,7 +79,7 @@ fn render_wgpu_frame(
         bloom_amt,
         vignette,
     };
-    effects_render_pipeline(
+    run_effects_render_pipeline(
         &effects_data,
         device,
         queue,
@@ -88,7 +89,7 @@ fn render_wgpu_frame(
 
     // Output
     let out_res = st.resources.get::<OutputResources>().unwrap();
-    output_render_pipeline(&mut command_encoder, out_res);
+    run_output_render_pipeline(&mut command_encoder, out_res);
     queue.submit(Some(command_encoder.finish()));
     get_gpu_frame(device, out_res)
 }

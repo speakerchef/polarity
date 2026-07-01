@@ -40,10 +40,6 @@
 - [x] Simple and Advanced mode toggle
 - [x] Particle / Fluid simulation motion generator
   - [x] No-gravity based fluid Canvas
-  - [ ] Multiple force generator positions
-    - [x] Centered
-    - [ ] From sides
-    - [ ] Corners
   - [x] Envelope follower based force generator
   - [x] Tunable envelope controls
   - [x] Visualize waves through particle compression and expansion
@@ -60,8 +56,7 @@
   - [ ] Muxable and state managed (multiple params per LFO or multiple LFOs per param)
   - [ ] Rate, depth controls
   - [ ] Include audio envelope in advanced mode (basically use audio to control other params)
-    - [ ] Tunable ADSR.
-    - [ ] Audio envelope muxable to feed different params
+  - [ ] Tunable ADSR.
 - [ ] FPS counter
 - [ ] Project save/load ability with custom format:
   - [ ] container that also stores the audio file path (or audio copied into project container)

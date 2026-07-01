@@ -6,7 +6,7 @@ use wgpu::{Device, util::DeviceExt};
 use crate::{
     generators::{
         rendering::{
-            EffectsRenderResources, FluidRenderResources, OutputResources,
+            EffectsRenderResources, FluidRenderResources, OutputResources, SrcRenderResources,
             StereometerRenderResources,
         },
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
@@ -15,6 +15,22 @@ use crate::{
     ui::canvas::{NUM_PARTICLES, generate_particle_grid},
 };
 
+fn init_src_render_resources(st: &mut AppState, wgpu_render_state: &egui_wgpu::RenderState) {
+    let live_res = SrcRenderResources {
+        target_format: wgpu_render_state.target_format,
+        tex: None,
+    };
+    let export_res = SrcRenderResources {
+        target_format: wgpu_render_state.target_format,
+        tex: None,
+    };
+    st.resources.insert(export_res);
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(live_res);
+}
 fn build_stereometer_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
@@ -133,13 +149,11 @@ fn build_stereometer_render_resources(
         ],
     });
     StereometerRenderResources {
-        target_format: wgpu_render_state.target_format,
         pipeline,
         bind_group: stereometer_bind_group,
         vertex_buffer,
         params_buffer,
         alpha_buffer,
-        tex: None,
     }
 }
 
@@ -709,14 +723,12 @@ fn build_fluid_render_resources(
         pressure_pipeline: pressure,
         viscosity_pipeline: viscosity,
         positions_pipeline: positions,
-        tex: None,
         render_bind_group,
         compute_bind_group,
         params_buffer,
         speaker_position,
         debug_storage,
         debug_staging,
-        target_format: wgpu_render_state.target_format,
     }
 }
 
@@ -728,7 +740,6 @@ fn init_output_render_resources(
     let live_res = build_output_render_resources(device, wgpu_render_state);
     let export_res = build_output_render_resources(device, wgpu_render_state);
     st.resources.insert(export_res);
-    // st.output_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -758,6 +769,7 @@ pub fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
         .expect("not using wgpu backend");
     let device = &wgpu_render_state.device;
 
+    init_src_render_resources(st, wgpu_render_state);
     init_stereometer_render_resources(st, device, wgpu_render_state);
     init_bloom_render_resources(st, device, wgpu_render_state);
     init_output_render_resources(st, device, wgpu_render_state);

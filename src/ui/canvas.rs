@@ -63,20 +63,6 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     pos
 }
 
-pub fn get_render_callback_data(
-    st: &mut AppState,
-    canvas_size: Vec2,
-    live: bool,
-    fps: usize,
-) -> RendererCallback {
-    let params = st.build_callback_params(live, fps);
-    RendererCallback {
-        canvas_size,
-        gen_kind: st.gen_kind,
-        params,
-    }
-}
-
 fn get_effects_callback_data(
     ui: &mut egui::Ui,
     st: &mut AppState,
@@ -124,16 +110,22 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
         GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
     };
-    let efx_dat = EffectsCallback {
-        top_left: rect.left_top(),
-        bloom_amt,
-        vignette,
-    };
-    let rcb_dat = get_render_callback_data(st, rect.size(), true, 0);
-    ui.painter()
-        .add(egui_wgpu::Callback::new_paint_callback(rect, rcb_dat));
-    ui.painter()
-        .add(egui_wgpu::Callback::new_paint_callback(rect, efx_dat));
+    let params = st.build_callback_params(true, 0);
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        RendererCallback {
+            canvas_size,
+            params,
+        },
+    ));
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        EffectsCallback {
+            top_left: rect.left_top(),
+            bloom_amt,
+            vignette,
+        },
+    ));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         OutputCallback,

@@ -3,11 +3,9 @@ use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
 
-use crate::GenKindLabel;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
-use crate::traits::Textured;
 use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
@@ -99,10 +97,10 @@ impl GenCbParams {
         command_encoder: &mut wgpu::CommandEncoder,
         target_texture_view: wgpu::TextureView,
     ) {
-        let stereometer_res: &StereometerRenderResources = res.get().unwrap();
+        let stereo_res: &StereometerRenderResources = res.get().unwrap();
         let fluid_res: &FluidRenderResources = res.get().unwrap();
         let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("main pass"),
+            label: Some("src pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &target_texture_view,
                 depth_slice: None,
@@ -133,7 +131,7 @@ impl GenCbParams {
                         (live + trace) as u32
                     }
                 };
-                stereometer_res.paint(&mut pass, n);
+                stereo_res.paint(&mut pass, n);
             }
             GenCbParams::Fwave(_) => {
                 fluid_res.paint(&mut pass, (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4);
@@ -142,25 +140,25 @@ impl GenCbParams {
     }
 }
 
-pub struct StereometerRenderResources {
+pub struct SrcRenderResources {
     pub target_format: wgpu::TextureFormat,
+    pub tex: Option<wgpu::Texture>,
+}
+impl SrcRenderResources {
+    fn texture(&self) -> Option<&wgpu::Texture> {
+        self.tex.as_ref()
+    }
+    fn set_texture(&mut self, tex: wgpu::Texture) {
+        self.tex = Some(tex);
+    }
+}
+
+pub struct StereometerRenderResources {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
     pub alpha_buffer: wgpu::Buffer,
-    pub tex: Option<wgpu::Texture>,
-}
-impl Textured for StereometerRenderResources {
-    fn texture(&self) -> Option<&wgpu::Texture> {
-        self.tex.as_ref()
-    }
-    fn target_format(&self) -> wgpu::TextureFormat {
-        self.target_format
-    }
-    fn set_texture(&mut self, tex: wgpu::Texture) {
-        self.tex = Some(tex);
-    }
 }
 #[allow(clippy::too_many_arguments)]
 impl StereometerRenderResources {
@@ -261,6 +259,9 @@ pub struct OutputResources {
     pub sampler: wgpu::Sampler,
 }
 impl OutputResources {
+    fn texture(&self) -> Option<&wgpu::Texture> {
+        self.tex.as_ref()
+    }
     fn prepare(&self, queue: &wgpu::Queue, top_left: Pos2) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
     }
@@ -284,19 +285,6 @@ pub struct FluidRenderResources {
     pub speaker_position: wgpu::Buffer,
     pub debug_storage: wgpu::Buffer,
     pub debug_staging: wgpu::Buffer,
-    pub tex: Option<wgpu::Texture>,
-    pub target_format: wgpu::TextureFormat,
-}
-impl Textured for FluidRenderResources {
-    fn texture(&self) -> Option<&wgpu::Texture> {
-        self.tex.as_ref()
-    }
-    fn target_format(&self) -> wgpu::TextureFormat {
-        self.target_format
-    }
-    fn set_texture(&mut self, tex: wgpu::Texture) {
-        self.tex = Some(tex);
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -435,10 +423,9 @@ impl FluidRenderResources {
 
 pub struct RendererCallback {
     pub canvas_size: Vec2,
-    pub gen_kind: GenKindLabel,
     pub params: GenCbParams,
 }
-pub fn main_render_pipeline(
+pub fn run_source_render_pipeline(
     data: &RendererCallback,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -447,35 +434,25 @@ pub fn main_render_pipeline(
     dim: (u32, u32),
 ) {
     data.params.prepare_resources(res, queue, command_encoder);
-    let view = match data.gen_kind {
-        GenKindLabel::Stereometer => get_texture_view(
-            res.get_mut::<StereometerRenderResources>().unwrap(),
-            device,
-            dim,
-        ),
-        GenKindLabel::Fluidwave => get_texture_view(
-            res.get_mut::<StereometerRenderResources>().unwrap(),
-            device,
-            dim,
-        ),
-    };
-    data.params.paint(res, command_encoder, view);
+    let src_view = get_src_texture_view(res, device, dim);
+    data.params.paint(res, command_encoder, src_view);
 }
-fn get_texture_view<T: Textured>(
-    res: &mut T,
+
+fn get_src_texture_view(
+    res: &mut egui_wgpu::CallbackResources,
     device: &wgpu::Device,
     dim: (u32, u32),
 ) -> wgpu::TextureView {
+    let res: &mut SrcRenderResources = res.get_mut().unwrap();
     let (w, h) = (dim.0, dim.1);
     let resized = res
         .texture()
         .map(|t| t.width() != w || t.height() != h)
         .unwrap_or(true);
-
     if resized {
         // Now we create the texture
         let main_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("main texture"),
+            label: Some("src scene texture"),
             size: wgpu::Extent3d {
                 width: w,
                 height: h,
@@ -484,7 +461,7 @@ fn get_texture_view<T: Textured>(
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: res.target_format(),
+            format: res.target_format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_DST
@@ -517,7 +494,7 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             (self.canvas_size.x * ppp) as u32,
             (self.canvas_size.y * ppp) as u32,
         );
-        main_render_pipeline(self, device, queue, command_encoder, resources, (w, h));
+        run_source_render_pipeline(self, device, queue, command_encoder, resources, (w, h));
         Vec::new()
     }
 
@@ -558,12 +535,13 @@ pub struct EffectsCallback {
     pub vignette: f32,
 }
 
-fn prep_meter_resources_for_effects(
+fn prep_source_resources_for_effects(
+    res: &mut egui_wgpu::CallbackResources,
     device: &wgpu::Device,
-    meter_res: &StereometerRenderResources,
-    efx_res: &EffectsRenderResources,
 ) -> ((u32, u32), wgpu::BindGroup) {
-    let tex = meter_res.tex.as_ref().unwrap();
+    let src_res = res.get::<SrcRenderResources>().unwrap();
+    let efx_res = res.get::<EffectsRenderResources>().unwrap();
+    let tex = src_res.texture().unwrap();
     let tex_size = (tex.width(), tex.height());
     let src_view = tex.create_view(&wgpu::TextureViewDescriptor {
         dimension: Some(wgpu::TextureViewDimension::D2),
@@ -572,7 +550,7 @@ fn prep_meter_resources_for_effects(
         ..Default::default()
     });
     let efx_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("bloom"),
+        label: Some("efx"),
         layout: &efx_res.bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -593,10 +571,11 @@ fn prep_meter_resources_for_effects(
 }
 
 fn prep_output_resources_for_effects(
+    res: &mut egui_wgpu::CallbackResources,
     device: &wgpu::Device,
     tex_size: (u32, u32),
-    out_res: &mut OutputResources,
 ) -> wgpu::TextureView {
+    let out_res = res.get_mut::<OutputResources>().unwrap();
     let (w, h) = (tex_size.0, tex_size.1);
     let resized = out_res
         .tex
@@ -625,8 +604,7 @@ fn prep_output_resources_for_effects(
     }
 
     let dst_view = out_res
-        .tex
-        .as_ref()
+        .texture()
         .unwrap()
         .create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2),
@@ -656,19 +634,15 @@ fn prep_output_resources_for_effects(
     dst_view
 }
 
-pub fn effects_render_pipeline(
+pub fn run_effects_render_pipeline(
     data: &EffectsCallback,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
     res: &mut egui_wgpu::CallbackResources,
 ) {
-    let meter_res = res.get::<StereometerRenderResources>().unwrap();
-    let efx_res = res.get::<EffectsRenderResources>().unwrap();
-    let (tex_size, efx_bind_group) = prep_meter_resources_for_effects(device, meter_res, efx_res);
-
-    let out_res = res.get_mut::<OutputResources>().unwrap();
-    let dst_view = prep_output_resources_for_effects(device, tex_size, out_res);
+    let (tex_size, efx_bind_group) = prep_source_resources_for_effects(res, device);
+    let dst_view = prep_output_resources_for_effects(res, device, tex_size);
 
     let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
     efx_res.bind_group = Some(efx_bind_group);
@@ -704,7 +678,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        effects_render_pipeline(self, device, queue, command_encoder, resources);
+        run_effects_render_pipeline(self, device, queue, command_encoder, resources);
         let out_res = resources.get::<OutputResources>().unwrap();
         out_res.prepare(queue, self.top_left * screen_descriptor.pixels_per_point);
         Vec::new()
@@ -722,7 +696,10 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
 }
 
 pub struct OutputCallback;
-pub fn output_render_pipeline(command_encoder: &mut wgpu::CommandEncoder, res: &OutputResources) {
+pub fn run_output_render_pipeline(
+    command_encoder: &mut wgpu::CommandEncoder,
+    res: &OutputResources,
+) {
     let tex = res.tex.as_ref().unwrap();
     let tex_img_copy = tex.as_image_copy();
 
@@ -750,7 +727,7 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         let out_res = resources.get::<OutputResources>().unwrap();
-        output_render_pipeline(command_encoder, out_res);
+        run_output_render_pipeline(command_encoder, out_res);
         Vec::new()
     }
 
@@ -763,6 +740,7 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
     }
 }
 
+#[allow(dead_code)]
 async fn read_debug_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::Device) {
     let (tx, rx) = flume::bounded(1);
     buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
