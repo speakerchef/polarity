@@ -1,9 +1,9 @@
 use std::time::Instant;
 
 use crate::{
-    generators::Envelope,
+    generators::{ChromaType, Envelope, PostFx},
     labeled_enum,
-    traits::{Generator, Labeled},
+    traits::{ActiveGenerator, Generator, Labeled, PostFxParams},
     ui::canvas::NUM_PARTICLES,
 };
 
@@ -87,8 +87,7 @@ pub struct Fluidwave {
     pub point_size: f32,
     pub uniform_color: crate::Rgba,
     pub env: Envelope,
-    pub bloom: f32,
-    pub vignette: f32,
+    pub efx: PostFx,
 
     #[serde(skip, default = "instant_default")]
     pub last_frame: Instant,
@@ -96,6 +95,24 @@ pub struct Fluidwave {
     pub frame_time_accumulator: f32,
     #[serde(skip)]
     pub last_idx: usize,
+}
+
+impl ActiveGenerator for Fluidwave {}
+impl PostFxParams for Fluidwave {
+    fn post_fx(&self) -> (f32, f32, f32, ChromaType, f32) {
+        let e = &self.efx;
+        (
+            e.bloom,
+            e.vignette,
+            e.chroma_shift,
+            e.chroma_type,
+            e.chroma_blur,
+        )
+    }
+    fn post_fx_state(&self) -> (bool, bool, bool) {
+        let e = &self.efx;
+        (e.use_bloom, e.use_vignette, e.use_chroma)
+    }
 }
 
 fn instant_default() -> Instant {
@@ -162,8 +179,16 @@ impl Default for Fluidwave {
             near_pressure_multiplier: 7.0,
             viscosity_amount: 0.007,
             point_size: 0.0045,
-            bloom: 0.5,
-            vignette: 0.10,
+            efx: PostFx {
+                use_bloom: true,
+                bloom: 0.5,
+                use_vignette: true,
+                vignette: 0.10,
+                use_chroma: false,
+                chroma_shift: 0.0,
+                chroma_blur: 8.0,
+                chroma_type: ChromaType::Radial,
+            },
         }
     }
 }

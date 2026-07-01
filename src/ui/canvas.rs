@@ -63,22 +63,6 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     pos
 }
 
-fn get_effects_callback_data(
-    ui: &mut egui::Ui,
-    st: &mut AppState,
-    rect: egui::Rect,
-) -> EffectsCallback {
-    let (bloom_amt, vignette) = match st.gen_kind {
-        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
-        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
-    };
-    EffectsCallback {
-        top_left: rect.left_top(),
-        bloom_amt,
-        vignette,
-    }
-}
-
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
     let l = h.min(w) * 0.99;
@@ -106,10 +90,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
 
     st.active_gen().prepare(pl, None);
 
-    let (bloom_amt, vignette) = match st.gen_kind {
-        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette * MAX_VIGNETTE),
-        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette * MAX_VIGNETTE),
-    };
+    let (bloom_amt, vignette, chroma_shift, chroma_type, chroma_blur) = st.active_gen().post_fx();
+    let (use_bloom, use_vignette, use_chroma) = st.active_gen().post_fx_state();
     let params = st.build_callback_params(true, 0);
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
@@ -122,8 +104,14 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
+            use_bloom,
             bloom_amt,
+            use_vignette,
             vignette,
+            use_chroma,
+            chroma_shift,
+            chroma_type,
+            chroma_blur,
         },
     ));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(

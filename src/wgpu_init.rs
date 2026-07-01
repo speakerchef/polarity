@@ -173,57 +173,81 @@ fn init_stereometer_render_resources(
         .insert(live_res);
 }
 
-fn build_bloom_render_resources(
+fn build_efx_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) -> EffectsRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("bloom"),
+        label: Some("efx"),
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/postfx_shader.wgsl").into()),
     });
-    let num_params = 4;
+    let num_params = 8;
 
-    let bloom_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("bloom"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("efx bind group layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16 * num_params),
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16 * num_params),
-                    },
-                    count: None,
-                },
-            ],
-        });
+                count: None,
+            },
+        ],
+    });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("bloom"),
-        bind_group_layouts: &[Some(&bloom_bind_group_layout)],
+        label: Some("efx"),
+        bind_group_layouts: &[Some(&bind_group_layout)],
         immediate_size: 0,
     });
 
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("bloom"),
+    let chroma_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("chroma pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: None,
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("chromatic_aberration"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let main_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("main efx"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -247,8 +271,8 @@ fn build_bloom_render_resources(
         multiview_mask: None,
         cache: None,
     });
-    let bloom_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("bloom sampler"),
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("efx sampler"),
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
         mipmap_filter: wgpu::MipmapFilterMode::Linear,
@@ -262,23 +286,26 @@ fn build_bloom_render_resources(
     });
 
     EffectsRenderResources {
-        pipeline,
-        bind_group_layout: bloom_bind_group_layout,
-        sampler: bloom_sampler,
-        bind_group: None,
+        main_pipeline,
+        chroma_pipeline,
+        chroma_tex: None,
+        target_format: wgpu_render_state.target_format,
+        bind_group_layout,
+        sampler,
+        chroma_bind_group: None,
+        main_bind_group: None,
         params_buffer,
     }
 }
 
-fn init_bloom_render_resources(
+fn init_effects_render_resources(
     st: &mut AppState,
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let live_res = build_bloom_render_resources(device, wgpu_render_state);
-    let export_res = build_bloom_render_resources(device, wgpu_render_state);
+    let live_res = build_efx_render_resources(device, wgpu_render_state);
+    let export_res = build_efx_render_resources(device, wgpu_render_state);
     st.resources.insert(export_res);
-    // st.bloom_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -771,7 +798,7 @@ pub fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
 
     init_src_render_resources(st, wgpu_render_state);
     init_stereometer_render_resources(st, device, wgpu_render_state);
-    init_bloom_render_resources(st, device, wgpu_render_state);
+    init_effects_render_resources(st, device, wgpu_render_state);
     init_output_render_resources(st, device, wgpu_render_state);
     init_fluid_render_resources(st, device, wgpu_render_state);
 }

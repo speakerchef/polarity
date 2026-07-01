@@ -2,13 +2,42 @@ use std::ops::Div;
 
 use eframe::egui::{Pos2, pos2};
 
-use crate::audio::audio_player::AudioPlayer;
+use crate::{audio::audio_player::AudioPlayer, labeled_enum, traits::Labeled};
 
 pub mod fluidwave;
 pub mod rendering;
 pub mod stereometer;
 pub const DAMP_FACTOR: f32 = 1.25;
 pub const MAX_RANGE: f32 = 0.95;
+labeled_enum!(ChromaType {
+    Linear => "Linear",
+    Radial => "Radial",
+}, Radial);
+impl ChromaType {
+    pub fn value(self) -> u32 {
+        match self {
+            ChromaType::Linear => 0,
+            ChromaType::Radial => 1,
+        }
+    }
+}
+impl Labeled for ChromaType {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct PostFx {
+    pub use_bloom: bool,
+    pub bloom: f32,
+    pub use_vignette: bool,
+    pub vignette: f32,
+    pub use_chroma: bool,
+    pub chroma_shift: f32,
+    pub chroma_blur: f32,
+    pub chroma_type: ChromaType,
+}
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Envelope {

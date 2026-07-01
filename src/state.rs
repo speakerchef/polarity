@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::traits::{Generator, Labeled};
+use crate::traits::{ActiveGenerator, Labeled};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -186,6 +186,11 @@ pub struct AppState {
     pub color_arrangement_options_open: bool,
     pub envelope_follower_open: bool,
 
+    pub bloom_open: bool,
+    pub vignette_open: bool,
+    pub chroma_open: bool,
+    pub chroma_type_open: bool,
+
     pub stereo_kind_options_open: bool,
     pub filtering_open: bool,
     pub set_default_freqs: bool,
@@ -200,7 +205,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn active_gen(&mut self) -> &mut dyn Generator {
+    // pub fn active_gen(&mut self) -> &mut dyn Generator {
+    pub fn active_gen(&mut self) -> &mut dyn ActiveGenerator {
         match self.gen_kind {
             GenKindLabel::Stereometer => &mut self.stereo,
             GenKindLabel::Fluidwave => &mut self.fwave,
@@ -266,7 +272,6 @@ impl AppState {
                     point_size: f.point_size,
                     energy_transfer_mode: f.energy_transfer_mode,
                     force_direction: f.force_direction,
-                    vignette: f.vignette,
                     color_arrangement: f.color_arrangement,
                     color_invert: f.color_invert,
                     luminance_mode: f.luminance_mode,
@@ -357,7 +362,6 @@ impl Default for AppState {
             preset_name: String::default(),
 
             show_settings: false,
-
             gen_kind_options_open: false,
             gen_open: false,
 
@@ -370,6 +374,11 @@ impl Default for AppState {
             gradient_formula_options_open: false,
             color_arrangement_options_open: false,
             envelope_follower_open: false,
+
+            bloom_open: false,
+            vignette_open: false,
+            chroma_open: false,
+            chroma_type_open: false,
 
             stereo_kind_options_open: false,
             filtering_open: false,

@@ -2,10 +2,13 @@ use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
+use wgpu::{BindGroupEntry, BindingResource};
 
+use crate::generators::ChromaType;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
+use crate::traits::Textured;
 use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
@@ -48,7 +51,6 @@ pub struct FluidCbParams {
     pub point_size: f32,
     pub energy_transfer_mode: EnergyTransferMode,
     pub force_direction: ForceDirection,
-    pub vignette: f32,
     pub color_arrangement: ColorArrangement,
     pub color_invert: bool,
     pub luminance_mode: bool,
@@ -144,9 +146,12 @@ pub struct SrcRenderResources {
     pub target_format: wgpu::TextureFormat,
     pub tex: Option<wgpu::Texture>,
 }
-impl SrcRenderResources {
+impl Textured for SrcRenderResources {
     fn texture(&self) -> Option<&wgpu::Texture> {
         self.tex.as_ref()
+    }
+    fn target_format(&self) -> wgpu::TextureFormat {
+        self.target_format
     }
     fn set_texture(&mut self, tex: wgpu::Texture) {
         self.tex = Some(tex);
@@ -258,10 +263,18 @@ pub struct OutputResources {
     pub tex: Option<wgpu::Texture>,
     pub sampler: wgpu::Sampler,
 }
-impl OutputResources {
+impl Textured for OutputResources {
     fn texture(&self) -> Option<&wgpu::Texture> {
         self.tex.as_ref()
     }
+    fn target_format(&self) -> wgpu::TextureFormat {
+        self.target_format
+    }
+    fn set_texture(&mut self, tex: wgpu::Texture) {
+        self.tex = Some(tex);
+    }
+}
+impl OutputResources {
     fn prepare(&self, queue: &wgpu::Queue, top_left: Pos2) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
     }
@@ -270,6 +283,27 @@ impl OutputResources {
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..6, 0..1);
     }
+}
+
+fn prepare_output_resources(
+    res: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    tex_size: (u32, u32),
+) -> wgpu::TextureView {
+    let output_view = get_texture_view(
+        res.get_mut::<OutputResources>().unwrap(),
+        device,
+        tex_size,
+        true,
+    );
+    let out_res = res.get_mut::<OutputResources>().unwrap();
+    let output_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("output bind group"),
+        layout: &out_res.bind_group_layout,
+        entries: &create_bg_entries(&output_view, &out_res.sampler, &out_res.params_buffer),
+    });
+    out_res.bind_group = Some(output_bind_group);
+    output_view
 }
 
 pub struct FluidRenderResources {
@@ -358,11 +392,6 @@ impl FluidRenderResources {
         );
         queue.write_buffer(
             &self.params_buffer,
-            208,
-            bytemuck::cast_slice(&[dat.vignette]),
-        );
-        queue.write_buffer(
-            &self.params_buffer,
             224,
             bytemuck::cast_slice(&[dat.edge_damping_factor]),
         );
@@ -434,41 +463,48 @@ pub fn run_source_render_pipeline(
     dim: (u32, u32),
 ) {
     data.params.prepare_resources(res, queue, command_encoder);
-    let src_view = get_src_texture_view(res, device, dim);
+    let src_view = get_texture_view(
+        res.get_mut::<SrcRenderResources>().unwrap(),
+        device,
+        dim,
+        true,
+    );
     data.params.paint(res, command_encoder, src_view);
 }
 
-fn get_src_texture_view(
-    res: &mut egui_wgpu::CallbackResources,
+fn get_texture_view<T: Textured>(
+    res: &mut T,
     device: &wgpu::Device,
     dim: (u32, u32),
+    update_or_create: bool,
 ) -> wgpu::TextureView {
-    let res: &mut SrcRenderResources = res.get_mut().unwrap();
-    let (w, h) = (dim.0, dim.1);
-    let resized = res
-        .texture()
-        .map(|t| t.width() != w || t.height() != h)
-        .unwrap_or(true);
-    if resized {
-        // Now we create the texture
-        let main_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("src scene texture"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: res.target_format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        res.set_texture(main_tex);
+    if update_or_create {
+        let (w, h) = (dim.0, dim.1);
+        let resized = res
+            .texture()
+            .map(|t| t.width() != w || t.height() != h)
+            .unwrap_or(true);
+        if resized {
+            // Now we create the texture
+            let main_tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("src scene texture"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: res.target_format(),
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            res.set_texture(main_tex);
+        }
     }
     res.texture()
         .unwrap()
@@ -508,14 +544,34 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
 }
 
 pub struct EffectsRenderResources {
-    pub pipeline: wgpu::RenderPipeline,
+    pub main_pipeline: wgpu::RenderPipeline,
+    pub chroma_pipeline: wgpu::RenderPipeline,
+    pub chroma_tex: Option<wgpu::Texture>,
+    pub target_format: wgpu::TextureFormat,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
-    pub bind_group: Option<wgpu::BindGroup>,
+    pub chroma_bind_group: Option<wgpu::BindGroup>,
+    pub main_bind_group: Option<wgpu::BindGroup>,
     pub params_buffer: wgpu::Buffer,
+}
+impl Textured for EffectsRenderResources {
+    fn texture(&self) -> Option<&wgpu::Texture> {
+        self.chroma_tex.as_ref()
+    }
+    fn target_format(&self) -> wgpu::TextureFormat {
+        self.target_format
+    }
+    fn set_texture(&mut self, tex: wgpu::Texture) {
+        self.chroma_tex = Some(tex);
+    }
 }
 impl EffectsRenderResources {
     fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, dat: &EffectsCallback) {
+        queue.write_buffer(
+            &self.params_buffer,
+            0,
+            bytemuck::cast_slice(&[dat.use_bloom as u32]),
+        );
         queue.write_buffer(
             &self.params_buffer,
             16,
@@ -523,115 +579,47 @@ impl EffectsRenderResources {
         );
         queue.write_buffer(
             &self.params_buffer,
+            32,
+            bytemuck::cast_slice(&[dat.use_vignette as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
             48,
             bytemuck::cast_slice(&[dat.vignette]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            64,
+            bytemuck::cast_slice(&[dat.use_chroma as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            80,
+            bytemuck::cast_slice(&[dat.chroma_shift]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            96,
+            bytemuck::cast_slice(&[dat.chroma_blur]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            112,
+            bytemuck::cast_slice(&[dat.chroma_type.value()]),
         );
     }
 }
 
 pub struct EffectsCallback {
     pub top_left: Pos2,
+    pub use_bloom: bool,
     pub bloom_amt: f32,
+    pub use_vignette: bool,
     pub vignette: f32,
-}
-
-fn prep_source_resources_for_effects(
-    res: &mut egui_wgpu::CallbackResources,
-    device: &wgpu::Device,
-) -> ((u32, u32), wgpu::BindGroup) {
-    let src_res = res.get::<SrcRenderResources>().unwrap();
-    let efx_res = res.get::<EffectsRenderResources>().unwrap();
-    let tex = src_res.texture().unwrap();
-    let tex_size = (tex.width(), tex.height());
-    let src_view = tex.create_view(&wgpu::TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::D2),
-        base_mip_level: 0,
-        mip_level_count: None,
-        ..Default::default()
-    });
-    let efx_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("efx"),
-        layout: &efx_res.bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&src_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&efx_res.sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: efx_res.params_buffer.as_entire_binding(),
-            },
-        ],
-    });
-    (tex_size, efx_bg)
-}
-
-fn prep_output_resources_for_effects(
-    res: &mut egui_wgpu::CallbackResources,
-    device: &wgpu::Device,
-    tex_size: (u32, u32),
-) -> wgpu::TextureView {
-    let out_res = res.get_mut::<OutputResources>().unwrap();
-    let (w, h) = (tex_size.0, tex_size.1);
-    let resized = out_res
-        .tex
-        .as_ref()
-        .map(|t| t.width() != w || t.height() != h)
-        .unwrap_or(true);
-    if resized {
-        let output_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("output_texture"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: out_res.target_format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        out_res.tex = Some(output_texture);
-    }
-
-    let dst_view = out_res
-        .texture()
-        .unwrap()
-        .create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            base_mip_level: 0,
-            mip_level_count: None,
-            ..Default::default()
-        });
-    let output_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("output"),
-        layout: &out_res.bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&dst_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&out_res.sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: out_res.params_buffer.as_entire_binding(),
-            },
-        ],
-    });
-    out_res.bind_group = Some(output_bind_group);
-    dst_view
+    pub use_chroma: bool,
+    pub chroma_shift: f32,
+    pub chroma_blur: f32,
+    pub chroma_type: ChromaType,
 }
 
 pub fn run_effects_render_pipeline(
@@ -641,17 +629,25 @@ pub fn run_effects_render_pipeline(
     command_encoder: &mut wgpu::CommandEncoder,
     res: &mut egui_wgpu::CallbackResources,
 ) {
-    let (tex_size, efx_bind_group) = prep_source_resources_for_effects(res, device);
-    let dst_view = prep_output_resources_for_effects(res, device, tex_size);
+    let src_tex = res.get::<SrcRenderResources>().unwrap().texture().unwrap();
+    let tex_size = (src_tex.width(), src_tex.height());
+
+    // apply chromatic aberration first so all other postfx is applied to it
+    let chroma_view =
+        render_chromatic_aberration(res, device, queue, command_encoder, data, tex_size);
 
     let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
-    efx_res.bind_group = Some(efx_bind_group);
-    efx_res.prepare(device, queue, data);
-
-    let mut output_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("output pass"),
+    let main_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("main efx bind group"),
+        layout: &efx_res.bind_group_layout,
+        entries: &create_bg_entries(&chroma_view, &efx_res.sampler, &efx_res.params_buffer),
+    });
+    efx_res.main_bind_group = Some(main_bind_group);
+    let output_view = prepare_output_resources(res, device, tex_size);
+    let mut main_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("main pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &dst_view,
+            view: &output_view,
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {
@@ -659,15 +655,78 @@ pub fn run_effects_render_pipeline(
                 store: wgpu::StoreOp::Store,
             },
         })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-        multiview_mask: None,
+        ..Default::default()
     });
+    let efx_res = res.get::<EffectsRenderResources>().unwrap();
+    main_pass.set_pipeline(&efx_res.main_pipeline);
+    main_pass.set_bind_group(0, &efx_res.main_bind_group, &[]);
+    main_pass.draw(0..6, 0..1);
+}
 
-    output_pass.set_pipeline(&efx_res.pipeline);
-    output_pass.set_bind_group(0, &efx_res.bind_group, &[]);
-    output_pass.draw(0..6, 0..1);
+fn render_chromatic_aberration(
+    res: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    command_encoder: &mut wgpu::CommandEncoder,
+    data: &EffectsCallback,
+    tex_size: (u32, u32),
+) -> wgpu::TextureView {
+    let src_view = get_texture_view(
+        res.get_mut::<SrcRenderResources>().unwrap(),
+        device,
+        tex_size,
+        false,
+    );
+
+    let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
+    let chroma_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("chrome bind group"),
+        layout: &efx_res.bind_group_layout,
+        entries: &create_bg_entries(&src_view, &efx_res.sampler, &efx_res.params_buffer),
+    });
+    efx_res.chroma_bind_group = Some(chroma_bind_group);
+    efx_res.prepare(device, queue, data);
+
+    let chroma_view = get_texture_view(efx_res, device, tex_size, true);
+    let mut chroma_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("chroma pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &chroma_view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(CANVAS_BG),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        ..Default::default()
+    });
+    chroma_pass.set_pipeline(&efx_res.chroma_pipeline);
+    chroma_pass.set_bind_group(0, &efx_res.chroma_bind_group, &[]);
+    chroma_pass.draw(0..6, 0..1);
+    drop(chroma_pass);
+    chroma_view
+}
+
+fn create_bg_entries<'a>(
+    view: &'a wgpu::TextureView,
+    sampler: &'a wgpu::Sampler,
+    buffer: &'a wgpu::Buffer,
+) -> [BindGroupEntry<'a>; 3] {
+    [
+        BindGroupEntry {
+            binding: 0,
+            resource: BindingResource::TextureView(view),
+        },
+        BindGroupEntry {
+            binding: 1,
+            resource: BindingResource::Sampler(sampler),
+        },
+        BindGroupEntry {
+            binding: 2,
+            resource: buffer.as_entire_binding(),
+        },
+    ]
 }
 impl egui_wgpu::CallbackTrait for EffectsCallback {
     fn prepare(

@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    GenKindLabel, Preset,
+    Preset,
     audio::{StereoFilter, audio_player::*},
     generators::{
         rendering::{
@@ -69,15 +69,18 @@ fn render_wgpu_frame(
         dim,
     );
 
-    let (bloom_amt, vignette) = match st.gen_kind {
-        GenKindLabel::Stereometer => (st.stereo.bloom, st.stereo.vignette),
-        GenKindLabel::Fluidwave => (st.fwave.bloom, st.fwave.vignette),
-    };
-
+    let (bloom_amt, vignette, chroma_shift, chroma_type, chroma_blur) = st.active_gen().post_fx();
+    let (use_bloom, use_vignette, use_chroma) = st.active_gen().post_fx_state();
     let effects_data = EffectsCallback {
         top_left: Pos2::ZERO,
+        use_bloom,
         bloom_amt,
+        use_vignette,
         vignette,
+        use_chroma,
+        chroma_shift,
+        chroma_type,
+        chroma_blur,
     };
     run_effects_render_pipeline(
         &effects_data,

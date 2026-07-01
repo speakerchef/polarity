@@ -1,3 +1,4 @@
+use crate::generators::ChromaType;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
@@ -5,7 +6,7 @@ use crate::generators::stereometer::{
     FilterMode, LiveDensity, RenderMode, StereometerKind, TraceDensity,
 };
 use crate::ui::canvas::NUM_PARTICLES;
-use crate::ui::{control_panel_widgets::*, palette as plt};
+use crate::ui::{SHARP, control_panel_widgets::*, palette as plt};
 use crate::{GenKindLabel, state::*};
 use eframe::egui::{self, vec2};
 
@@ -245,12 +246,54 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
 fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
     match st.gen_kind {
         GenKindLabel::Stereometer => {
-            slider_row(ui, "BLOOM", &mut st.stereo.bloom, 0.0, 10.0, 1);
-            slider_row(ui, "VIGNETTE", &mut st.stereo.vignette, 0.0, 1.0, 2);
+            let rect = section_header_submenu(ui, "BLOOM", &mut st.bloom_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.stereo.efx.use_bloom);
+            if st.bloom_open {
+                slider_row(ui, "BLOOM", &mut st.stereo.efx.bloom, 0.0, 10.0, 1);
+            }
+            let rect = section_header_submenu(ui, "VIGNETTE", &mut st.vignette_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.stereo.efx.use_vignette);
+            if st.vignette_open {
+                slider_row(ui, "VIGNETTE", &mut st.stereo.efx.vignette, 0.0, 1.0, 2);
+            }
+            let rect = section_header_submenu(ui, "CHROMA", &mut st.chroma_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.stereo.efx.use_chroma);
+            if st.chroma_open {
+                slider_row(ui, "CHROMA", &mut st.stereo.efx.chroma_shift, 0.0, 0.1, 3);
+                slider_row(ui, "BLUR", &mut st.stereo.efx.chroma_blur, 0.0, 20.0, 0);
+                dropdown_row(
+                    ui,
+                    "TYPE",
+                    &mut st.stereo.efx.chroma_type,
+                    ChromaType::ALL,
+                    &mut st.chroma_type_open,
+                );
+            }
         }
         GenKindLabel::Fluidwave => {
-            slider_row(ui, "BLOOM", &mut st.fwave.bloom, 0.0, 10.0, 1);
-            slider_row(ui, "VIGNETTE", &mut st.fwave.vignette, 0.0, 1.0, 2);
+            let rect = section_header_submenu(ui, "BLOOM", &mut st.bloom_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.fwave.efx.use_bloom);
+            if st.bloom_open {
+                slider_row(ui, "BLOOM", &mut st.fwave.efx.bloom, 0.0, 10.0, 1);
+            }
+            let rect = section_header_submenu(ui, "VIGNETTE", &mut st.vignette_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.fwave.efx.use_vignette);
+            if st.vignette_open {
+                slider_row(ui, "VIGNETTE", &mut st.fwave.efx.vignette, 0.0, 1.0, 2);
+            }
+            let rect = section_header_submenu(ui, "CHROMA", &mut st.chroma_open).rect;
+            subheader_toggle_button(ui, &rect, &mut st.fwave.efx.use_chroma);
+            if st.chroma_open {
+                slider_row(ui, "CHROMA", &mut st.fwave.efx.chroma_shift, 0.0, 0.1, 3);
+                slider_row(ui, "BLUR", &mut st.fwave.efx.chroma_blur, 0.0, 20.0, 0);
+                dropdown_row(
+                    ui,
+                    "TYPE",
+                    &mut st.fwave.efx.chroma_type,
+                    ChromaType::ALL,
+                    &mut st.chroma_type_open,
+                );
+            }
         }
     }
 }

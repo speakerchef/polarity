@@ -9,7 +9,7 @@ use eframe::egui::{
 
 use crate::traits::Labeled;
 use crate::ui::palette as plt;
-const TOGGLE_BUTTON_W: f32 = 34.0;
+pub const TOGGLE_BUTTON_W: f32 = 34.0;
 
 fn border(dark: bool) -> Stroke {
     Stroke::new(plt::FRAME_WIDTH, plt::BORDER(dark))
@@ -294,7 +294,8 @@ pub fn popup_item(
     );
     let fonts = FontId {
         size: font_size,
-        family: FontFamily::Name("mono_medium".into()),
+        // family: FontFamily::Name("mono_medium".into()),
+        family: FontFamily::Name("inter_medium".into()),
     };
     let (_, th) = get_text_size(ui, &label.to_uppercase(), fonts.clone()).into();
     custom_text(
@@ -448,6 +449,23 @@ pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool) {
     apply_bucket_border(ui, br);
 }
 
+pub fn subheader_toggle_button(ui: &mut egui::Ui, root_rect: &egui::Rect, on: &mut bool) {
+    let rect = ui
+        .allocate_rect(
+            egui::Rect::from_min_size(
+                root_rect.right_top() - vec2(TOGGLE_BUTTON_W - 5., -11.0),
+                vec2(0.0, root_rect.height()),
+            ),
+            egui::Sense::focusable_noninteractive(),
+        )
+        .rect;
+    ui.painter().rect_filled(rect, SHARP, plt::LIVE);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+        ui.set_min_height(root_rect.height() - 11.0);
+        toggle_button(ui, on);
+    });
+}
+
 pub fn toggle_button(ui: &mut egui::Ui, on: &mut bool) {
     let (rect, mut resp) =
         ui.allocate_exact_size(vec2(TOGGLE_BUTTON_W, 16.0), egui::Sense::click());
@@ -516,7 +534,8 @@ pub fn dropdown_menu<T: Labeled>(
 
     let font = FontId {
         size: plt::font_size::TINY,
-        family: egui::FontFamily::Name("mono_medium".into()),
+        // family: egui::FontFamily::Name("mono_medium".into()),
+        family: egui::FontFamily::Name("inter_medium".into()),
     };
     let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
     let offset = (dim.1 - th) / 1.25;
@@ -524,7 +543,8 @@ pub fn dropdown_menu<T: Labeled>(
         ui,
         &value.text().to_uppercase(),
         font.clone(),
-        inner.left_center() - vec2(-offset, (th / 2.0) + 1.0),
+        // inner.left_center() - vec2(-offset, (th / 2.0) + 1.0),
+        inner.left_center() - vec2(-offset, th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::TEXT,
         Align::LEFT,

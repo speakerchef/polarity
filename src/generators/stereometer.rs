@@ -1,4 +1,5 @@
-use crate::traits::{Generator, Labeled};
+use crate::generators::{ChromaType, PostFx};
+use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
 use crate::{Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum};
 use eframe::egui::Pos2;
 use std::collections::VecDeque;
@@ -114,12 +115,10 @@ pub struct Stereometer {
     pub fs_color: Rgba,
     pub mb_color: [Rgba; 3],
 
-    pub bloom: f32,
-    pub vignette: f32,
     pub point_size: f32,
     pub radial_scale_factor: f32,
-
     pub last_sample_idx: usize,
+    pub efx: PostFx,
 
     #[serde(skip)]
     pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
@@ -148,6 +147,24 @@ pub struct Stereometer {
     pub trace_high_buffer: VecDeque<Pos2>,
 }
 
+impl ActiveGenerator for Stereometer {}
+impl PostFxParams for Stereometer {
+    fn post_fx(&self) -> (f32, f32, f32, ChromaType, f32) {
+        let e = &self.efx;
+        (
+            e.bloom,
+            e.vignette,
+            e.chroma_shift,
+            e.chroma_type,
+            e.chroma_blur,
+        )
+    }
+    fn post_fx_state(&self) -> (bool, bool, bool) {
+        let e = &self.efx;
+        (e.use_bloom, e.use_vignette, e.use_chroma)
+    }
+}
+
 impl Generator for Stereometer {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
         self.draw(pl, export_sample_idx);
@@ -160,8 +177,16 @@ impl Default for Stereometer {
         Self {
             filter_freq: 1.0,
             last_freq: 1.0,
-            bloom: 3.0,
-            vignette: 0.0,
+            efx: PostFx {
+                use_bloom: true,
+                bloom: 3.0,
+                use_vignette: false,
+                vignette: 0.0,
+                use_chroma: false,
+                chroma_shift: 0.0,
+                chroma_blur: 8.0,
+                chroma_type: ChromaType::Radial,
+            },
             radial_scale_factor: 0.6,
             fs_color: Rgba::new(0, 255, 0, 255),
             mb_color: [
