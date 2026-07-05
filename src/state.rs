@@ -1,12 +1,15 @@
 #![allow(dead_code)]
-use crate::traits::{ActiveGenerator, Labeled};
+use crate::{
+    generators::{Envelope, fluidwave::ModSrc, rendering::EffectsCallback},
+    traits::{ActiveGenerator, Labeled},
+};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
 use eframe::{
-    egui::{Align2, vec2},
+    egui::{Align2, Pos2, vec2},
     egui_wgpu,
 };
 use egui_file_dialog::{self as fd, FileDialog};
@@ -14,7 +17,6 @@ use egui_file_dialog::{self as fd, FileDialog};
 use crate::{
     GenKindLabel, Preset,
     generators::{
-        DAMP_FACTOR,
         fluidwave::Fluidwave,
         rendering::{
             EffectsRenderResources, FluidCbParams, FluidRenderResources, GenCbParams,
@@ -25,6 +27,11 @@ use crate::{
     labeled_enum,
     ui::canvas::{MIN_SUBSTEP_DIV, SUBSTEP_DIV, TARGET_DT},
 };
+
+pub const DAMP_FACTOR: f32 = 1.25;
+pub const MAX_CHROMA_SHIFT: f32 = 0.2;
+pub const MAX_VIGNETTE: f32 = 1.0;
+pub const MAX_BLOOM: f32 = 10.0;
 
 #[derive(Default)]
 pub enum PlaybackMode {
@@ -119,61 +126,8 @@ pub struct ExportConfig {
     pub quality: ExportQuality,
     pub total_frames: usize,
 }
-
-pub struct AppState {
-    pub audio_file_dialog: FileDialog,
-    pub preset_file_dialog: FileDialog,
-    pub playback_mode: PlaybackMode,
-    pub gen_kind: GenKindLabel,
-    pub stereo: Stereometer,
-    pub fwave: Fluidwave,
-    pub stereometer_render_resources: Option<StereometerRenderResources>,
-    pub fluid_render_resources: Option<FluidRenderResources>,
-    pub bloom_render_resources: Option<EffectsRenderResources>,
-    pub output_render_resources: Option<OutputResources>,
-    pub resources: egui_wgpu::CallbackResources,
-
-    // Export states
-    pub export_config: ExportConfig,
-    pub show_export_resolution: bool,
-    pub show_export_fps: bool,
-    pub show_export_quality: bool,
-    pub cur_frame_idx: usize,
-    pub export_sample_idx: usize,
-    pub show_export_modal: bool,
-    pub start_render: bool,
-    pub rendering: bool,
-    pub export_canceled: bool,
-    pub writer_handle: Option<std::thread::JoinHandle<()>>,
-    pub logger_handle: Option<std::thread::JoinHandle<()>>,
-    pub export_tx: Option<flume::Sender<Vec<u8>>>,
-    pub prev_export_timestamp: Option<Instant>,
-    pub export_elapsed_time: Option<Duration>,
-
-    pub dark_mode: bool,
-    pub advanced_mode: bool,
-    pub fullscreen: bool,
-    pub import_open: bool,
-
-    pub save_preset: bool,
-    pub load_preset: bool,
-    pub show_preset_options: bool,
-    pub show_preset_save_modal: bool,
-    pub show_preset_load_modal: bool,
-    pub open_preset_save_file_picker: bool,
-    pub open_preset_load_file_picker: bool,
-    pub picked_preset_save_dir: bool,
-    pub picked_preset_load_file: bool,
-    pub preset_save_path: Option<PathBuf>,
-    pub preset_load_path: Option<PathBuf>,
-    pub preset_name: String,
-
-    pub show_file_options: bool,
-    pub window_drag_tooltip_modal_deadline: Option<Instant>,
-    pub window_drag_tooltip_modal_open: bool,
-    pub show_fullscreen_button: bool,
-    pub show_settings: bool,
-
+#[derive(Default)]
+pub struct BoolStates {
     pub gen_kind_options_open: bool,
     pub gen_open: bool,
     pub render_open: bool,
@@ -200,20 +154,100 @@ pub struct AppState {
     pub visual_open: bool,
     pub density_open: bool,
     pub trace_open: bool,
-
     pub postfx_open: bool,
+
+    pub bloom_mod_open: bool,
+    pub vignette_mod_open: bool,
+    pub chroma_mod_open: bool,
+    pub mod_src_open: bool,
+    pub import_open: bool,
+
+    pub dark_mode: bool,
+    pub advanced_mode: bool,
+    pub fullscreen: bool,
+
+    pub save_preset: bool,
+    pub load_preset: bool,
+    pub show_preset_options: bool,
+    pub show_preset_save_modal: bool,
+    pub show_preset_load_modal: bool,
+    pub open_preset_save_file_picker: bool,
+    pub open_preset_load_file_picker: bool,
+    pub picked_preset_save_dir: bool,
+    pub picked_preset_load_file: bool,
+    pub show_file_options: bool,
+    pub window_drag_tooltip_modal_open: bool,
+    pub show_fullscreen_button: bool,
+    pub show_settings: bool,
+    pub show_export_resolution: bool,
+    pub show_export_fps: bool,
+    pub show_export_quality: bool,
+    pub export_sample_idx: usize,
+    pub show_export_modal: bool,
+    pub start_render: bool,
+    pub rendering: bool,
+    pub export_canceled: bool,
+}
+
+pub struct AppState {
+    pub audio_file_dialog: FileDialog,
+    pub preset_file_dialog: FileDialog,
+    pub playback_mode: PlaybackMode,
+    pub gen_kind: GenKindLabel,
+    pub stereo: Stereometer,
+    pub fwave: Fluidwave,
+    pub env_a: Option<Envelope>,
+    pub env_b: Option<Envelope>,
+    pub stereometer_render_resources: Option<StereometerRenderResources>,
+    pub fluid_render_resources: Option<FluidRenderResources>,
+    pub bloom_render_resources: Option<EffectsRenderResources>,
+    pub output_render_resources: Option<OutputResources>,
+    pub resources: egui_wgpu::CallbackResources,
+
+    pub preset_save_path: Option<PathBuf>,
+    pub preset_load_path: Option<PathBuf>,
+    pub preset_name: String,
+
+    pub window_drag_tooltip_modal_deadline: Option<Instant>,
+
+    pub bool: BoolStates,
+
+    // Export states
+    pub export_config: ExportConfig,
+    pub writer_handle: Option<std::thread::JoinHandle<()>>,
+    pub logger_handle: Option<std::thread::JoinHandle<()>>,
+    pub export_tx: Option<flume::Sender<Vec<u8>>>,
+    pub prev_export_timestamp: Option<Instant>,
+    pub export_elapsed_time: Option<Duration>,
+    pub cur_frame_idx: usize,
 }
 
 impl AppState {
-    // pub fn active_gen(&mut self) -> &mut dyn Generator {
     pub fn active_gen(&mut self) -> &mut dyn ActiveGenerator {
         match self.gen_kind {
             GenKindLabel::Stereometer => &mut self.stereo,
             GenKindLabel::Fluidwave => &mut self.fwave,
         }
     }
+    pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
+        let (Some(a), Some(b)) = (&self.env_a, &self.env_b) else {
+            return 0.0;
+        };
+        match src {
+            ModSrc::None => 0.0,
+            ModSrc::EnvA => a.envelope(range),
+            ModSrc::EnvB => b.envelope(range),
+        }
+    }
+    pub fn envelope_from_mod_src(&self, src: ModSrc) -> Option<&Envelope> {
+        match src {
+            ModSrc::None => None,
+            ModSrc::EnvA => self.env_a.as_ref(),
+            ModSrc::EnvB => self.env_b.as_ref(),
+        }
+    }
 
-    pub fn build_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
+    pub fn build_renderer_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
         match self.gen_kind {
             GenKindLabel::Stereometer => {
                 let s = &mut self.stereo;
@@ -240,7 +274,13 @@ impl AppState {
                 let f = &mut self.fwave;
                 let pressure_multiplier = f.pressure_multiplier
                     - if f.envelope_pressure_link {
-                        400.0 * f.env.envelope().powf(DAMP_FACTOR)
+                        400.0
+                            * self
+                                .env_a
+                                .as_ref()
+                                .expect("unreachable without envelope")
+                                .envelope(f.env_range)
+                                .powf(DAMP_FACTOR)
                     } else {
                         0.0
                     };
@@ -260,7 +300,12 @@ impl AppState {
                 let params = GenCbParams::Fwave(FluidCbParams {
                     color_mode: f.color_mode,
                     uniform_color: f.uniform_color,
-                    particle_pos: f.env.envelope(),
+                    //fwave will use env A as its driver
+                    particle_pos: self
+                        .env_a
+                        .as_ref()
+                        .expect("unreachable without envelope")
+                        .envelope(f.env_range),
                     frame_time_accumulator: f.frame_time_accumulator,
                     gravity: f.gravity,
                     pressure_multiplier,
@@ -282,6 +327,38 @@ impl AppState {
                 f.frame_time_accumulator %= TARGET_DT; // leftover frametime
                 params
             }
+        }
+    }
+
+    pub fn build_effects_callback_params(&mut self) -> EffectsCallback {
+        let fx = self.active_gen().post_fx();
+        let env = |src: ModSrc, range: f32| -> f32 { self.envelope_value_from_mod_src(src, range) };
+        let (brng, vrng, csh_rng) = (fx.bloom_range, fx.vignette_range, fx.chroma_shift_range);
+        let (bsrc, vsrc, csh_src) = (
+            fx.bloom_mod_src,
+            fx.vignette_mod_src,
+            fx.chroma_shift_mod_src,
+        );
+        let (bloom_amt, vignette, chroma_shift, chroma_blur, chroma_type) = (
+            (fx.bloom + env(bsrc, brng) * MAX_BLOOM).clamp(0.0, MAX_BLOOM),
+            (fx.vignette + env(vsrc, vrng) * MAX_VIGNETTE).clamp(0.0, MAX_VIGNETTE),
+            (fx.chroma_shift + env(csh_src, csh_rng) * MAX_CHROMA_SHIFT)
+                .clamp(0.0, MAX_CHROMA_SHIFT),
+            fx.chroma_blur,
+            fx.chroma_type,
+        );
+        let (use_bloom, use_vignette, use_chroma) = (fx.use_bloom, fx.use_vignette, fx.use_chroma);
+
+        EffectsCallback {
+            top_left: Pos2::ZERO,
+            use_bloom,
+            bloom_amt,
+            use_vignette,
+            vignette,
+            use_chroma,
+            chroma_shift,
+            chroma_blur,
+            chroma_type,
         }
     }
 }
@@ -313,7 +390,6 @@ impl Default for AppState {
                 .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
             gen_kind: GenKindLabel::Fluidwave,
-            show_fullscreen_button: true,
             stereometer_render_resources: None,
             fluid_render_resources: None,
             bloom_render_resources: None,
@@ -326,71 +402,24 @@ impl Default for AppState {
             export_tx: None,
             prev_export_timestamp: None,
             export_elapsed_time: None,
-            show_export_resolution: false,
-            show_export_fps: false,
-            show_export_quality: false,
-            cur_frame_idx: 0,
-            export_sample_idx: 0,
-            show_export_modal: false,
-            start_render: false,
-            rendering: false,
-            export_canceled: false,
 
             playback_mode: PlaybackMode::default(),
             stereo,
             fwave,
-            dark_mode: true,
-            advanced_mode: false,
-            fullscreen: false,
-            import_open: false,
+            env_a: None,
+            env_b: None,
 
-            show_file_options: false,
-            show_preset_options: false,
             window_drag_tooltip_modal_deadline: None,
-            window_drag_tooltip_modal_open: false,
-
-            save_preset: false,
-            load_preset: false,
-            show_preset_save_modal: false,
-            show_preset_load_modal: false,
-            picked_preset_save_dir: false,
-            picked_preset_load_file: false,
-            open_preset_save_file_picker: false,
-            open_preset_load_file_picker: false,
             preset_save_path: None,
             preset_load_path: None,
             preset_name: String::default(),
 
-            show_settings: false,
-            gen_kind_options_open: false,
-            gen_open: false,
-
-            render_open: false,
-            render_mode_options_open: false,
-
-            energy_transfer_mode_options_open: false,
-            force_direction_options_open: false,
-            color_mode_options_open: false,
-            gradient_formula_options_open: false,
-            color_arrangement_options_open: false,
-            envelope_follower_open: false,
-
-            bloom_open: false,
-            vignette_open: false,
-            chroma_open: false,
-            chroma_type_open: false,
-
-            stereo_kind_options_open: false,
-            filtering_open: false,
-            filter_mode_options_open: false,
-            mode_open: false,
-            color_open: false,
-            visual_open: false,
-            density_open: false,
-            trace_open: false,
-            set_default_freqs: true,
-
-            postfx_open: false,
+            cur_frame_idx: 0,
+            bool: BoolStates {
+                dark_mode: true,
+                show_fullscreen_button: true,
+                ..BoolStates::default()
+            },
         }
     }
 }

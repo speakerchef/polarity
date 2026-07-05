@@ -7,8 +7,7 @@ use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
 use crate::GenKindLabel;
-use crate::generators::DAMP_FACTOR;
-use crate::generators::fluidwave::EnergyTransferMode;
+use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::traits::Generator;
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
@@ -35,7 +34,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
         .show_inside(ui, |ui| {
             if ui.ctx().input(
                 |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
-            ) || !st.fullscreen
+            ) || !st.bool.fullscreen
             {
                 fullscreen_button(ui, st);
             }
@@ -65,7 +64,8 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
-    let l = h.min(w) * 0.99;
+    // let l = h.min(w) * 0.99;
+    let l = h.min(w);
     let canvas_size = vec2(l, l);
 
     let center = ui.max_rect().center();
@@ -80,38 +80,26 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
 
-    let Some(pl) = pl else {
+    let (Some(pl), Some(env_a), Some(env_b)) = (pl, &mut st.env_a, &mut st.env_b) else {
         return;
     };
-    let frame_time = Instant::now()
-        .duration_since(st.fwave.last_frame)
-        .as_secs_f32()
-        .max(1. / 60.);
-
+    env_a.run_differential_follower(pl, None);
+    env_b.run_differential_follower(pl, None);
     st.active_gen().prepare(pl, None);
-
-    let (bloom_amt, vignette, chroma_shift, chroma_type, chroma_blur) = st.active_gen().post_fx();
-    let (use_bloom, use_vignette, use_chroma) = st.active_gen().post_fx_state();
-    let params = st.build_callback_params(true, 0);
+    let renderer_params = st.build_renderer_callback_params(true, 0);
+    let efx_params = st.build_effects_callback_params();
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         RendererCallback {
             canvas_size,
-            params,
+            params: renderer_params,
         },
     ));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         EffectsCallback {
             top_left: rect.left_top(),
-            use_bloom,
-            bloom_amt,
-            use_vignette,
-            vignette,
-            use_chroma,
-            chroma_shift,
-            chroma_type,
-            chroma_blur,
+            ..efx_params
         },
     ));
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(

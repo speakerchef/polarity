@@ -46,11 +46,13 @@
   - [x] Have dynamic velocity based color generation
   - [x] Color gradient ordering options
   - [x] Extra color options (added inversion and luminance mode)
-  - [x] Vignette effect
   - [x] Variable simulation speed
   - [ ] Different particle counts
+- [ ] Oscilloscope based generator
+  - [ ] More CRT-like and vintage
 - [ ] Live/RT mode
-- [ ] Automation LFOs
+- [ ] Universal audio reactivity envelope structure.
+- [ ] Automation Envelopes / LFOs
   - [ ] 4 wave types: sine/saw/square/triangle
   - [ ] Attachable to most parameters
   - [ ] Muxable and state managed (multiple params per LFO or multiple LFOs per param)
@@ -61,7 +63,8 @@
 - [ ] Project save/load ability with custom format:
   - [ ] container that also stores the audio file path (or audio copied into project container)
 - [ ] Post-FX
-  - [ ] Chromatic aberration
+  - [x] Chromatic aberration
+  - [x] Vignette
   - [ ] Phosphor
 
 ### Author

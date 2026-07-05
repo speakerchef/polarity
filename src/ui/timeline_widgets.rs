@@ -347,7 +347,7 @@ pub fn playback_head(
 
 pub fn file_import_prompt(ui: &mut egui::Ui, st: &mut AppState, waveform: egui::Response) {
     if waveform.clicked() {
-        st.import_open = true;
+        st.bool.import_open = true;
     }
     custom_text(
         ui,

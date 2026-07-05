@@ -59,9 +59,9 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             family: egui::FontFamily::Name("inter_medium".into()),
                             size: plt::font_size::TINY,
                         },
-                        &mut st.show_file_options,
+                        &mut st.bool.show_file_options,
                         &["Import", "Export"],
-                        &mut [&mut st.import_open, &mut st.show_export_modal],
+                        &mut [&mut st.bool.import_open, &mut st.bool.show_export_modal],
                         MB_H,
                         false,
                     );
@@ -75,11 +75,11 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             family: egui::FontFamily::Name("inter_medium".into()),
                             size: plt::font_size::TINY,
                         },
-                        &mut st.show_preset_options,
+                        &mut st.bool.show_preset_options,
                         &["Save", "Load"],
                         &mut [
-                            &mut st.show_preset_save_modal,
-                            &mut st.show_preset_load_modal,
+                            &mut st.bool.show_preset_save_modal,
+                            &mut st.bool.show_preset_load_modal,
                         ],
                         MB_H,
                         false,
@@ -94,22 +94,22 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                             family: egui::FontFamily::Name("icons".into()),
                             size: plt::font_size::TINY,
                         },
-                        &mut st.show_settings,
+                        &mut st.bool.show_settings,
                         &[
                             &format!(
                                 "{} Theme",
-                                if st.dark_mode { "Graphite" } else { "Midnight" }
+                                if st.bool.dark_mode { "Graphite" } else { "Midnight" }
                             ),
                             &format!(
                                 "{} Mode",
-                                if st.advanced_mode {
+                                if st.bool.advanced_mode {
                                     "Simple"
                                 } else {
                                     "Advanced"
                                 }
                             ),
                         ],
-                        &mut [&mut st.dark_mode, &mut st.advanced_mode],
+                        &mut [&mut st.bool.dark_mode, &mut st.bool.advanced_mode],
                         MB_H,
                         true,
                     );
@@ -127,7 +127,7 @@ pub fn main_window(
     let mut resp = egui::CentralPanel::default()
         .frame(
             egui::Frame::NONE
-                .inner_margin(if !st.fullscreen {
+                .inner_margin(if !st.bool.fullscreen {
                     egui::Margin {
                         bottom: 12,
                         left: 12,
@@ -137,10 +137,10 @@ pub fn main_window(
                 } else {
                     0.into()
                 })
-                .fill(plt::BG(st.dark_mode)),
+                .fill(plt::BG(st.bool.dark_mode)),
         )
         .show_inside(ui, |ui| {
-            if !st.fullscreen {
+            if !st.bool.fullscreen {
                 timeline::draw(ui, st, player);
                 control_panel::draw(ui, st);
                 editor_window_behavior(frame);
@@ -150,14 +150,14 @@ pub fn main_window(
                 fullscreen_window_behavior(ui, frame);
             }
 
-            if st.show_export_modal {
+            if st.bool.show_export_modal {
                 export_modal(ui, st);
             }
-            if st.show_preset_load_modal || st.show_preset_save_modal {
+            if st.bool.show_preset_load_modal || st.bool.show_preset_save_modal {
                 preset_modal(ui, st);
             }
 
-            if st.rendering {
+            if st.bool.rendering {
                 player.as_ref().unwrap().pause();
             } else {
                 canvas::draw(ui, st, player);
@@ -165,7 +165,7 @@ pub fn main_window(
         })
         .response;
 
-    if !st.fullscreen {
+    if !st.bool.fullscreen {
         resp.rect = resp.rect.translate(vec2(0., -6.));
         resp.rect = resp.rect.shrink2(vec2(12.0, 6.0));
         ui.painter().rect_stroke(
@@ -180,17 +180,17 @@ pub fn main_window(
 fn show_window_drag_tooltip_modal(st: &mut AppState, ui: &mut egui::Ui) {
     if st.window_drag_tooltip_modal_deadline.is_none() {
         st.window_drag_tooltip_modal_deadline = Some(Instant::now());
-        st.window_drag_tooltip_modal_open = true;
+        st.bool.window_drag_tooltip_modal_open = true;
     }
 
-    if st.window_drag_tooltip_modal_open {
+    if st.bool.window_drag_tooltip_modal_open {
         window_drag_tooltip(ui);
     }
 
     if let Some(start_time) = st.window_drag_tooltip_modal_deadline
         && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
     {
-        st.window_drag_tooltip_modal_open = false;
+        st.bool.window_drag_tooltip_modal_open = false;
     }
 }
 
@@ -306,28 +306,28 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
             ui.painter()
                 .rect_filled(resp.rect, SHARP, plt::BG(ui.style().visuals.dark_mode));
 
-            if !st.rendering {
+            if !st.bool.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
                     dropdown_row(
                         ui,
                         "Resolution",
                         &mut st.export_config.resolution,
                         Resolution::ALL,
-                        &mut st.show_export_resolution,
+                        &mut st.bool.show_export_resolution,
                     );
                     dropdown_row(
                         ui,
                         "FPS",
                         &mut st.export_config.frame_rate,
                         Fps::ALL,
-                        &mut st.show_export_fps,
+                        &mut st.bool.show_export_fps,
                     );
                     dropdown_row(
                         ui,
                         "Quality",
                         &mut st.export_config.quality,
                         ExportQuality::ALL,
-                        &mut st.show_export_quality,
+                        &mut st.bool.show_export_quality,
                     );
                 });
 
@@ -346,7 +346,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "CANCEL",
                     plt::font_size::BODY,
                     plt::TEXT,
-                    &mut st.show_export_modal,
+                    &mut st.bool.show_export_modal,
                     false,
                 );
                 modal_button(
@@ -356,11 +356,11 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "EXPORT",
                     plt::font_size::BODY,
                     plt::LIVE,
-                    &mut st.start_render,
+                    &mut st.bool.start_render,
                     false,
                 );
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
-                    st.show_export_modal = false;
+                    st.bool.show_export_modal = false;
                 }
             } else {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
@@ -459,7 +459,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         "Cancel",
                         plt::font_size::META,
                         plt::TEXT,
-                        &mut st.export_canceled,
+                        &mut st.bool.export_canceled,
                         false,
                     );
                 });
@@ -501,7 +501,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 border(ui.style().visuals.dark_mode),
                 StrokeKind::Inside,
             );
-            if st.show_preset_save_modal {
+            if st.bool.show_preset_save_modal {
                 ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
                     let path_rect = ui
                         .allocate_rect(
@@ -594,7 +594,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         "\u{e2c7}",
                         plt::font_size::ICON,
                         plt::YELLO,
-                        &mut st.open_preset_save_file_picker,
+                        &mut st.bool.open_preset_save_file_picker,
                         true,
                     );
                 });
@@ -657,7 +657,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "CANCEL",
                     plt::font_size::BODY,
                     plt::DANGER,
-                    &mut st.show_preset_save_modal,
+                    &mut st.bool.show_preset_save_modal,
                     false,
                 );
                 modal_button(
@@ -667,15 +667,15 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "SAVE",
                     plt::font_size::BODY,
                     plt::LIVE,
-                    &mut st.save_preset,
+                    &mut st.bool.save_preset,
                     false,
                 );
                 // disallow empty preset names
-                if st.save_preset && st.preset_name.is_empty() {
-                    st.save_preset = false;
+                if st.bool.save_preset && st.preset_name.is_empty() {
+                    st.bool.save_preset = false;
                 }
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
-                    st.show_preset_save_modal = false;
+                    st.bool.show_preset_save_modal = false;
                 }
             } else {
                 ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
@@ -768,7 +768,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         "\u{e2c7}",
                         plt::font_size::ICON,
                         plt::YELLO,
-                        &mut st.open_preset_load_file_picker,
+                        &mut st.bool.open_preset_load_file_picker,
                         true,
                     );
                 });
@@ -780,7 +780,7 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "CANCEL",
                     plt::font_size::BODY,
                     plt::DANGER,
-                    &mut st.show_preset_load_modal,
+                    &mut st.bool.show_preset_load_modal,
                     false,
                 );
                 modal_button(
@@ -790,11 +790,11 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     "LOAD",
                     plt::font_size::BODY,
                     plt::LIVE,
-                    &mut st.load_preset,
+                    &mut st.bool.load_preset,
                     false,
                 );
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
-                    st.show_preset_load_modal = false;
+                    st.bool.show_preset_load_modal = false;
                 }
             }
         });

@@ -13,8 +13,8 @@ pub fn fullscreen_button(ui: &mut egui::Ui, st: &mut AppState) {
             let resp = ui.allocate_rect(
                 egui::Rect::from_min_size(
                     pos2(
-                        ui.viewport_rect().left_top().x + if st.fullscreen { 16.0 } else { 22.0 },
-                        ui.viewport_rect().left_top().y + if st.fullscreen { 17.0 } else { 44.0 },
+                        ui.viewport_rect().left_top().x + if st.bool.fullscreen { 16.0 } else { 22.0 },
+                        ui.viewport_rect().left_top().y + if st.bool.fullscreen { 17.0 } else { 44.0 },
                     ),
                     vec2(20., 20.),
                 ),
@@ -40,7 +40,7 @@ pub fn fullscreen_button(ui: &mut egui::Ui, st: &mut AppState) {
                 Align::LEFT,
             );
             if resp.clicked() {
-                st.fullscreen = !st.fullscreen;
+                st.bool.fullscreen = !st.bool.fullscreen;
                 st.window_drag_tooltip_modal_deadline.take();
             }
         });

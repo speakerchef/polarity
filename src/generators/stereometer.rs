@@ -1,7 +1,12 @@
+use crate::generators::fluidwave::ModSrc;
 use crate::generators::{ChromaType, PostFx};
+use crate::state::{BoolStates, MAX_BLOOM, MAX_CHROMA_SHIFT, MAX_VIGNETTE};
 use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
+use crate::ui::control_panel_widgets::{
+    dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
+};
 use crate::{Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum};
-use eframe::egui::Pos2;
+use eframe::egui::{self, Pos2};
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
@@ -149,25 +154,75 @@ pub struct Stereometer {
 
 impl ActiveGenerator for Stereometer {}
 impl PostFxParams for Stereometer {
-    fn post_fx(&self) -> (f32, f32, f32, ChromaType, f32) {
-        let e = &self.efx;
-        (
-            e.bloom,
-            e.vignette,
-            e.chroma_shift,
-            e.chroma_type,
-            e.chroma_blur,
-        )
-    }
-    fn post_fx_state(&self) -> (bool, bool, bool) {
-        let e = &self.efx;
-        (e.use_bloom, e.use_vignette, e.use_chroma)
+    fn post_fx(&self) -> PostFx {
+        self.efx
     }
 }
 
 impl Generator for Stereometer {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
         self.draw(pl, export_sample_idx);
+    }
+    fn draw_post_fx(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
+        let rect = section_header_submenu(ui, "BLOOM", &mut open.bloom_open).rect;
+        subheader_toggle_button(ui, &rect, &mut self.efx.use_bloom);
+        if open.bloom_open {
+            slider_row(ui, "BLOOM", &mut self.efx.bloom, 0.0, MAX_BLOOM, 1);
+        }
+        let rect = section_header_submenu(ui, "VIGNETTE", &mut open.vignette_open).rect;
+        subheader_toggle_button(ui, &rect, &mut self.efx.use_vignette);
+        if open.vignette_open {
+            slider_row(ui, "VIGNETTE", &mut self.efx.vignette, 0.0, MAX_VIGNETTE, 2);
+        }
+        let rect = section_header_submenu(ui, "CHROMA", &mut open.chroma_open).rect;
+        subheader_toggle_button(ui, &rect, &mut self.efx.use_chroma);
+        if open.chroma_open {
+            mod_slider_row(
+                ui,
+                "CHROMA",
+                &mut self.efx.chroma_shift,
+                0.0,
+                MAX_CHROMA_SHIFT,
+                3,
+                &mut self.efx.chroma_shift_mod_src,
+                ModSrc::ALL,
+                &mut open.chroma_mod_open,
+                &mut open.mod_src_open,
+                &mut self.efx.chroma_shift_range,
+            );
+            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0);
+            dropdown_row(
+                ui,
+                "TYPE",
+                &mut self.efx.chroma_type,
+                ChromaType::ALL,
+                &mut open.chroma_type_open,
+            );
+        }
+    }
+
+    fn draw_visual_menu(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates) {
+        dropdown_row(
+            ui,
+            "DENSITY",
+            &mut self.live_density,
+            LiveDensity::ALL,
+            &mut bool.density_open,
+        );
+        dropdown_row(
+            ui,
+            "TRACE",
+            &mut self.trace_density,
+            TraceDensity::ALL,
+            &mut bool.trace_open,
+        );
+        if matches!(
+            self.kind,
+            StereometerKind::ScaledBipolar | StereometerKind::ScaledLissajous
+        ) {
+            slider_row(ui, "RADIUS", &mut self.radial_scale_factor, 0.0, 1.0, 3);
+        }
+        slider_row(ui, "POINT SIZE", &mut self.point_size, 0.0005, 0.01, 4);
     }
 }
 
@@ -180,12 +235,14 @@ impl Default for Stereometer {
             efx: PostFx {
                 use_bloom: true,
                 bloom: 3.0,
-                use_vignette: false,
+                use_vignette: true,
                 vignette: 0.0,
-                use_chroma: false,
+                use_chroma: true,
                 chroma_shift: 0.0,
-                chroma_blur: 8.0,
+                chroma_blur: 4.0,
                 chroma_type: ChromaType::Radial,
+
+                ..Default::default()
             },
             radial_scale_factor: 0.6,
             fs_color: Rgba::new(0, 255, 0, 255),

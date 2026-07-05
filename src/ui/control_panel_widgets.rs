@@ -3,8 +3,8 @@ use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
 
 use eframe::egui::{
-    self, Align, CornerRadius, DragValue, FontFamily, FontId, Layout, Rect, Response, Sense,
-    Stroke, StrokeKind, Vec2, pos2, vec2,
+    self, Align, Color32, CornerRadius, DragValue, FontFamily, FontId, Layout, Rect, Response,
+    Sense, Shadow, Stroke, StrokeKind, Vec2, pos2, vec2,
 };
 
 use crate::traits::Labeled;
@@ -170,6 +170,95 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
         plt::TEXT,
         Align::LEFT,
     );
+}
+impl Labeled for &'static str {
+    fn text(self) -> &'static str {
+        self
+    }
+}
+pub fn mod_button<T: Labeled>(
+    ui: &mut egui::Ui,
+    value: &mut T,
+    options: &[T],
+    h: f32,
+    mod_menu_open: &mut bool,
+    mod_src_menu_open: &mut bool,
+    range: &mut f32,
+) {
+    const W: f32 = 12.0;
+    let (inner, mut resp) = ui.allocate_exact_size(vec2(W, h), egui::Sense::click());
+    resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
+    if resp.clicked() {
+        *mod_menu_open = !*mod_menu_open;
+    }
+    let bc = if resp.hovered() {
+        plt::YELLO
+    } else {
+        plt::BORDER(ui.visuals().dark_mode)
+    };
+    let border = Stroke {
+        width: 1.0,
+        color: bc,
+    };
+    ui.painter().rect_filled(inner, SHARP, plt::YELLO);
+    ui.painter()
+        .rect_stroke(inner, SHARP, border, egui::StrokeKind::Inside);
+
+    let font = FontId {
+        size: plt::font_size::TINY - 1.0,
+        family: egui::FontFamily::Name("inter_bold".into()),
+    };
+    let (_, th) = get_text_size(ui, "M", font.clone()).into();
+    custom_text(
+        ui,
+        "∆",
+        font.clone(),
+        inner.center() - vec2(0.0, th / 2.0),
+        0.0,
+        plt::INK,
+        Align::Center,
+    );
+    if *mod_menu_open {
+        egui::Area::new("modulation_options".into())
+            .movable(false)
+            .fixed_pos(inner.left_bottom())
+            .order(egui::Order::Foreground)
+            .show(ui.ctx(), |ui| {
+                let ctr_pan_w = 320.0;
+                let ctr_pan_pad = 24.0;
+                ui.set_width(ctr_pan_w - ctr_pan_pad);
+                ui.painter()
+                    .rect_filled(ui.available_rect_before_wrap(), SHARP, plt::YELLO);
+                ui.painter().rect_stroke(
+                    ui.available_rect_before_wrap(),
+                    SHARP,
+                    Stroke {
+                        width: 1.0,
+                        color: plt::YELLO,
+                    },
+                    StrokeKind::Outside,
+                );
+                let shadow = Shadow {
+                    offset: [0, 0],
+                    blur: 10,
+                    spread: 8,
+                    color: Color32::from_black_alpha(30),
+                };
+                ui.painter()
+                    .add(shadow.as_shape(ui.available_rect_before_wrap(), SHARP));
+                static_label(ui, "MODULATOR OPTIONS");
+                dropdown_row(ui, "MOD SOURCE", value, options, mod_src_menu_open);
+                slider_row(ui, "RANGE", range, -100.0, 100.0, 0);
+            });
+    }
+    // close dropdown if clicked elsewhere
+    // ui.ctx().input(|i| {
+    //     if i.pointer.primary_clicked()
+    //         && !inner.contains(i.pointer.interact_pos().unwrap_or_default())
+    //     {
+    //         *mod_menu_open = false;
+    //     }
+    // });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -700,6 +789,78 @@ pub fn slider_row(
                 label_text(ui, label, 70.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
                 ui.add_space(8.0);
+                value_box(ui, value, decimals, min..=max, 54.0);
+            },
+        )
+        .response
+        .rect;
+
+    let bg_rect = egui::Shape::rect_filled(
+        egui::Rect::from_min_size(
+            inner_rect.left_top(),
+            vec2(ui.available_width(), inner_rect.height()),
+        ),
+        SHARP,
+        plt::INK,
+    );
+    ui.painter().set(bg, bg_rect.clone());
+    ui.painter().line_segment(
+        [
+            bg_rect.visual_bounding_rect().left_bottom(),
+            bg_rect.visual_bounding_rect().right_bottom(),
+        ],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [
+            bg_rect.visual_bounding_rect().left_bottom(),
+            bg_rect.visual_bounding_rect().left_top(),
+        ],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [
+            bg_rect.visual_bounding_rect().right_bottom(),
+            bg_rect.visual_bounding_rect().right_top(),
+        ],
+        border(ui.style().visuals.dark_mode),
+    );
+}
+#[allow(clippy::too_many_arguments)]
+pub fn mod_slider_row<T: Labeled>(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut f32,
+    min: f32,
+    max: f32,
+    decimals: usize,
+    mod_src: &mut T,
+    mod_opts: &[T],
+    mod_open: &mut bool,
+    mod_src_open: &mut bool,
+    mod_range: &mut f32,
+) {
+    let bg = ui.painter().add(egui::Shape::Noop);
+    let inner_rect = ui
+        .allocate_ui_with_layout(
+            vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.set_min_height(plt::height::DROPDOWN_ITEM);
+                mod_button(
+                    ui,
+                    mod_src,
+                    mod_opts,
+                    plt::height::DROPDOWN_ITEM,
+                    mod_open,
+                    mod_src_open,
+                    mod_range,
+                );
+                // ui.add_space(12.0);
+                ui.add_space(6.0);
+                label_text(ui, label, 65.0);
+                slider(ui, value, min, max, plt::width::SLIDER);
+                ui.add_space(13.0);
                 value_box(ui, value, decimals, min..=max, 54.0);
             },
         )

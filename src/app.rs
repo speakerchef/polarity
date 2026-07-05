@@ -14,6 +14,7 @@ use crate::{
     Preset,
     audio::{StereoFilter, audio_player::*},
     generators::{
+        Envelope,
         rendering::{
             EffectsCallback, OutputResources, RendererCallback, get_gpu_frame,
             run_effects_render_pipeline, run_output_render_pipeline, run_source_render_pipeline,
@@ -56,7 +57,7 @@ fn render_wgpu_frame(
 
     let render_data = RendererCallback {
         canvas_size: vec2(w as f32, h as f32),
-        params: st.build_callback_params(false, fps),
+        params: st.build_renderer_callback_params(false, fps),
     };
 
     // Main pipeline
@@ -68,20 +69,7 @@ fn render_wgpu_frame(
         &mut st.resources,
         dim,
     );
-
-    let (bloom_amt, vignette, chroma_shift, chroma_type, chroma_blur) = st.active_gen().post_fx();
-    let (use_bloom, use_vignette, use_chroma) = st.active_gen().post_fx_state();
-    let effects_data = EffectsCallback {
-        top_left: Pos2::ZERO,
-        use_bloom,
-        bloom_amt,
-        use_vignette,
-        vignette,
-        use_chroma,
-        chroma_shift,
-        chroma_type,
-        chroma_blur,
-    };
+    let effects_data = st.build_effects_callback_params();
     run_effects_render_pipeline(
         &effects_data,
         device,
@@ -163,17 +151,17 @@ fn export_batched_frames(
     let queue = &wgpu_render_state.queue;
 
     for _ in 0..BATCH_SIZE {
-        if st.cur_frame_idx >= st.export_config.total_frames || st.export_canceled {
+        if st.cur_frame_idx >= st.export_config.total_frames || st.bool.export_canceled {
             drop(std::mem::take(&mut st.export_tx));
             st.writer_handle.take().unwrap().join().unwrap();
             st.logger_handle.take().unwrap().join().unwrap();
-            st.rendering = false;
-            st.show_export_modal = false;
+            st.bool.rendering = false;
+            st.bool.show_export_modal = false;
             st.cur_frame_idx = 0;
             st.export_elapsed_time.take();
             st.prev_export_timestamp.take();
             st.export_config.total_frames = 0;
-            st.export_canceled = false;
+            st.bool.export_canceled = false;
             println!("Finished");
             break;
         }
@@ -198,13 +186,13 @@ fn update_preset_path(new_path: PathBuf, dst_path: &mut Option<PathBuf>, modal_o
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         // debug_window(ui, &mut self.st);
-        if !self.st.fullscreen {
+        if !self.st.bool.fullscreen {
             menu_bar(&mut self.st, ui);
         }
         main_window(ui, &mut self.st, &mut self.player, frame);
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        theme::apply_theme(ctx, self.st.dark_mode);
+        theme::apply_theme(ctx, self.st.bool.dark_mode);
 
         self.handle_audio_import(ctx);
         self.handle_playback(ctx);
@@ -218,7 +206,7 @@ impl PolarityApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install_fonts(&cc.egui_ctx);
         let mut st = AppState::default();
-        theme::apply_theme(&cc.egui_ctx, st.dark_mode);
+        theme::apply_theme(&cc.egui_ctx, st.bool.dark_mode);
         setup_wgpu(&mut st, cc);
         Self {
             st,
@@ -227,24 +215,35 @@ impl PolarityApp {
     }
 
     fn load_file(&mut self, path: PathBuf) {
+        let (paused, clear_env) = (true, false);
         if let Some(old_player) = &self.player {
             if *old_player.contents.path != path {
-                self.spawn_audio_player(path, true);
+                self.spawn_audio_player(path, paused, clear_env);
             }
         } else {
-            self.spawn_audio_player(path, true);
+            self.spawn_audio_player(path, paused, clear_env);
         }
     }
 
-    fn spawn_audio_player(&mut self, path: PathBuf, paused: bool) {
+    fn spawn_audio_player(&mut self, path: PathBuf, paused: bool, clear_envelopes: bool) {
         // Clear old player
         self.player.take();
         self.st.stereo.clear_live_buffers();
         self.st.stereo.clear_trace_buffers();
-
+        if clear_envelopes {
+            self.st.env_a.take();
+            self.st.env_b.take();
+        }
         self.player = AudioPlayer::new(path, paused)
             .inspect_err(|err| println!("error creating audio player: {}", err))
             .ok();
+        if let Some(p) = &self.player
+            && self.st.env_a.is_none()
+            && self.st.env_b.is_none()
+        {
+            self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
+            self.st.env_b = Some(Envelope::new(1., 20., -0.40, p.contents.sample_rate));
+        }
     }
 
     fn handle_playback(&mut self, ctx: &egui::Context) {
@@ -266,7 +265,7 @@ impl PolarityApp {
             && player.ended()
         {
             let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
-            self.spawn_audio_player(player.contents.path.to_path_buf(), paused);
+            self.spawn_audio_player(player.contents.path.to_path_buf(), paused, false);
         }
     }
 
@@ -274,7 +273,7 @@ impl PolarityApp {
         if self.st.stereo.live_fs_filters.is_none()
             && let Some(p) = &self.player
         {
-            self.st.set_default_freqs = true;
+            self.st.bool.set_default_freqs = true;
             let st = &mut self.st.stereo;
             let filters = Some((
                 StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., p.contents.sample_rate),
@@ -299,7 +298,7 @@ impl PolarityApp {
             && let Some(p) = &self.player
             && self.st.stereo.last_freq != self.st.stereo.filter_freq
         {
-            self.st.set_default_freqs = false;
+            self.st.bool.set_default_freqs = false;
             let st = &mut self.st.stereo;
             st.last_freq = st.filter_freq;
             let livefs = st.live_fs_filters.as_mut().unwrap();
@@ -348,10 +347,10 @@ impl PolarityApp {
 
     fn handle_audio_import(&mut self, ctx: &egui::Context) {
         // Open audio import dialog
-        if self.st.import_open {
+        if self.st.bool.import_open {
             self.st.audio_file_dialog.pick_file();
-            self.st.import_open = false;
-            self.st.start_render = false;
+            self.st.bool.import_open = false;
+            self.st.bool.start_render = false;
         }
 
         // Check if user picked an audio file
@@ -368,51 +367,51 @@ impl PolarityApp {
 
     fn handle_preset_state(&mut self, ctx: &egui::Context) {
         let fd = &mut self.st.preset_file_dialog;
-        if self.st.open_preset_save_file_picker {
+        if self.st.bool.open_preset_save_file_picker {
             fd.pick_directory();
-            self.st.open_preset_save_file_picker = false;
-            self.st.show_preset_save_modal = false;
-            self.st.picked_preset_save_dir = true;
+            self.st.bool.open_preset_save_file_picker = false;
+            self.st.bool.show_preset_save_modal = false;
+            self.st.bool.picked_preset_save_dir = true;
         }
-        if self.st.open_preset_load_file_picker {
+        if self.st.bool.open_preset_load_file_picker {
             fd.pick_file();
-            self.st.open_preset_load_file_picker = false;
-            self.st.show_preset_load_modal = false;
-            self.st.picked_preset_load_file = true;
+            self.st.bool.open_preset_load_file_picker = false;
+            self.st.bool.show_preset_load_modal = false;
+            self.st.bool.picked_preset_load_file = true;
         }
 
-        if self.st.picked_preset_save_dir {
+        if self.st.bool.picked_preset_save_dir {
             let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
                 return;
             };
             update_preset_path(
                 newpath,
                 &mut self.st.preset_save_path,
-                &mut self.st.show_preset_save_modal,
+                &mut self.st.bool.show_preset_save_modal,
             );
-            self.st.picked_preset_save_dir = false;
+            self.st.bool.picked_preset_save_dir = false;
         };
-        if self.st.picked_preset_load_file {
+        if self.st.bool.picked_preset_load_file {
             let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
                 return;
             };
             update_preset_path(
                 newpath,
                 &mut self.st.preset_load_path,
-                &mut self.st.show_preset_load_modal,
+                &mut self.st.bool.show_preset_load_modal,
             );
-            self.st.picked_preset_load_file = false;
+            self.st.bool.picked_preset_load_file = false;
         };
 
-        if self.st.save_preset {
+        if self.st.bool.save_preset {
             self.save_preset();
-            self.st.save_preset = false;
-            self.st.show_preset_save_modal = false;
+            self.st.bool.save_preset = false;
+            self.st.bool.show_preset_save_modal = false;
         }
-        if self.st.load_preset {
+        if self.st.bool.load_preset {
             self.load_preset();
-            self.st.load_preset = false;
-            self.st.show_preset_load_modal = false;
+            self.st.bool.load_preset = false;
+            self.st.bool.show_preset_load_modal = false;
         }
     }
 
@@ -445,10 +444,10 @@ impl PolarityApp {
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         if let Some(p) = &self.player
-            && (self.st.start_render || self.st.rendering)
+            && (self.st.bool.start_render || self.st.bool.rendering)
         {
-            self.st.start_render = false;
-            self.st.rendering = true;
+            self.st.bool.start_render = false;
+            self.st.bool.rendering = true;
             let wgpu_render_state = frame
                 .wgpu_render_state()
                 .expect("error: wgpu unavailable on device");
