@@ -1,5 +1,4 @@
 use biquad::*;
-use eframe::egui::{Pos2, pos2};
 
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
@@ -91,8 +90,8 @@ impl Envelope {
     pub fn envelope(&self, range: f32) -> f32 {
         let env = self.cur_envelope;
         let s = range / 100.0;
-        let compress = |mu: f32| -> f32 { (1.0 + mu * env).ln() / (1.0 + mu).ln() * s };
-        let expand = |mu: f32| -> f32 { ((1.0 + mu).powf(env) - 1.0) / mu };
+        let compress = |mu: f32| -> f32 { ((1.0 + mu * env).ln() / (1.0 + mu).ln()) * s };
+        let expand = |mu: f32| -> f32 { (((1.0 + mu).powf(env) - 1.0) / mu) * s };
 
         /* audio taper kinda */
         let raw = self.sensitivity;
@@ -177,15 +176,4 @@ impl Envelope {
         self.cur_envelope = frame_max;
         self.last_idx = sample_idx;
     }
-}
-
-pub fn points_to_quad_vertices(s: f32, l: f32, r: f32) -> [Pos2; 6] {
-    [
-        pos2(l + s, r + s),
-        pos2(l + s, r - s),
-        pos2(l - s, r - s),
-        pos2(l + s, r + s),
-        pos2(l - s, r + s),
-        pos2(l - s, r - s),
-    ]
 }

@@ -49,8 +49,8 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     let ps = params.point_size;
     let quad_pos = array(vec2f(ps, ps), vec2f(-ps, -ps), vec2f(-ps, ps), vec2f(ps, -ps), vec2f(ps, ps), vec2f(-ps, -ps), vec2f(ps, -ps), vec2f(-ps, ps));
     var out: VertOut;
-    let particle_id = i / 6u;
-    let corner = i % 6u;
+    let particle_id = i / 6;
+    let corner = i % 6;
 
     out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
 

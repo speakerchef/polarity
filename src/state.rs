@@ -139,6 +139,10 @@ pub struct BoolStates {
     pub gradient_formula_options_open: bool,
     pub color_arrangement_options_open: bool,
     pub envelope_follower_open: bool,
+    pub env_a_open: bool,
+    pub env_b_open: bool,
+    pub env_c_open: bool,
+    pub env_d_open: bool,
 
     pub bloom_open: bool,
     pub vignette_open: bool,
@@ -198,6 +202,8 @@ pub struct AppState {
     pub fwave: Fluidwave,
     pub env_a: Option<Envelope>,
     pub env_b: Option<Envelope>,
+    pub env_c: Option<Envelope>,
+    pub env_d: Option<Envelope>,
     pub stereometer_render_resources: Option<StereometerRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
     pub bloom_render_resources: Option<EffectsRenderResources>,
@@ -230,38 +236,53 @@ impl AppState {
         }
     }
     pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
-        let (Some(a), Some(b)) = (&self.env_a, &self.env_b) else {
+        let (Some(a), Some(b), Some(c), Some(d)) =
+            (&self.env_a, &self.env_b, &self.env_c, &self.env_d)
+        else {
             return 0.0;
         };
         match src {
             ModSrc::None => 0.0,
             ModSrc::EnvA => a.envelope(range),
             ModSrc::EnvB => b.envelope(range),
+            ModSrc::EnvC => c.envelope(range),
+            ModSrc::EnvD => d.envelope(range),
         }
     }
-    pub fn envelope_from_mod_src(&self, src: ModSrc) -> Option<&Envelope> {
+    pub fn get_envelope(&self, src: ModSrc) -> Option<&Envelope> {
         match src {
             ModSrc::None => None,
             ModSrc::EnvA => self.env_a.as_ref(),
             ModSrc::EnvB => self.env_b.as_ref(),
+            ModSrc::EnvC => self.env_c.as_ref(),
+            ModSrc::EnvD => self.env_d.as_ref(),
         }
     }
 
     pub fn build_renderer_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
         match self.gen_kind {
             GenKindLabel::Stereometer => {
+                const MAX_POINT_SIZE: f32 = 0.01;
+                let s = &self.stereo;
+                let env = |src: ModSrc, range: f32| -> f32 {
+                    self.envelope_value_from_mod_src(src, range)
+                };
+                let point_size =
+                    s.point_size + env(s.point_size_mod_src, s.point_size_rng) * MAX_POINT_SIZE;
+
                 let s = &mut self.stereo;
                 GenCbParams::Stereo(StereoCbParams {
                     render_mode: s.render_mode,
+                    point_size,
                     live_pos: std::mem::take(&mut s.live_buffer),
-                    trace_pos: s.trace_buffer.iter().copied().collect(),
+                    trace_pos: s.trace_buffer.clone().into(),
 
                     live_low_pos: std::mem::take(&mut s.live_low_buffer),
                     live_mid_pos: std::mem::take(&mut s.live_mid_buffer),
                     live_high_pos: std::mem::take(&mut s.live_high_buffer),
-                    trace_low_pos: s.trace_low_buffer.iter().copied().collect(),
-                    trace_mid_pos: s.trace_mid_buffer.iter().copied().collect(),
-                    trace_high_pos: s.trace_high_buffer.iter().copied().collect(),
+                    trace_low_pos: s.trace_low_buffer.clone().into(),
+                    trace_mid_pos: s.trace_mid_buffer.clone().into(),
+                    trace_high_pos: s.trace_high_buffer.clone().into(),
 
                     fs_color: s.fs_color.into(),
                     lb_color: s.mb_color[0].into(),
@@ -271,6 +292,15 @@ impl AppState {
             }
             GenKindLabel::Fluidwave => {
                 const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
+                const MAX_LUMINANCE_FLOOR: f32 = 100.0;
+
+                let env = |src: ModSrc, range: f32| -> f32 {
+                    self.envelope_value_from_mod_src(src, range)
+                };
+                let f = &self.fwave;
+                let luminance_floor = f.luminance_floor
+                    + env(f.luminance_floor_mod_src, f.luminance_floor_rng) * MAX_LUMINANCE_FLOOR;
+
                 let f = &mut self.fwave;
                 let pressure_multiplier = f.pressure_multiplier
                     - if f.envelope_pressure_link {
@@ -297,15 +327,13 @@ impl AppState {
                     1. / fps as f32 / sim_speed
                 };
                 f.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
+
+                let active_envelope = self.env_a.as_ref().expect("unreachable without envelope");
                 let params = GenCbParams::Fwave(FluidCbParams {
                     color_mode: f.color_mode,
                     uniform_color: f.uniform_color,
                     //fwave will use env A as its driver
-                    particle_pos: self
-                        .env_a
-                        .as_ref()
-                        .expect("unreachable without envelope")
-                        .envelope(f.env_range),
+                    particle_pos: active_envelope.envelope(f.env_range),
                     frame_time_accumulator: f.frame_time_accumulator,
                     gravity: f.gravity,
                     pressure_multiplier,
@@ -320,7 +348,7 @@ impl AppState {
                     color_arrangement: f.color_arrangement,
                     color_invert: f.color_invert,
                     luminance_mode: f.luminance_mode,
-                    luminance_floor: f.luminance_floor,
+                    luminance_floor,
                     substeps: sim_speed,
                 });
                 f.last_frame = now;
@@ -408,6 +436,8 @@ impl Default for AppState {
             fwave,
             env_a: None,
             env_b: None,
+            env_c: None,
+            env_d: None,
 
             window_drag_tooltip_modal_deadline: None,
             preset_save_path: None,
@@ -416,7 +446,6 @@ impl Default for AppState {
 
             cur_frame_idx: 0,
             bool: BoolStates {
-                dark_mode: true,
                 show_fullscreen_button: true,
                 ..BoolStates::default()
             },

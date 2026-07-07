@@ -40,6 +40,7 @@ fn build_stereometer_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/stereometer_shader.wgsl").into()),
     });
 
+    let num_params = 10;
     let stereometer_bind_group_layout =
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("stereometer"),
@@ -60,7 +61,7 @@ fn build_stereometer_render_resources(
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: NonZeroU64::new(144),
+                        min_binding_size: NonZeroU64::new(16 * num_params),
                     },
                     count: None,
                 },
@@ -125,7 +126,7 @@ fn build_stereometer_render_resources(
     });
     let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
-        size: (size_of::<f32>() * 36) as u64,
+        size: 16 * num_params,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         mapped_at_creation: false,
     });

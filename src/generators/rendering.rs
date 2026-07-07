@@ -19,6 +19,8 @@ const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
 
 pub struct StereoCbParams {
     pub render_mode: RenderMode,
+    pub point_size: f32,
+
     pub live_pos: Vec<Pos2>,
     pub trace_pos: Vec<Pos2>,
 
@@ -244,6 +246,11 @@ impl StereometerRenderResources {
             &self.params_buffer,
             128,
             bytemuck::cast_slice(&[matches!(stereo.render_mode, RenderMode::MultiBand) as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            144,
+            bytemuck::cast_slice(&[stereo.point_size]),
         );
     }
 

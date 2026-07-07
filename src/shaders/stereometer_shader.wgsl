@@ -14,6 +14,7 @@ struct StereometerParams {
     @size(16) mb_color: vec4<f32>,
     @size(16) hb_color: vec4<f32>,
     @size(16) is_mb: u32, // true = !0, false = 0
+    @size(16) point_size: f32,
 };
 
 @group(0) @binding(0)
@@ -23,8 +24,8 @@ var<uniform> params: StereometerParams;
 @group(0) @binding(2)
 var<storage, read> alphas: array<f32>;
 
-fn quad_local_pos(v_idx: u32) -> vec2<f32> {
-    switch v_idx % 6u {
+fn quad_local_pos(corner: u32) -> vec2<f32> {
+    switch corner % 6 {
         case 0u: { return vec2f(1.0, 1.0); }  // l+s, r+s
         case 1u: { return vec2f(1.0, -1.0); }  // l+s, r-s
         case 2u: { return vec2f(-1.0, -1.0); }  // l-s, r-s
@@ -38,7 +39,10 @@ fn quad_local_pos(v_idx: u32) -> vec2<f32> {
 @vertex
 fn vs_main(@builtin(vertex_index) v_idx: u32) -> Vertex {
     var vertex: Vertex;
-    let pos = sample_positions[v_idx];
+    let ps = params.point_size;
+    let quad_pos = array(vec2f(ps, ps), vec2f(-ps, -ps), vec2f(-ps, ps), vec2f(ps, -ps), vec2f(ps, ps), vec2f(-ps, -ps), vec2f(ps, -ps), vec2f(-ps, ps));
+    let corner = v_idx % 6;
+    let pos = sample_positions[v_idx] + quad_pos[corner];
     vertex.position = vec4f(pos, 0.0, 1.0);
     vertex.local_pos = quad_local_pos(v_idx);
 

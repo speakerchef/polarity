@@ -98,7 +98,11 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
                         &[
                             &format!(
                                 "{} Theme",
-                                if st.bool.dark_mode { "Graphite" } else { "Midnight" }
+                                if st.bool.dark_mode {
+                                    "Graphite"
+                                } else {
+                                    "Midnight"
+                                }
                             ),
                             &format!(
                                 "{} Mode",
@@ -314,6 +318,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.export_config.resolution,
                         Resolution::ALL,
                         &mut st.bool.show_export_resolution,
+                        false,
                     );
                     dropdown_row(
                         ui,
@@ -321,6 +326,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.export_config.frame_rate,
                         Fps::ALL,
                         &mut st.bool.show_export_fps,
+                        false,
                     );
                     dropdown_row(
                         ui,
@@ -328,6 +334,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.export_config.quality,
                         ExportQuality::ALL,
                         &mut st.bool.show_export_quality,
+                        false,
                     );
                 });
 

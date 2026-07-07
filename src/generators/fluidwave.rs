@@ -78,7 +78,9 @@ impl ColorArrangement {
 labeled_enum!(ModSrc {
     None => "None",
     EnvA => "Envelope A",
-    EnvB => "Envelope B"
+    EnvB => "Envelope B",
+    EnvC => "Envelope C",
+    EnvD => "Envelope D"
 }, None);
 
 impl Labeled for ModSrc {
@@ -92,8 +94,13 @@ pub struct Fluidwave {
     pub color_mode: ColorMode,
     pub color_invert: bool,
     pub sim_speed: f32,
+
     pub luminance_mode: bool,
     pub luminance_floor: f32,
+    pub luminance_mode_mod_open: bool,
+    pub luminance_floor_mod_src: ModSrc,
+    pub luminance_floor_rng: f32,
+
     pub color_arrangement: ColorArrangement,
     pub energy_transfer_mode: EnergyTransferMode,
     pub force_direction: ForceDirection,
@@ -141,12 +148,36 @@ impl Generator for Fluidwave {
         let rect = section_header_submenu(ui, "BLOOM", &mut open.bloom_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_bloom);
         if open.bloom_open {
-            slider_row(ui, "BLOOM", &mut self.efx.bloom, 0.0, MAX_BLOOM, 1);
+            mod_slider_row(
+                ui,
+                "BLOOM",
+                &mut self.efx.bloom,
+                0.0,
+                MAX_BLOOM,
+                1,
+                &mut self.efx.bloom_mod_src,
+                &mut open.bloom_mod_open,
+                &mut open.mod_src_open,
+                &mut self.efx.bloom_range,
+                false,
+            );
         }
         let rect = section_header_submenu(ui, "VIGNETTE", &mut open.vignette_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_vignette);
         if open.vignette_open {
-            slider_row(ui, "VIGNETTE", &mut self.efx.vignette, 0.0, MAX_VIGNETTE, 2);
+            mod_slider_row(
+                ui,
+                "VIGNETTE",
+                &mut self.efx.vignette,
+                0.0,
+                MAX_VIGNETTE,
+                2,
+                &mut self.efx.vignette_mod_src,
+                &mut open.vignette_mod_open,
+                &mut open.mod_src_open,
+                &mut self.efx.vignette_range,
+                false,
+            );
         }
         let rect = section_header_submenu(ui, "CHROMA", &mut open.chroma_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_chroma);
@@ -159,29 +190,91 @@ impl Generator for Fluidwave {
                 MAX_CHROMA_SHIFT,
                 3,
                 &mut self.efx.chroma_shift_mod_src,
-                ModSrc::ALL,
                 &mut open.chroma_mod_open,
                 &mut open.mod_src_open,
                 &mut self.efx.chroma_shift_range,
+                false,
             );
-            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0);
+            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0, false);
             dropdown_row(
                 ui,
                 "TYPE",
                 &mut self.efx.chroma_type,
                 ChromaType::ALL,
                 &mut open.chroma_type_open,
+                true,
             );
         }
     }
 
+    fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
+        dropdown_row(
+            ui,
+            "COLOR MODE",
+            &mut self.color_mode,
+            ColorMode::ALL,
+            &mut open.color_mode_options_open,
+            false,
+        );
+        match self.color_mode {
+            ColorMode::VelocityGradient => {
+                dropdown_row(
+                    ui,
+                    "COLOR ORDER",
+                    &mut self.color_arrangement,
+                    ColorArrangement::ALL,
+                    &mut open.color_arrangement_options_open,
+                    false,
+                );
+                toggle_button_row(ui, "INVERT COLOR", &mut self.color_invert, false);
+                toggle_button_row(ui, "LUMINANCE MODE", &mut self.luminance_mode, false);
+                if self.luminance_mode {
+                    mod_slider_row(
+                        ui,
+                        "LUM FLOOR",
+                        &mut self.luminance_floor,
+                        0.0,
+                        100.0,
+                        0,
+                        &mut self.luminance_floor_mod_src,
+                        &mut self.luminance_mode_mod_open,
+                        &mut open.mod_src_open,
+                        &mut self.luminance_floor_rng,
+                        false,
+                    );
+                }
+            }
+            ColorMode::Uniform => {
+                slider_row(ui, "RED", &mut self.uniform_color.r, 0.0, 255.0, 0, false);
+                slider_row(ui, "GREEN", &mut self.uniform_color.g, 0.0, 255.0, 0, false);
+                slider_row(ui, "BLUE", &mut self.uniform_color.b, 0.0, 255.0, 0, false);
+            }
+        }
+    }
+
     fn draw_visual_menu(&mut self, ui: &mut egui::Ui, st: &mut BoolStates) {
-        slider_row(ui, "SIM SPEED", &mut self.sim_speed, 1.0, 200.0, 1);
-        slider_row(ui, "POINT SIZE", &mut self.point_size, 0.0005, 0.02, 4);
+        slider_row(ui, "SIM SPEED", &mut self.sim_speed, 1.0, 200.0, 1, false);
+        slider_row(
+            ui,
+            "POINT SIZE",
+            &mut self.point_size,
+            0.0005,
+            0.02,
+            4,
+            false,
+        );
         if st.advanced_mode {
             static_label(ui, "ADVANCED SETTINGS");
-            slider_row(ui, "MAX FORCE", &mut self.env_range, 0.0, 100.0, 1);
-            slider_row(ui, "VISCOSITY", &mut self.viscosity_amount, 0.0, 0.05, 3);
+            slider_row(ui, "MAX FORCE", &mut self.env_range, 0.0, 100.0, 1, false);
+            slider_row(
+                ui,
+                "VISCOSITY",
+                &mut self.viscosity_amount,
+                0.0,
+                0.05,
+                3,
+                false,
+            );
             slider_row(
                 ui,
                 "DENSITY",
@@ -189,15 +282,41 @@ impl Generator for Fluidwave {
                 0.0,
                 (86.0 * NUM_PARTICLES as f32).round(),
                 0,
+                false,
             );
             toggle_button_row(
                 ui,
                 "ENVELOPE-PRESSURE LINK",
                 &mut self.envelope_pressure_link,
+                false,
             );
-            slider_row(ui, "PRESSURE", &mut self.pressure_multiplier, 0.0, 400.0, 0);
-            slider_row(ui, "DAMPING", &mut self.edge_damping_factor, 0.0, 1.0, 2);
-            slider_row(ui, "F-BOUNDS", &mut self.smoothing_radius, 0.05, 0.25, 2);
+            slider_row(
+                ui,
+                "PRESSURE",
+                &mut self.pressure_multiplier,
+                0.0,
+                400.0,
+                0,
+                false,
+            );
+            slider_row(
+                ui,
+                "DAMPING",
+                &mut self.edge_damping_factor,
+                0.0,
+                1.0,
+                2,
+                false,
+            );
+            slider_row(
+                ui,
+                "F-BOUNDS",
+                &mut self.smoothing_radius,
+                0.05,
+                0.25,
+                2,
+                false,
+            );
         }
     }
 }
@@ -211,25 +330,30 @@ impl Default for Fluidwave {
             color_mode: ColorMode::VelocityGradient,
             color_invert: false,
             luminance_mode: true,
-            luminance_floor: 2.0,
-            color_arrangement: ColorArrangement::default(),
-            uniform_color: crate::Rgba::new(255, 25, 255, 255),
+
+            luminance_floor: 25.0,
+            luminance_mode_mod_open: false,
+            luminance_floor_mod_src: ModSrc::EnvC,
+            luminance_floor_rng: 100.0,
+
+            color_arrangement: ColorArrangement::Bgr,
+            uniform_color: crate::Rgba::new(255, 255, 255, 255),
             last_idx: 0,
             energy_transfer_mode: EnergyTransferMode::ForceField,
-            force_direction: ForceDirection::Out,
+            force_direction: ForceDirection::In,
             gravity: 0.0,
             pressure_multiplier: 150.0,
             envelope_pressure_link: true,
             target_density: (NUM_PARTICLES as f32 * 78.57).round(),
             smoothing_radius: 0.10,
-            edge_damping_factor: 0.45,
+            edge_damping_factor: 0.75,
             near_pressure_multiplier: 7.0,
             viscosity_amount: 0.007,
             point_size: 0.0045,
             env_range: 80.0,
             efx: PostFx {
-                bloom_mod_src: ModSrc::None,
-                vignette_mod_src: ModSrc::None,
+                bloom_mod_src: ModSrc::EnvB,
+                vignette_mod_src: ModSrc::EnvC,
                 chroma_shift_mod_src: ModSrc::EnvB,
 
                 use_bloom: true,
@@ -238,9 +362,9 @@ impl Default for Fluidwave {
                 vignette: 0.10,
                 use_chroma: true,
                 chroma_shift: 0.0,
-                chroma_shift_range: 100.0,
+                chroma_shift_range: 40.0,
                 chroma_blur: 4.0,
-                chroma_type: ChromaType::Radial,
+                chroma_type: ChromaType::Linear,
                 ..Default::default()
             },
         }

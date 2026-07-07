@@ -1,8 +1,5 @@
 use biquad::*;
-use eframe::{
-    egui::Pos2,
-    egui_wgpu::{self, wgpu},
-};
+use eframe::egui_wgpu::{self, wgpu};
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 use std::{
     io::Write,
@@ -16,8 +13,8 @@ use crate::{
     generators::{
         Envelope,
         rendering::{
-            EffectsCallback, OutputResources, RendererCallback, get_gpu_frame,
-            run_effects_render_pipeline, run_output_render_pipeline, run_source_render_pipeline,
+            OutputResources, RendererCallback, get_gpu_frame, run_effects_render_pipeline,
+            run_output_render_pipeline, run_source_render_pipeline,
         },
         stereometer::FilterMode,
     },
@@ -53,6 +50,15 @@ fn render_wgpu_frame(
     let frac = st.cur_frame_idx as f32 / fps as f32;
     let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
+    let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
+        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
+    else {
+        return vec![0];
+    };
+    env_a.run_differential_follower(p, Some(export_sample_idx));
+    env_b.run_differential_follower(p, Some(export_sample_idx));
+    env_c.run_differential_follower(p, Some(export_sample_idx));
+    env_d.run_differential_follower(p, Some(export_sample_idx));
     st.active_gen().prepare(p, Some(export_sample_idx));
 
     let render_data = RendererCallback {
@@ -233,6 +239,8 @@ impl PolarityApp {
         if clear_envelopes {
             self.st.env_a.take();
             self.st.env_b.take();
+            self.st.env_c.take();
+            self.st.env_d.take();
         }
         self.player = AudioPlayer::new(path, paused)
             .inspect_err(|err| println!("error creating audio player: {}", err))
@@ -242,7 +250,9 @@ impl PolarityApp {
             && self.st.env_b.is_none()
         {
             self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
-            self.st.env_b = Some(Envelope::new(1., 20., -0.40, p.contents.sample_rate));
+            self.st.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
+            self.st.env_c = Some(Envelope::new(75., 800., 0.0, p.contents.sample_rate));
+            self.st.env_d = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
         }
     }
 

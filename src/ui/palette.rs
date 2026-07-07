@@ -8,7 +8,7 @@ pub fn BG(dark: bool) -> Color32 {
         Color32::from_rgb(0x0d, 0x0d, 0x0d)
     } else {
         // Color32::from_rgb(0x1a, 0x1a, 0x1a)
-        Color32::from_rgb(0x1f, 0x1f, 0x1f)
+        Color32::from_rgb(0x22, 0x22, 0x22) // #222222 #1f1f1f
     }
 }
 

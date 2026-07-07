@@ -1,3 +1,4 @@
+use crate::generators::fluidwave::ModSrc;
 use crate::ui::{ROUND_MAX, SHARP};
 use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
@@ -110,14 +111,6 @@ pub fn section_header_submenu(ui: &mut egui::Ui, name: &str, open: &mut bool) ->
         [rect.left_top(), rect.right_top()],
         border(ui.style().visuals.dark_mode),
     );
-    p.line_segment(
-        [rect.left_bottom(), rect.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    p.line_segment(
-        [rect.right_bottom(), rect.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
     let fonts = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),
@@ -144,6 +137,10 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
     let (rect, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, SHARP, plt::GRAY);
+    p.line_segment(
+        [rect.left_top(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
     p.line_segment(
         [rect.left_bottom(), rect.right_bottom()],
         border(ui.style().visuals.dark_mode),
@@ -176,10 +173,9 @@ impl Labeled for &'static str {
         self
     }
 }
-pub fn mod_button<T: Labeled>(
+pub fn mod_button(
     ui: &mut egui::Ui,
-    value: &mut T,
-    options: &[T],
+    value: &mut ModSrc,
     h: f32,
     mod_menu_open: &mut bool,
     mod_src_menu_open: &mut bool,
@@ -191,18 +187,16 @@ pub fn mod_button<T: Labeled>(
     if resp.clicked() {
         *mod_menu_open = !*mod_menu_open;
     }
-    let bc = if resp.hovered() {
-        plt::YELLO
+    let (bg, fg) = if *mod_menu_open {
+        (plt::TEXT, plt::INK)
     } else {
-        plt::BORDER(ui.visuals().dark_mode)
+        if resp.hovered() {
+            (plt::YELLO, plt::INK)
+        } else {
+            (plt::SURFACE_HOVER(ui.visuals().dark_mode), plt::TEXT)
+        }
     };
-    let border = Stroke {
-        width: 1.0,
-        color: bc,
-    };
-    ui.painter().rect_filled(inner, SHARP, plt::YELLO);
-    ui.painter()
-        .rect_stroke(inner, SHARP, border, egui::StrokeKind::Inside);
+    ui.painter().rect_filled(inner, SHARP, bg);
 
     let font = FontId {
         size: plt::font_size::TINY - 1.0,
@@ -211,15 +205,15 @@ pub fn mod_button<T: Labeled>(
     let (_, th) = get_text_size(ui, "M", font.clone()).into();
     custom_text(
         ui,
-        "∆",
+        "•",
         font.clone(),
         inner.center() - vec2(0.0, th / 2.0),
         0.0,
-        plt::INK,
+        fg,
         Align::Center,
     );
     if *mod_menu_open {
-        egui::Area::new("modulation_options".into())
+        let resp = egui::Area::new("modulation_options".into())
             .movable(false)
             .fixed_pos(inner.left_bottom())
             .order(egui::Order::Foreground)
@@ -234,7 +228,7 @@ pub fn mod_button<T: Labeled>(
                     SHARP,
                     Stroke {
                         width: 1.0,
-                        color: plt::YELLO,
+                        color: plt::TEXT,
                     },
                     StrokeKind::Outside,
                 );
@@ -242,23 +236,34 @@ pub fn mod_button<T: Labeled>(
                     offset: [0, 0],
                     blur: 10,
                     spread: 8,
-                    color: Color32::from_black_alpha(30),
+                    color: Color32::from_black_alpha(50),
                 };
                 ui.painter()
                     .add(shadow.as_shape(ui.available_rect_before_wrap(), SHARP));
                 static_label(ui, "MODULATOR OPTIONS");
-                dropdown_row(ui, "MOD SOURCE", value, options, mod_src_menu_open);
-                slider_row(ui, "RANGE", range, -100.0, 100.0, 0);
-            });
+                dropdown_row(
+                    ui,
+                    "MOD SOURCE",
+                    value,
+                    ModSrc::ALL,
+                    mod_src_menu_open,
+                    false,
+                );
+                slider_row(ui, "RANGE", range, -100.0, 100.0, 0, false);
+            })
+            .response;
+        // close dropdown if clicked elsewhere
+        ui.ctx().input(|i| {
+            if i.pointer.primary_clicked()
+                && (!resp
+                    .interact_rect
+                    .contains(i.pointer.interact_pos().unwrap_or_default())
+                    && !inner.contains(i.pointer.interact_pos().unwrap_or_default()))
+            {
+                *mod_menu_open = false;
+            }
+        });
     }
-    // close dropdown if clicked elsewhere
-    // ui.ctx().input(|i| {
-    //     if i.pointer.primary_clicked()
-    //         && !inner.contains(i.pointer.interact_pos().unwrap_or_default())
-    //     {
-    //         *mod_menu_open = false;
-    //     }
-    // });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -444,12 +449,14 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
     resp
 }
 
-/// Creates `|____|` typa border
-fn apply_bucket_border(ui: &mut egui::Ui, rect: egui::Rect) {
-    ui.painter().line_segment(
-        [rect.left_bottom(), rect.right_bottom()],
-        border(ui.style().visuals.dark_mode),
-    );
+/// Creates `|   |` typa border
+fn apply_side_border(ui: &mut egui::Ui, rect: egui::Rect, add_bottom: bool) {
+    if add_bottom {
+        ui.painter().line_segment(
+            [rect.left_bottom(), rect.right_bottom()],
+            border(ui.style().visuals.dark_mode),
+        );
+    }
     ui.painter().line_segment(
         [rect.left_bottom(), rect.left_top()],
         border(ui.style().visuals.dark_mode),
@@ -467,6 +474,7 @@ pub fn dropdown_row<T: Labeled>(
     value: &mut T,
     options: &[T],
     open: &mut bool,
+    bottom_border: bool,
 ) {
     const SEL_W: f32 = 150.0;
     const PAD: f32 = 12.0;
@@ -494,8 +502,7 @@ pub fn dropdown_row<T: Labeled>(
     );
     ui.painter().set(bg, bg_rect.clone());
     let br = bg_rect.visual_bounding_rect();
-    apply_bucket_border(ui, br);
-
+    apply_side_border(ui, br, bottom_border);
     // close dropdown if clicked elsewhere
     ui.ctx().input(|i| {
         if i.pointer.primary_clicked()
@@ -508,7 +515,7 @@ pub fn dropdown_row<T: Labeled>(
 }
 
 /// Menu item with `On/Off` toggle button
-pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool) {
+pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool, bottom_border: bool) {
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
@@ -534,8 +541,7 @@ pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool) {
         plt::INK,
     );
     ui.painter().set(bg, bg_rect.clone());
-    let br = bg_rect.visual_bounding_rect();
-    apply_bucket_border(ui, br);
+    apply_side_border(ui, bg_rect.visual_bounding_rect(), bottom_border);
 }
 
 pub fn subheader_toggle_button(ui: &mut egui::Ui, root_rect: &egui::Rect, on: &mut bool) {
@@ -777,6 +783,7 @@ pub fn slider_row(
     min: f32,
     max: f32,
     decimals: usize,
+    bottom_border: bool,
 ) {
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
@@ -804,41 +811,21 @@ pub fn slider_row(
         plt::INK,
     );
     ui.painter().set(bg, bg_rect.clone());
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().left_bottom(),
-            bg_rect.visual_bounding_rect().right_bottom(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().left_bottom(),
-            bg_rect.visual_bounding_rect().left_top(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().right_bottom(),
-            bg_rect.visual_bounding_rect().right_top(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
+    apply_side_border(ui, bg_rect.visual_bounding_rect(), bottom_border);
 }
 #[allow(clippy::too_many_arguments)]
-pub fn mod_slider_row<T: Labeled>(
+pub fn mod_slider_row(
     ui: &mut egui::Ui,
     label: &str,
     value: &mut f32,
     min: f32,
     max: f32,
     decimals: usize,
-    mod_src: &mut T,
-    mod_opts: &[T],
+    mod_src: &mut ModSrc,
     mod_open: &mut bool,
     mod_src_open: &mut bool,
     mod_range: &mut f32,
+    bottom_border: bool,
 ) {
     let bg = ui.painter().add(egui::Shape::Noop);
     let inner_rect = ui
@@ -850,17 +837,15 @@ pub fn mod_slider_row<T: Labeled>(
                 mod_button(
                     ui,
                     mod_src,
-                    mod_opts,
                     plt::height::DROPDOWN_ITEM,
                     mod_open,
                     mod_src_open,
                     mod_range,
                 );
-                // ui.add_space(12.0);
                 ui.add_space(6.0);
-                label_text(ui, label, 65.0);
+                label_text(ui, label, 64.0);
                 slider(ui, value, min, max, plt::width::SLIDER);
-                ui.add_space(13.0);
+                ui.add_space(8.0);
                 value_box(ui, value, decimals, min..=max, 54.0);
             },
         )
@@ -876,25 +861,5 @@ pub fn mod_slider_row<T: Labeled>(
         plt::INK,
     );
     ui.painter().set(bg, bg_rect.clone());
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().left_bottom(),
-            bg_rect.visual_bounding_rect().right_bottom(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().left_bottom(),
-            bg_rect.visual_bounding_rect().left_top(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [
-            bg_rect.visual_bounding_rect().right_bottom(),
-            bg_rect.visual_bounding_rect().right_top(),
-        ],
-        border(ui.style().visuals.dark_mode),
-    );
+    apply_side_border(ui, bg_rect.visual_bounding_rect(), bottom_border);
 }

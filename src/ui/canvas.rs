@@ -80,11 +80,19 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
 
-    let (Some(pl), Some(env_a), Some(env_b)) = (pl, &mut st.env_a, &mut st.env_b) else {
+    let (Some(pl), Some(env_a), Some(env_b), Some(env_c), Some(env_d)) = (
+        pl,
+        &mut st.env_a,
+        &mut st.env_b,
+        &mut st.env_c,
+        &mut st.env_d,
+    ) else {
         return;
     };
     env_a.run_differential_follower(pl, None);
     env_b.run_differential_follower(pl, None);
+    env_c.run_differential_follower(pl, None);
+    env_d.run_differential_follower(pl, None);
     st.active_gen().prepare(pl, None);
     let renderer_params = st.build_renderer_callback_params(true, 0);
     let efx_params = st.build_effects_callback_params();

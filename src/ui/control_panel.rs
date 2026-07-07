@@ -1,6 +1,4 @@
-use crate::generators::fluidwave::{
-    ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
-};
+use crate::generators::fluidwave::{EnergyTransferMode, ForceDirection};
 use crate::generators::stereometer::{FilterMode, RenderMode, StereometerKind};
 use crate::ui::{control_panel_widgets::*, palette as plt};
 use crate::{GenKindLabel, state::*};
@@ -17,6 +15,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.stereo.render_mode,
                     RenderMode::ALL,
                     &mut st.bool.render_mode_options_open,
+                    false,
                 );
                 dropdown_row(
                     ui,
@@ -24,6 +23,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.stereo.kind,
                     StereometerKind::ALL,
                     &mut st.bool.stereo_kind_options_open,
+                    false,
                 );
             }
             GenKindLabel::Fluidwave => {
@@ -33,6 +33,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.fwave.energy_transfer_mode,
                     EnergyTransferMode::ALL,
                     &mut st.bool.energy_transfer_mode_options_open,
+                    false,
                 );
                 if matches!(
                     st.fwave.energy_transfer_mode,
@@ -44,6 +45,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.fwave.force_direction,
                         ForceDirection::ALL,
                         &mut st.bool.force_direction_options_open,
+                        false,
                     );
                 }
             }
@@ -58,6 +60,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 &mut st.stereo.filter_mode,
                 FilterMode::ALL,
                 &mut st.bool.filter_mode_options_open,
+                false,
             );
             if st.bool.set_default_freqs {
                 let f = match st.stereo.filter_mode {
@@ -69,66 +72,23 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
                 st.stereo.filter_freq = f;
                 st.stereo.last_freq = f;
             }
-            slider_row(ui, "FREQ", &mut st.stereo.filter_freq, 1.0, 20000.0, 0);
+            slider_row(
+                ui,
+                "FREQ",
+                &mut st.stereo.filter_freq,
+                1.0,
+                20000.0,
+                0,
+                false,
+            );
         }
     }
 
     section_header_submenu(ui, "COLOR", &mut st.bool.color_open);
     if st.bool.color_open {
-        match st.gen_kind {
-            GenKindLabel::Stereometer => match st.stereo.render_mode {
-                RenderMode::FullSpectrum => {
-                    slider_row(ui, "RED", &mut st.stereo.fs_color.r, 0.0, 255.0, 0);
-                    slider_row(ui, "GREEN", &mut st.stereo.fs_color.g, 0.0, 255.0, 0);
-                    slider_row(ui, "BLUE", &mut st.stereo.fs_color.b, 0.0, 255.0, 0);
-                }
-                RenderMode::MultiBand => {
-                    for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate() {
-                        static_label(ui, name);
-                        slider_row(ui, "RED", &mut st.stereo.mb_color[band].r, 0.0, 255.0, 0);
-                        slider_row(ui, "GREEN", &mut st.stereo.mb_color[band].g, 0.0, 255.0, 0);
-                        slider_row(ui, "BLUE", &mut st.stereo.mb_color[band].b, 0.0, 255.0, 0);
-                    }
-                }
-            },
-            GenKindLabel::Fluidwave => {
-                dropdown_row(
-                    ui,
-                    "COLOR MODE",
-                    &mut st.fwave.color_mode,
-                    ColorMode::ALL,
-                    &mut st.bool.color_mode_options_open,
-                );
-                match st.fwave.color_mode {
-                    ColorMode::VelocityGradient => {
-                        dropdown_row(
-                            ui,
-                            "COLOR ORDER",
-                            &mut st.fwave.color_arrangement,
-                            ColorArrangement::ALL,
-                            &mut st.bool.color_arrangement_options_open,
-                        );
-                        toggle_button_row(ui, "INVERT COLOR", &mut st.fwave.color_invert);
-                        toggle_button_row(ui, "LUMINANCE MODE", &mut st.fwave.luminance_mode);
-                        if st.fwave.luminance_mode {
-                            slider_row(
-                                ui,
-                                "LUM FLOOR",
-                                &mut st.fwave.luminance_floor,
-                                0.0,
-                                100.0,
-                                0,
-                            );
-                        }
-                    }
-                    ColorMode::Uniform => {
-                        slider_row(ui, "RED", &mut st.fwave.uniform_color.r, 0.0, 255.0, 0);
-                        slider_row(ui, "GREEN", &mut st.fwave.uniform_color.g, 0.0, 255.0, 0);
-                        slider_row(ui, "BLUE", &mut st.fwave.uniform_color.b, 0.0, 255.0, 0);
-                    }
-                }
-            }
-        }
+        let mut b_st = std::mem::take(&mut st.bool);
+        st.active_gen().draw_color_menu(ui, &mut b_st);
+        st.bool = b_st;
     }
 
     section_header_submenu(ui, "VISUAL", &mut st.bool.visual_open);
@@ -139,23 +99,71 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     }
 
     section_header_submenu(ui, "REACTIVITY", &mut st.bool.envelope_follower_open);
-    let (Some(env_a), Some(env_b)) = (&mut st.env_a, &mut st.env_b) else {
+    let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
+        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
+    else {
         return;
     };
     if st.bool.envelope_follower_open {
-        static_label(ui, "ENVELOPE A");
-        if st.bool.advanced_mode {
-            slider_row(ui, "ATTACK (ms)", &mut env_a.attack, 1., 500.0, 0);
-            slider_row(ui, "RELEASE (ms)", &mut env_a.release, 1., 1000.0, 0);
+        section_header_submenu(ui, "ENVELOPE A", &mut st.bool.env_a_open);
+        if st.bool.env_a_open {
+            slider_row(ui, "ATTACK (ms)", &mut env_a.attack, 1., 500.0, 0, false);
+            slider_row(ui, "RELEASE (ms)", &mut env_a.release, 1., 1000.0, 0, false);
+            slider_row(
+                ui,
+                "SENSITIVITY",
+                &mut env_a.sensitivity,
+                -1.0,
+                1.0,
+                2,
+                false,
+            );
         }
-        slider_row(ui, "SENSITIVITY", &mut env_a.sensitivity, -1.0, 1.0, 2);
 
-        static_label(ui, "ENVELOPE B");
-        if st.bool.advanced_mode {
-            slider_row(ui, "ATTACK (ms)", &mut env_b.attack, 1., 500.0, 0);
-            slider_row(ui, "RELEASE (ms)", &mut env_b.release, 1., 1000.0, 0);
+        section_header_submenu(ui, "ENVELOPE B", &mut st.bool.env_b_open);
+        if st.bool.env_b_open {
+            slider_row(ui, "ATTACK (ms)", &mut env_b.attack, 1., 500.0, 0, false);
+            slider_row(ui, "RELEASE (ms)", &mut env_b.release, 1., 1000.0, 0, false);
+            slider_row(
+                ui,
+                "SENSITIVITY",
+                &mut env_b.sensitivity,
+                -1.0,
+                1.0,
+                2,
+                false,
+            );
         }
-        slider_row(ui, "SENSITIVITY", &mut env_b.sensitivity, -1.0, 1.0, 2);
+
+        section_header_submenu(ui, "ENVELOPE C", &mut st.bool.env_c_open);
+        if st.bool.env_c_open {
+            slider_row(ui, "ATTACK (ms)", &mut env_c.attack, 1., 500.0, 0, false);
+            slider_row(ui, "RELEASE (ms)", &mut env_c.release, 1., 1000.0, 0, false);
+            slider_row(
+                ui,
+                "SENSITIVITY",
+                &mut env_c.sensitivity,
+                -1.0,
+                1.0,
+                2,
+                false,
+            );
+        }
+
+        section_header_submenu(ui, "ENVELOPE D", &mut st.bool.env_d_open);
+        if st.bool.env_d_open {
+            slider_row(ui, "ATTACK (ms)", &mut env_d.attack, 1., 500.0, 0, false);
+            slider_row(ui, "RELEASE (ms)", &mut env_d.release, 1., 1000.0, 0, false);
+            slider_row(
+                ui,
+                "SENSITIVITY",
+                &mut env_d.sensitivity,
+                -1.0,
+                1.0,
+                2,
+                false,
+            );
+        }
     }
 }
 

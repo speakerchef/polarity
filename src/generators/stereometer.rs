@@ -3,10 +3,11 @@ use crate::generators::{ChromaType, PostFx};
 use crate::state::{BoolStates, MAX_BLOOM, MAX_CHROMA_SHIFT, MAX_VIGNETTE};
 use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
 use crate::ui::control_panel_widgets::{
-    dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
+    dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
+    subheader_toggle_button,
 };
-use crate::{Rgba, audio::StereoFilter, generators::points_to_quad_vertices, labeled_enum};
-use eframe::egui::{self, Pos2};
+use crate::{Rgba, audio::StereoFilter, labeled_enum};
+use eframe::egui::{self, Pos2, pos2};
 use std::collections::VecDeque;
 
 use crate::audio::audio_player::AudioPlayer;
@@ -121,7 +122,12 @@ pub struct Stereometer {
     pub mb_color: [Rgba; 3],
 
     pub point_size: f32,
+    pub point_size_mod_src: ModSrc,
+    pub point_size_mod_open: bool,
+    pub point_size_rng: f32,
+
     pub radial_scale_factor: f32,
+
     pub last_sample_idx: usize,
     pub efx: PostFx,
 
@@ -167,12 +173,36 @@ impl Generator for Stereometer {
         let rect = section_header_submenu(ui, "BLOOM", &mut open.bloom_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_bloom);
         if open.bloom_open {
-            slider_row(ui, "BLOOM", &mut self.efx.bloom, 0.0, MAX_BLOOM, 1);
+            mod_slider_row(
+                ui,
+                "BLOOM",
+                &mut self.efx.bloom,
+                0.0,
+                MAX_BLOOM,
+                1,
+                &mut self.efx.bloom_mod_src,
+                &mut open.bloom_mod_open,
+                &mut open.mod_src_open,
+                &mut self.efx.bloom_range,
+                false,
+            );
         }
         let rect = section_header_submenu(ui, "VIGNETTE", &mut open.vignette_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_vignette);
         if open.vignette_open {
-            slider_row(ui, "VIGNETTE", &mut self.efx.vignette, 0.0, MAX_VIGNETTE, 2);
+            mod_slider_row(
+                ui,
+                "VIGNETTE",
+                &mut self.efx.vignette,
+                0.0,
+                MAX_VIGNETTE,
+                2,
+                &mut self.efx.vignette_mod_src,
+                &mut open.vignette_mod_open,
+                &mut open.mod_src_open,
+                &mut self.efx.vignette_range,
+                false,
+            );
         }
         let rect = section_header_submenu(ui, "CHROMA", &mut open.chroma_open).rect;
         subheader_toggle_button(ui, &rect, &mut self.efx.use_chroma);
@@ -185,19 +215,46 @@ impl Generator for Stereometer {
                 MAX_CHROMA_SHIFT,
                 3,
                 &mut self.efx.chroma_shift_mod_src,
-                ModSrc::ALL,
                 &mut open.chroma_mod_open,
                 &mut open.mod_src_open,
                 &mut self.efx.chroma_shift_range,
+                false,
             );
-            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0);
+            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0, false);
             dropdown_row(
                 ui,
                 "TYPE",
                 &mut self.efx.chroma_type,
                 ChromaType::ALL,
                 &mut open.chroma_type_open,
+                true,
             );
+        }
+    }
+
+    fn draw_color_menu(&mut self, ui: &mut egui::Ui, _bool: &mut BoolStates) {
+        match self.render_mode {
+            RenderMode::FullSpectrum => {
+                slider_row(ui, "RED", &mut self.fs_color.r, 0.0, 255.0, 0, false);
+                slider_row(ui, "GREEN", &mut self.fs_color.g, 0.0, 255.0, 0, false);
+                slider_row(ui, "BLUE", &mut self.fs_color.b, 0.0, 255.0, 0, false);
+            }
+            RenderMode::MultiBand => {
+                for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate() {
+                    static_label(ui, name);
+                    slider_row(ui, "RED", &mut self.mb_color[band].r, 0.0, 255.0, 0, false);
+                    slider_row(
+                        ui,
+                        "GREEN",
+                        &mut self.mb_color[band].g,
+                        0.0,
+                        255.0,
+                        0,
+                        false,
+                    );
+                    slider_row(ui, "BLUE", &mut self.mb_color[band].b, 0.0, 255.0, 0, false);
+                }
+            }
         }
     }
 
@@ -208,6 +265,7 @@ impl Generator for Stereometer {
             &mut self.live_density,
             LiveDensity::ALL,
             &mut bool.density_open,
+            false,
         );
         dropdown_row(
             ui,
@@ -215,14 +273,35 @@ impl Generator for Stereometer {
             &mut self.trace_density,
             TraceDensity::ALL,
             &mut bool.trace_open,
+            false,
         );
         if matches!(
             self.kind,
             StereometerKind::ScaledBipolar | StereometerKind::ScaledLissajous
         ) {
-            slider_row(ui, "RADIUS", &mut self.radial_scale_factor, 0.0, 1.0, 3);
+            slider_row(
+                ui,
+                "RADIUS",
+                &mut self.radial_scale_factor,
+                0.0,
+                1.0,
+                3,
+                false,
+            );
         }
-        slider_row(ui, "POINT SIZE", &mut self.point_size, 0.0005, 0.01, 4);
+        mod_slider_row(
+            ui,
+            "POINT SIZE",
+            &mut self.point_size,
+            0.0005,
+            0.01,
+            4,
+            &mut self.point_size_mod_src,
+            &mut self.point_size_mod_open,
+            &mut bool.mod_src_open,
+            &mut self.point_size_rng,
+            false,
+        );
     }
 }
 
@@ -233,25 +312,33 @@ impl Default for Stereometer {
             filter_freq: 1.0,
             last_freq: 1.0,
             efx: PostFx {
+                bloom_mod_src: ModSrc::EnvB,
+                vignette_mod_src: ModSrc::EnvC,
+                chroma_shift_mod_src: ModSrc::EnvB,
+
                 use_bloom: true,
                 bloom: 3.0,
                 use_vignette: true,
                 vignette: 0.0,
                 use_chroma: true,
                 chroma_shift: 0.0,
+                chroma_shift_range: 50.0,
                 chroma_blur: 4.0,
                 chroma_type: ChromaType::Radial,
 
                 ..Default::default()
             },
             radial_scale_factor: 0.6,
-            fs_color: Rgba::new(0, 255, 0, 255),
+            fs_color: Rgba::new(0, 255, 170, 255),
             mb_color: [
                 Rgba::new(110, 0, 255, 255),
                 Rgba::new(0, 155, 255, 255),
                 Rgba::new(230, 0, 140, 255),
             ],
             point_size: 0.0025,
+            point_size_mod_src: ModSrc::None,
+            point_size_mod_open: false,
+            point_size_rng: 0.0,
             kind: StereometerKind::default(),
             render_mode: RenderMode::MultiBand,
             live_density: LiveDensity::Ultra,
@@ -360,7 +447,7 @@ impl Stereometer {
             RenderMode::FullSpectrum => {
                 let (l, r) = self.filter_fs(is_live, l, r);
                 let (l, r) = self.get_coord_from_meterkind(l, r);
-                let pos = points_to_quad_vertices(self.point_size, l, r);
+                let pos = std::iter::repeat_n(pos2(l, r), 6);
                 if is_live {
                     self.live_buffer.extend(pos);
                 } else {
@@ -374,9 +461,9 @@ impl Stereometer {
                 let (lowl, lowr) = self.get_coord_from_meterkind(lowl, lowr);
                 let (midl, midr) = self.get_coord_from_meterkind(midl, midr);
                 let (highl, highr) = self.get_coord_from_meterkind(highl, highr);
-                let posl = points_to_quad_vertices(self.point_size, lowl, lowr);
-                let posm = points_to_quad_vertices(self.point_size, midl, midr);
-                let posh = points_to_quad_vertices(self.point_size, highl, highr);
+                let posl = std::iter::repeat_n(pos2(lowl, lowr), 6);
+                let posm = std::iter::repeat_n(pos2(midl, midr), 6);
+                let posh = std::iter::repeat_n(pos2(highl, highr), 6);
                 if is_live {
                     self.live_low_buffer.extend(posl);
                     self.live_mid_buffer.extend(posm);

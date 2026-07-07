@@ -22,8 +22,7 @@
   - [x] per-band color.
   - [x] Single color
   - [x] Tunable point density for primary and trace generators
-  - [x] Editable point size
-  - [x] Tunable animation scale-factor
+  - [x] Editable point size [x] Tunable animation scale-factor
 - [x] Post-FX
   - [x] Bloom / Sparkle
 - [x] Transport bar with playback controls + File path + Loop mode toggle
@@ -51,7 +50,7 @@
 - [ ] Oscilloscope based generator
   - [ ] More CRT-like and vintage
 - [ ] Live/RT mode
-- [ ] Universal audio reactivity envelope structure.
+- [x] Universal audio reactivity envelope structure.
 - [ ] Automation Envelopes / LFOs
   - [ ] 4 wave types: sine/saw/square/triangle
   - [ ] Attachable to most parameters
