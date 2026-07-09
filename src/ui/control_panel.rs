@@ -168,9 +168,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
 }
 
 fn postfx_options(ui: &mut egui::Ui, st: &mut AppState) {
-    let mut os = std::mem::take(&mut st.bool);
-    st.active_gen().draw_post_fx(ui, &mut os);
-    st.bool = os;
+    st.draw_post_fx(ui);
 }
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {

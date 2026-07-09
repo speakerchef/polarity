@@ -7,7 +7,6 @@ pub trait Labeled: PartialEq + Copy {
 }
 pub trait Generator {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>);
-    fn draw_post_fx(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates);
     fn draw_visual_menu(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates);
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates);
 }
@@ -18,5 +17,6 @@ pub trait Textured {
 }
 pub trait PostFxParams {
     fn post_fx(&self) -> PostFx;
+    fn post_fx_mut(&mut self) -> &mut PostFx;
 }
 pub trait ActiveGenerator: Generator + PostFxParams {}

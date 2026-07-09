@@ -175,6 +175,7 @@ impl Labeled for &'static str {
 }
 pub fn mod_button(
     ui: &mut egui::Ui,
+    label: &str,
     value: &mut ModSrc,
     h: f32,
     mod_menu_open: &mut bool,
@@ -213,7 +214,7 @@ pub fn mod_button(
         Align::Center,
     );
     if *mod_menu_open {
-        let resp = egui::Area::new("modulation_options".into())
+        let resp = egui::Area::new(label.to_string().into())
             .movable(false)
             .fixed_pos(inner.left_bottom())
             .order(egui::Order::Foreground)
@@ -836,6 +837,7 @@ pub fn mod_slider_row(
                 ui.set_min_height(plt::height::DROPDOWN_ITEM);
                 mod_button(
                     ui,
+                    label,
                     mod_src,
                     plt::height::DROPDOWN_ITEM,
                     mod_open,

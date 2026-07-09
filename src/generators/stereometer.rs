@@ -163,73 +163,14 @@ impl PostFxParams for Stereometer {
     fn post_fx(&self) -> PostFx {
         self.efx
     }
+    fn post_fx_mut(&mut self) -> &mut PostFx {
+        &mut self.efx
+    }
 }
 
 impl Generator for Stereometer {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
         self.draw(pl, export_sample_idx);
-    }
-    fn draw_post_fx(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
-        let rect = section_header_submenu(ui, "BLOOM", &mut open.bloom_open).rect;
-        subheader_toggle_button(ui, &rect, &mut self.efx.use_bloom);
-        if open.bloom_open {
-            mod_slider_row(
-                ui,
-                "BLOOM",
-                &mut self.efx.bloom,
-                0.0,
-                MAX_BLOOM,
-                1,
-                &mut self.efx.bloom_mod_src,
-                &mut open.bloom_mod_open,
-                &mut open.mod_src_open,
-                &mut self.efx.bloom_range,
-                false,
-            );
-        }
-        let rect = section_header_submenu(ui, "VIGNETTE", &mut open.vignette_open).rect;
-        subheader_toggle_button(ui, &rect, &mut self.efx.use_vignette);
-        if open.vignette_open {
-            mod_slider_row(
-                ui,
-                "VIGNETTE",
-                &mut self.efx.vignette,
-                0.0,
-                MAX_VIGNETTE,
-                2,
-                &mut self.efx.vignette_mod_src,
-                &mut open.vignette_mod_open,
-                &mut open.mod_src_open,
-                &mut self.efx.vignette_range,
-                false,
-            );
-        }
-        let rect = section_header_submenu(ui, "CHROMA", &mut open.chroma_open).rect;
-        subheader_toggle_button(ui, &rect, &mut self.efx.use_chroma);
-        if open.chroma_open {
-            mod_slider_row(
-                ui,
-                "CHROMA",
-                &mut self.efx.chroma_shift,
-                0.0,
-                MAX_CHROMA_SHIFT,
-                3,
-                &mut self.efx.chroma_shift_mod_src,
-                &mut open.chroma_mod_open,
-                &mut open.mod_src_open,
-                &mut self.efx.chroma_shift_range,
-                false,
-            );
-            slider_row(ui, "BLUR", &mut self.efx.chroma_blur, 0.0, 20.0, 0, false);
-            dropdown_row(
-                ui,
-                "TYPE",
-                &mut self.efx.chroma_type,
-                ChromaType::ALL,
-                &mut open.chroma_type_open,
-                true,
-            );
-        }
     }
 
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, _bool: &mut BoolStates) {

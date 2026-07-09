@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 use crate::{
-    generators::{Envelope, fluidwave::ModSrc, rendering::EffectsCallback},
+    generators::{ChromaType, Envelope, fluidwave::ModSrc, rendering::EffectsCallback},
     traits::{ActiveGenerator, Labeled},
+    ui::control_panel_widgets::{
+        dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
+    },
 };
 use std::{
     path::{Path, PathBuf},
@@ -9,7 +12,7 @@ use std::{
 };
 
 use eframe::{
-    egui::{Align2, Pos2, vec2},
+    egui::{self, Align2, Pos2, vec2},
     egui_wgpu,
 };
 use egui_file_dialog::{self as fd, FileDialog};
@@ -388,6 +391,74 @@ impl AppState {
             chroma_blur,
             chroma_type,
         }
+    }
+
+    pub fn draw_post_fx(&mut self, ui: &mut egui::Ui) {
+        let mut open = std::mem::take(&mut self.bool);
+        let fx = self.active_gen().post_fx_mut();
+
+        let rect = section_header_submenu(ui, "BLOOM", &mut open.bloom_open).rect;
+        subheader_toggle_button(ui, &rect, &mut fx.use_bloom);
+        if open.bloom_open {
+            mod_slider_row(
+                ui,
+                "BLOOM",
+                &mut fx.bloom,
+                0.0,
+                MAX_BLOOM,
+                1,
+                &mut fx.bloom_mod_src,
+                &mut open.bloom_mod_open,
+                &mut open.mod_src_open,
+                &mut fx.bloom_range,
+                false,
+            );
+        }
+        let rect = section_header_submenu(ui, "VIGNETTE", &mut open.vignette_open).rect;
+        subheader_toggle_button(ui, &rect, &mut fx.use_vignette);
+        if open.vignette_open {
+            mod_slider_row(
+                ui,
+                "VIGNETTE",
+                &mut fx.vignette,
+                0.0,
+                MAX_VIGNETTE,
+                2,
+                &mut fx.vignette_mod_src,
+                &mut open.vignette_mod_open,
+                &mut open.mod_src_open,
+                &mut fx.vignette_range,
+                false,
+            );
+        }
+        let rect = section_header_submenu(ui, "CHROMA", &mut open.chroma_open).rect;
+        subheader_toggle_button(ui, &rect, &mut fx.use_chroma);
+        if open.chroma_open {
+            mod_slider_row(
+                ui,
+                "CHROMA",
+                &mut fx.chroma_shift,
+                0.0,
+                MAX_CHROMA_SHIFT,
+                3,
+                &mut fx.chroma_shift_mod_src,
+                &mut open.chroma_mod_open,
+                &mut open.mod_src_open,
+                &mut fx.chroma_shift_range,
+                false,
+            );
+            slider_row(ui, "BLUR", &mut fx.chroma_blur, 0.0, 20.0, 0, false);
+            dropdown_row(
+                ui,
+                "TYPE",
+                &mut fx.chroma_type,
+                ChromaType::ALL,
+                &mut open.chroma_type_open,
+                true,
+            );
+        }
+
+        self.bool = open;
     }
 }
 
