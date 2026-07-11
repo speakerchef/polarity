@@ -7,8 +7,9 @@ pub trait Labeled: PartialEq + Copy {
 }
 pub trait Generator {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>);
-    fn draw_visual_menu(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates);
-    fn draw_color_menu(&mut self, ui: &mut egui::Ui, bool: &mut BoolStates);
+    fn draw_render_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates);
+    fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates);
+    fn draw_visual_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates);
 }
 pub trait Textured {
     fn texture(&self) -> Option<&wgpu::Texture>;

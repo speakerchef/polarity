@@ -1,5 +1,5 @@
 use crate::generators::fluidwave::ModSrc;
-use crate::ui::{ROUND_MAX, SHARP};
+use crate::ui::{ROUND_MAX, SHARP, apply_side_border};
 use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
 
@@ -137,21 +137,11 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
     let (rect, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, SHARP, plt::GRAY);
-    p.line_segment(
-        [rect.left_top(), rect.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    p.line_segment(
-        [rect.left_bottom(), rect.right_bottom()],
-        border(ui.style().visuals.dark_mode),
-    );
-    p.line_segment(
-        [rect.left_bottom(), rect.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    p.line_segment(
-        [rect.right_bottom(), rect.right_top()],
-        border(ui.style().visuals.dark_mode),
+    p.rect_stroke(
+        rect,
+        SHARP,
+        border(ui.visuals().dark_mode),
+        StrokeKind::Middle,
     );
     let fonts = FontId {
         size: plt::font_size::BODY,
@@ -310,7 +300,6 @@ pub fn menu_bar_option(
         font.clone(),
         rect.center() - vec2(0.0, th / 2.0),
         plt::letter_spacing::BASE,
-        // plt::BRIGHT,
         fg,
         Align::Center,
     );
@@ -389,7 +378,6 @@ pub fn popup_item(
     );
     let fonts = FontId {
         size: font_size,
-        // family: FontFamily::Name("mono_medium".into()),
         family: FontFamily::Name("inter_medium".into()),
     };
     let (_, th) = get_text_size(ui, &label.to_uppercase(), fonts.clone()).into();
@@ -448,24 +436,6 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
         Align::LEFT,
     );
     resp
-}
-
-/// Creates `|   |` typa border
-fn apply_side_border(ui: &mut egui::Ui, rect: egui::Rect, add_bottom: bool) {
-    if add_bottom {
-        ui.painter().line_segment(
-            [rect.left_bottom(), rect.right_bottom()],
-            border(ui.style().visuals.dark_mode),
-        );
-    }
-    ui.painter().line_segment(
-        [rect.left_bottom(), rect.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [rect.right_bottom(), rect.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
 }
 
 /// Menu item with `label        [ item ]` structure
@@ -630,7 +600,6 @@ pub fn dropdown_menu<T: Labeled>(
 
     let font = FontId {
         size: plt::font_size::TINY,
-        // family: egui::FontFamily::Name("mono_medium".into()),
         family: egui::FontFamily::Name("inter_medium".into()),
     };
     let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
@@ -639,7 +608,6 @@ pub fn dropdown_menu<T: Labeled>(
         ui,
         &value.text().to_uppercase(),
         font.clone(),
-        // inner.left_center() - vec2(-offset, (th / 2.0) + 1.0),
         inner.left_center() - vec2(-offset, th / 2.0),
         plt::letter_spacing::MINIMAL,
         plt::TEXT,
@@ -762,7 +730,6 @@ fn label_text(ui: &mut egui::Ui, s: &str, width: f32) {
     let fonts = FontId {
         size: plt::font_size::TINY,
         family: FontFamily::Name("inter_medium".into()),
-        // family: FontFamily::Name("mono_medium".into()),
     };
     let (_, th) = get_text_size(ui, s, fonts.clone()).into();
     custom_text(

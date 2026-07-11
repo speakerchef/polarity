@@ -6,7 +6,7 @@ use eframe::egui::{
     pos2, vec2,
 };
 
-use crate::ui::{SHARP, get_text_size};
+use crate::ui::{SHARP, apply_side_border, get_text_size};
 use crate::{
     audio::audio_player::AudioPlayer,
     state::{AppState, PlaybackMode},
@@ -72,14 +72,7 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::click());
     ui.painter()
         .rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
-    ui.painter().line_segment(
-        [rect.left_bottom(), rect.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [rect.right_bottom(), rect.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
+    apply_side_border(ui, rect, false);
     let font = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("mono".into()),
@@ -93,7 +86,6 @@ pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
         ui,
         &format!("{emins:02}:{esecs:02}"),
         font.clone(),
-        // timeposl,
         rect.left_center() + vec2(w / 4.0, -th / 2.0),
         0.,
         plt::BRIGHT,
@@ -174,14 +166,7 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
         bg
     };
     ui.painter().rect_filled(resp.rect, SHARP, bg);
-    ui.painter().line_segment(
-        [resp.rect.left_bottom(), resp.rect.left_top()],
-        border(ui.style().visuals.dark_mode),
-    );
-    ui.painter().line_segment(
-        [resp.rect.right_bottom(), resp.rect.right_top()],
-        border(ui.style().visuals.dark_mode),
-    );
+    apply_side_border(ui, resp.rect, false);
     let font_text = FontId {
         size: plt::font_size::BODY,
         family: FontFamily::Name("inter_medium".into()),

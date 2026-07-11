@@ -5,13 +5,12 @@ use eframe::egui;
 use crate::{
     generators::{ChromaType, PostFx},
     labeled_enum,
-    state::{BoolStates, MAX_BLOOM, MAX_CHROMA_SHIFT, MAX_VIGNETTE},
+    state::BoolStates,
     traits::{ActiveGenerator, Generator, Labeled, PostFxParams},
     ui::{
         canvas::NUM_PARTICLES,
         control_panel_widgets::{
-            dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
-            subheader_toggle_button, toggle_button_row,
+            dropdown_row, mod_slider_row, slider_row, static_label, toggle_button_row,
         },
     },
 };
@@ -145,6 +144,27 @@ impl Generator for Fluidwave {
         _pl: &crate::audio::audio_player::AudioPlayer,
         _export_sample_idx: Option<usize>,
     ) {
+    }
+
+    fn draw_render_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
+        dropdown_row(
+            ui,
+            "ENERGY TRANSFER",
+            &mut self.energy_transfer_mode,
+            EnergyTransferMode::ALL,
+            &mut open.energy_transfer_mode_options_open,
+            false,
+        );
+        if matches!(self.energy_transfer_mode, EnergyTransferMode::ForceField) {
+            dropdown_row(
+                ui,
+                "FORCE DIRECTION",
+                &mut self.force_direction,
+                ForceDirection::ALL,
+                &mut open.force_direction_options_open,
+                false,
+            );
+        }
     }
 
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {

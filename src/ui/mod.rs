@@ -3,6 +3,8 @@ use std::sync::Arc;
 use eframe::egui::{self, CornerRadius, Vec2};
 use eframe::egui::{Align, Color32, FontId, Pos2};
 
+use crate::ui::timeline_widgets::border;
+
 pub mod app_widgets;
 pub mod canvas;
 pub mod canvas_widgets;
@@ -52,4 +54,22 @@ pub fn custom_text(
     let galley = ui.painter().layout_job(job);
     ui.painter().galley(pos, galley.clone(), Color32::default());
     galley
+}
+
+/// Creates `|   |` typa border
+fn apply_side_border(ui: &mut egui::Ui, rect: egui::Rect, add_bottom: bool) {
+    if add_bottom {
+        ui.painter().line_segment(
+            [rect.left_bottom(), rect.right_bottom()],
+            border(ui.style().visuals.dark_mode),
+        );
+    }
+    ui.painter().line_segment(
+        [rect.left_bottom(), rect.left_top()],
+        border(ui.style().visuals.dark_mode),
+    );
+    ui.painter().line_segment(
+        [rect.right_bottom(), rect.right_top()],
+        border(ui.style().visuals.dark_mode),
+    );
 }

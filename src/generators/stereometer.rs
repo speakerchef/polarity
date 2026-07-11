@@ -1,10 +1,9 @@
 use crate::generators::fluidwave::ModSrc;
 use crate::generators::{ChromaType, PostFx};
-use crate::state::{BoolStates, MAX_BLOOM, MAX_CHROMA_SHIFT, MAX_VIGNETTE};
+use crate::state::BoolStates;
 use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
 use crate::ui::control_panel_widgets::{
     dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
-    subheader_toggle_button,
 };
 use crate::{Rgba, audio::StereoFilter, labeled_enum};
 use eframe::egui::{self, Pos2, pos2};
@@ -173,6 +172,25 @@ impl Generator for Stereometer {
         self.draw(pl, export_sample_idx);
     }
 
+    fn draw_render_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
+        dropdown_row(
+            ui,
+            "MODE",
+            &mut self.render_mode,
+            RenderMode::ALL,
+            &mut open.render_mode_options_open,
+            false,
+        );
+        dropdown_row(
+            ui,
+            "STYLE",
+            &mut self.kind,
+            StereometerKind::ALL,
+            &mut open.stereo_kind_options_open,
+            false,
+        );
+    }
+
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, _bool: &mut BoolStates) {
         match self.render_mode {
             RenderMode::FullSpectrum => {
@@ -309,6 +327,32 @@ enum FilterBand {
 }
 
 impl Stereometer {
+    pub fn draw_filtering_options(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
+        if matches!(self.render_mode, RenderMode::FullSpectrum) {
+            section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
+            if open.filtering_open {
+                dropdown_row(
+                    ui,
+                    "FILTER",
+                    &mut self.filter_mode,
+                    FilterMode::ALL,
+                    &mut open.filter_mode_options_open,
+                    false,
+                );
+                if open.set_default_freqs {
+                    let f = match self.filter_mode {
+                        FilterMode::Off => 1.0,
+                        FilterMode::Lpf => 200.,
+                        FilterMode::Bpf => 1000.,
+                        FilterMode::Hpf => 5000.,
+                    };
+                    self.filter_freq = f;
+                    self.last_freq = f;
+                }
+                slider_row(ui, "FREQ", &mut self.filter_freq, 1.0, 20000.0, 0, false);
+            }
+        }
+    }
     fn filter_fs(&mut self, is_live: bool, l: f32, r: f32) -> (f32, f32) {
         if is_live {
             if let Some(live_fs) = &mut self.live_fs_filters {
