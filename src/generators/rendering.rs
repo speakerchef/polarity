@@ -6,12 +6,12 @@ use eframe::egui_wgpu;
 use pollster::FutureExt;
 use wgpu::{BindGroupEntry, BindingResource};
 
-use crate::generators::ChromaType;
 use crate::generators::fluidwave::{
     ColorArrangement, ColorMode, EnergyTransferMode, ForceDirection,
 };
+use crate::generators::{ChromaType, TARGET_DT};
 use crate::traits::Textured;
-use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
+use crate::ui::canvas::NUM_PARTICLES;
 use crate::{
     LinearRgba,
     generators::stereometer::{MAX_TRACE_POINT_DENSITY, ParticleRenderMode, VERTICES_PER_QUAD},
@@ -64,10 +64,12 @@ pub struct FluidCbParams {
     pub substeps: f32,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum GenCbParams {
     Particle2D(Particle2DCbParams),
     Fwave(FluidCbParams),
 }
+
 impl GenCbParams {
     fn prepare_resources(
         &self,
@@ -197,13 +199,13 @@ impl P2DRenderResources {
         let alphas: Vec<f32> = if matches!(params.render_mode, ParticleRenderMode::MultiBand) {
             (0..trace_mb_len)
                 .map(|i| {
-                    (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
+                    (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75)
                 })
                 .collect()
         } else {
             (0..trace_len)
                 .map(|i| {
-                    (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
+                    (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75)
                 })
                 .collect()
         };
@@ -264,7 +266,7 @@ impl P2DRenderResources {
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[0]);
-        render_pass.draw(0..num_points, 0..1);
+        render_pass.draw(0..num_points * VERTICES_PER_QUAD as u32, 0..1);
     }
 }
 pub struct OutputResources {

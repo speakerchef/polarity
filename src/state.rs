@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 use crate::{
-    generators::{ChromaType, Envelope, fluidwave::ModSrc, rendering::EffectsCallback},
-    traits::{ActiveGenerator, Labeled},
+    generators::{
+        ChromaType, Envelope, fluidwave::ModSrc, oscilloscope::Oscilloscope,
+        rendering::EffectsCallback,
+    },
+    traits::{ActiveGenerator, Generator, Labeled},
     ui::control_panel_widgets::{
         dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
     },
@@ -22,13 +25,12 @@ use crate::{
     generators::{
         fluidwave::Fluidwave,
         rendering::{
-            EffectsRenderResources, FluidCbParams, FluidRenderResources, GenCbParams,
-            OutputResources, P2DRenderResources, Particle2DCbParams,
+            EffectsRenderResources, FluidRenderResources, GenCbParams, OutputResources,
+            P2DRenderResources,
         },
         stereometer::Stereometer,
     },
     labeled_enum,
-    ui::canvas::{MIN_SUBSTEP_DIV, SUBSTEP_DIV, TARGET_DT},
 };
 
 pub const DAMP_FACTOR: f32 = 1.25;
@@ -203,6 +205,7 @@ pub struct AppState {
     pub gen_kind: GenKindLabel,
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
+    pub osci: Oscilloscope,
     pub env_a: Option<Envelope>,
     pub env_b: Option<Envelope>,
     pub env_c: Option<Envelope>,
@@ -236,6 +239,7 @@ impl AppState {
         match self.gen_kind {
             GenKindLabel::Stereometer => &mut self.stereo,
             GenKindLabel::Fluidwave => &mut self.fwave,
+            GenKindLabel::Oscilloscope => &mut self.osci,
         }
     }
     pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
@@ -263,102 +267,19 @@ impl AppState {
     }
 
     pub fn build_renderer_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
-        match self.gen_kind {
-            GenKindLabel::Stereometer => {
-                const MAX_POINT_SIZE: f32 = 0.01;
-                let s = &self.stereo;
-                let env = |src: ModSrc, range: f32| -> f32 {
-                    self.envelope_value_from_mod_src(src, range)
-                };
-                let point_size =
-                    s.point_size + env(s.point_size_mod_src, s.point_size_rng) * MAX_POINT_SIZE;
+        let mut stereo = std::mem::take(&mut self.stereo);
+        let mut fwave = std::mem::take(&mut self.fwave);
+        let mut osci = std::mem::take(&mut self.osci);
+        let ret = match self.gen_kind {
+            GenKindLabel::Stereometer => stereo.into_gen_callback_params(self, live, fps),
+            GenKindLabel::Fluidwave => fwave.into_gen_callback_params(self, live, fps),
+            GenKindLabel::Oscilloscope => osci.into_gen_callback_params(self, live, fps),
+        };
+        self.stereo = stereo;
+        self.fwave = fwave;
+        self.osci = osci;
 
-                let s = &mut self.stereo;
-                GenCbParams::Particle2D(Particle2DCbParams {
-                    render_mode: s.render_mode,
-                    point_size,
-                    live_pos: std::mem::take(&mut s.live_buffer),
-                    trace_pos: s.trace_buffer.clone(),
-
-                    live_low: std::mem::take(&mut s.live_low_buffer),
-                    live_mid: std::mem::take(&mut s.live_mid_buffer),
-                    live_high: std::mem::take(&mut s.live_high_buffer),
-                    trace_low: s.trace_low_buffer.clone(),
-                    trace_mid: s.trace_mid_buffer.clone(),
-                    trace_high: s.trace_high_buffer.clone(),
-
-                    fs_color: s.fs_color.into(),
-                    lb_color: s.mb_color[0].into(),
-                    mb_color: s.mb_color[1].into(),
-                    hb_color: s.mb_color[2].into(),
-                })
-            }
-            GenKindLabel::Fluidwave => {
-                const MAX_FRAME_TIME: f32 = 1. / 12. / SUBSTEP_DIV;
-                const MAX_LUMINANCE_FLOOR: f32 = 100.0;
-
-                let env = |src: ModSrc, range: f32| -> f32 {
-                    self.envelope_value_from_mod_src(src, range)
-                };
-                let f = &self.fwave;
-                let luminance_floor = f.luminance_floor
-                    + env(f.luminance_floor_mod_src, f.luminance_floor_rng) * MAX_LUMINANCE_FLOOR;
-
-                let f = &mut self.fwave;
-                let pressure_multiplier = f.pressure_multiplier
-                    - if f.envelope_pressure_link {
-                        400.0
-                            * self
-                                .env_a
-                                .as_ref()
-                                .expect("unreachable without envelope")
-                                .envelope(f.env_range)
-                                .powf(DAMP_FACTOR)
-                    } else {
-                        0.0
-                    };
-
-                let sim_speed_scale = 100.0 / f.sim_speed.max(1.0);
-                let sim_speed = (sim_speed_scale * SUBSTEP_DIV) /* higher == slower */
-                    .clamp(MIN_SUBSTEP_DIV, 100.0)
-                    .round();
-
-                let now = Instant::now();
-                let frame_time = if live {
-                    now.duration_since(f.last_frame).as_secs_f32() / sim_speed
-                } else {
-                    1. / fps as f32 / sim_speed
-                };
-                f.frame_time_accumulator += frame_time.min(MAX_FRAME_TIME);
-
-                let active_envelope = self.env_a.as_ref().expect("unreachable without envelope");
-                let params = GenCbParams::Fwave(FluidCbParams {
-                    color_mode: f.color_mode,
-                    uniform_color: f.uniform_color,
-                    //fwave will use env A as its driver
-                    particle_pos: active_envelope.envelope(f.env_range),
-                    frame_time_accumulator: f.frame_time_accumulator,
-                    gravity: f.gravity,
-                    pressure_multiplier,
-                    target_density: f.target_density,
-                    smoothing_radius: f.smoothing_radius,
-                    edge_damping_factor: f.edge_damping_factor,
-                    near_pressure_multiplier: f.near_pressure_multiplier,
-                    viscosity_amount: f.viscosity_amount,
-                    point_size: f.point_size,
-                    energy_transfer_mode: f.energy_transfer_mode,
-                    force_direction: f.force_direction,
-                    color_arrangement: f.color_arrangement,
-                    color_invert: f.color_invert,
-                    luminance_mode: f.luminance_mode,
-                    luminance_floor,
-                    substeps: sim_speed,
-                });
-                f.last_frame = now;
-                f.frame_time_accumulator %= TARGET_DT; // leftover frametime
-                params
-            }
-        }
+        ret
     }
 
     pub fn build_effects_callback_params(&mut self) -> EffectsCallback {
@@ -466,7 +387,7 @@ impl Default for AppState {
     fn default() -> Self {
         let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
-        let (stereo, fwave) = (preset.stereometer, preset.fluidwave);
+        let (stereo, fwave, osci) = (preset.stereometer, preset.fluidwave, preset.oscilloscope);
         Self {
             audio_file_dialog: FileDialog::new()
                 .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
@@ -505,6 +426,7 @@ impl Default for AppState {
             playback_mode: PlaybackMode::default(),
             stereo,
             fwave,
+            osci,
             env_a: None,
             env_b: None,
             env_c: None,

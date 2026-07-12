@@ -48,25 +48,13 @@ fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
 
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     let mut open = std::mem::take(&mut st.bool);
-    section_header_submenu(ui, "RENDER", &mut open.render_open);
-    if open.render_open {
-        st.active_gen().draw_render_menu(ui, &mut open);
-    }
+    st.active_gen().draw_render_menu(ui, &mut open);
     if matches!(st.gen_kind, GenKindLabel::Stereometer)
         && matches!(st.stereo.render_mode, ParticleRenderMode::FullSpectrum)
         && open.filtering_open
-    {
-        section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
-        st.stereo.draw_filtering_options(ui, &mut open);
-    }
-    section_header_submenu(ui, "COLOR", &mut open.color_open);
-    if open.color_open {
-        st.active_gen().draw_color_menu(ui, &mut open);
-    }
-    section_header_submenu(ui, "VISUAL", &mut open.visual_open);
-    if open.visual_open {
-        st.active_gen().draw_visual_menu(ui, &mut open);
-    }
+    {}
+    st.active_gen().draw_color_menu(ui, &mut open);
+    st.active_gen().draw_visual_menu(ui, &mut open);
     section_header_submenu(ui, "REACTIVITY", &mut open.envelope_follower_open);
     st.bool = open;
 

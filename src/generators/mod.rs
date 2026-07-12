@@ -12,6 +12,11 @@ pub mod oscilloscope;
 pub mod rendering;
 pub mod stereometer;
 
+pub const TARGET_FPS: f32 = 30.0;
+pub const SUBSTEP_DIV: f32 = 6.0;
+pub const MIN_SUBSTEP_DIV: f32 = 3.0;
+pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
+
 labeled_enum!(ChromaType {
     Linear => "Linear",
     Radial => "Radial",

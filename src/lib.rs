@@ -8,7 +8,7 @@ mod traits;
 mod ui;
 mod wgpu_init;
 
-use crate::traits::Labeled;
+use crate::{generators::oscilloscope::Oscilloscope, traits::Labeled};
 pub use app::PolarityApp;
 
 use crate::generators::{fluidwave::Fluidwave, stereometer::Stereometer};
@@ -34,6 +34,7 @@ macro_rules! labeled_enum {
 pub struct Preset {
     pub stereometer: Stereometer,
     pub fluidwave: Fluidwave,
+    pub oscilloscope: Oscilloscope,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -82,6 +83,7 @@ impl LinearRgba {
 labeled_enum!(GenKindLabel{
     Stereometer=> "Stereometer",
     Fluidwave => "Fluidwave",
+    Oscilloscope => "Oscilloscope",
 }, Stereometer);
 
 impl Labeled for GenKindLabel {
@@ -90,12 +92,22 @@ impl Labeled for GenKindLabel {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Rgba {
     pub r: f32,
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+impl Default for Rgba {
+    fn default() -> Self {
+        Self {
+            r: 255.0,
+            g: 255.0,
+            b: 255.0,
+            a: 255.0,
+        }
+    }
 }
 
 impl Rgba {

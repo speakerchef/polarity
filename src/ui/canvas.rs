@@ -15,11 +15,6 @@ use crate::{audio::audio_player::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
-pub const TARGET_FPS: f32 = 30.0;
-pub const SUBSTEP_DIV: f32 = 6.0;
-pub const MIN_SUBSTEP_DIV: f32 = 3.0;
-pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
-
 const MAX_VIGNETTE: f32 = 0.5;
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
@@ -111,8 +106,4 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             ..efx_params
         },
     ));
-    // ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-    //     rect,
-    //     OutputCallback,
-    // ));
 }

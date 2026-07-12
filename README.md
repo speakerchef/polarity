@@ -47,7 +47,7 @@
   - [x] Extra color options (added inversion and luminance mode)
   - [x] Variable simulation speed
 - [ ] Non frequency-based Oscilloscope class generators
-  - [ ] Waveform window view (Maybe variable window size)
+  - [x] Waveform window view
   - [ ] Rotating shapes that morph into waveform / stereometer positions and return to shape
   - [ ] Abstract reactive formations (x3)
 - [ ] frequency-based generators (FFT)

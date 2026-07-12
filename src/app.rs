@@ -59,6 +59,7 @@ fn render_wgpu_frame(
     env_b.run_differential_follower(p, Some(export_sample_idx));
     env_c.run_differential_follower(p, Some(export_sample_idx));
     env_d.run_differential_follower(p, Some(export_sample_idx));
+
     st.active_gen().prepare(p, Some(export_sample_idx));
 
     let render_data = RendererCallback {
@@ -249,7 +250,7 @@ impl PolarityApp {
             && self.st.env_a.is_none()
             && self.st.env_b.is_none()
         {
-            self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
+            self.st.env_a = Some(Envelope::new(1., 100., -0.01, p.contents.sample_rate));
             self.st.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
             self.st.env_c = Some(Envelope::new(75., 800., 0.0, p.contents.sample_rate));
             self.st.env_d = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
@@ -429,6 +430,7 @@ impl PolarityApp {
         let Ok(data) = serde_json::to_vec(&Preset {
             stereometer: self.st.stereo.clone(),
             fluidwave: self.st.fwave.clone(),
+            oscilloscope: self.st.osci.clone(),
         }) else {
             return;
         };
