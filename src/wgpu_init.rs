@@ -40,7 +40,7 @@ fn build_particle2d_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/particle2d_shader.wgsl").into()),
     });
 
-    let num_params = 10;
+    let num_params = 11;
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("stereometer"),
         entries: &[
@@ -56,7 +56,7 @@ fn build_particle2d_render_resources(
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: true,

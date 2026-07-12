@@ -14,7 +14,9 @@ use crate::{
     },
     labeled_enum,
     traits::{ActiveGenerator, Generator, PostFxParams},
-    ui::control_panel_widgets::{mod_slider_row, section_header_submenu, slider_row},
+    ui::control_panel_widgets::{
+        mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
+    },
 };
 
 labeled_enum!(OscilloscopeKind {
@@ -34,6 +36,7 @@ pub struct Oscilloscope {
     pub point_size_rng: f32,
     pub point_size_mod_open: bool,
     pub max_height: f32,
+    pub phase_aligned: bool,
 
     #[serde(skip)]
     pub live_buffer: Vec<Pos2>,
@@ -48,14 +51,23 @@ impl Default for Oscilloscope {
         Self {
             window_sz: 25.0,
             kind: Default::default(),
+            phase_aligned: true,
+            // fs_color: Rgba {
+            //     r: 0.,
+            //     g: 255.,
+            //     b: 160.,
+            //     a: 255.0,
+            // },
             fs_color: Rgba {
-                r: 0.,
-                g: 255.,
-                b: 160.,
+                r: 80.,
+                g: 60.,
+                b: 255.,
                 a: 255.0,
             },
             efx: PostFx {
                 use_bloom: true,
+                bloom_mod_src: ModSrc::EnvA,
+                bloom_range: 80.0,
                 use_vignette: true,
                 use_chroma: true,
                 chroma_shift_mod_src: ModSrc::EnvB,
@@ -67,7 +79,7 @@ impl Default for Oscilloscope {
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,
-            max_height: 0.6,
+            max_height: 0.7,
 
             live_buffer: Default::default(),
             trace_buffer: Default::default(),
@@ -79,15 +91,10 @@ fn rising_zero_crossing(frame: (f32, f32)) -> bool {
     frame.0 <= 0.0 && frame.1 > 0.0
 }
 fn get_audio_frame(pl: &AudioPlayer, idx: usize, num_ch: usize) -> (f32, f32) {
-    let frame = pl
-        .contents
-        .samples
-        .get(idx * num_ch..(idx + 1) * num_ch)
-        .unwrap_or_default();
-
+    let s = &pl.contents.samples;
     (
-        *frame.first().unwrap_or(&0_f32),
-        *frame.last().unwrap_or(&0_f32),
+        *s.get(idx * num_ch).unwrap_or(&0_f32),
+        *s.get((idx + 1) * num_ch).unwrap_or(&0_f32),
     )
 }
 
@@ -100,22 +107,22 @@ impl Oscilloscope {
 
         let original = sample_idx;
         const MAX_TIMEOUT_SAMPLES: usize = 2048;
-        while !rising_zero_crossing(get_audio_frame(pl, sample_idx, num_ch))
-            && (sample_idx - original) < MAX_TIMEOUT_SAMPLES
-        {
-            sample_idx += 1;
+        if self.phase_aligned {
+            while !rising_zero_crossing(get_audio_frame(pl, sample_idx, num_ch)) {
+                // we couldnt find one in time
+                if (sample_idx - original) > MAX_TIMEOUT_SAMPLES {
+                    sample_idx = original;
+                    break;
+                }
+                sample_idx += 1;
+            }
         }
 
+        let gap = (Duration::from_millis(self.window_sz as u64).as_secs_f32() * sr as f32) as usize;
         let live_window = pl
             .contents
             .samples
-            .get(
-                sample_idx * num_ch
-                    ..(sample_idx as f32
-                        + Duration::from_millis(self.window_sz as u64).as_secs_f32() * sr as f32)
-                        as usize
-                        * num_ch,
-            )
+            .get(sample_idx * num_ch..(sample_idx + gap + 1) * num_ch)
             .unwrap_or_default();
 
         let mut x: f32 = -1.0;
@@ -177,6 +184,8 @@ impl Generator for Oscilloscope {
         GenCbParams::Particle2D(Particle2DCbParams {
             render_mode: ParticleRenderMode::FullSpectrum,
             point_size: s.point_size,
+            add_point_border: false,
+
             live_pos: std::mem::take(&mut s.live_buffer),
             trace_pos: s.trace_buffer.clone(),
 
@@ -211,15 +220,8 @@ impl Generator for Oscilloscope {
     fn draw_visual_menu(&mut self, ui: &mut eframe::egui::Ui, open: &mut crate::state::BoolStates) {
         section_header_submenu(ui, "VISUAL", &mut open.visual_open);
         if open.visual_open {
-            slider_row(
-                ui,
-                "WINDOW (ms)",
-                &mut self.window_sz,
-                1.0,
-                1000.0,
-                2,
-                false,
-            );
+            toggle_button_row(ui, "PHASE ALIGNED", &mut self.phase_aligned, false);
+            slider_row(ui, "WINDOW(ms)", &mut self.window_sz, 1.0, 1000.0, 2, false);
             slider_row(ui, "MAX HEIGHT", &mut self.max_height, 0.0, 1.0, 2, false);
             mod_slider_row(
                 ui,

@@ -23,6 +23,7 @@ const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
 pub struct Particle2DCbParams {
     pub render_mode: ParticleRenderMode,
     pub point_size: f32,
+    pub add_point_border: bool,
 
     pub live_pos: Vec<Pos2>,
     pub trace_pos: VecDeque<Pos2>,
@@ -198,15 +199,11 @@ impl P2DRenderResources {
 
         let alphas: Vec<f32> = if matches!(params.render_mode, ParticleRenderMode::MultiBand) {
             (0..trace_mb_len)
-                .map(|i| {
-                    (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75)
-                })
+                .map(|i| (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75))
                 .collect()
         } else {
             (0..trace_len)
-                .map(|i| {
-                    (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75)
-                })
+                .map(|i| (i as f32 / MAX_TRACE_POINT_DENSITY as f32).powf(1.75))
                 .collect()
         };
         queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
@@ -260,6 +257,11 @@ impl P2DRenderResources {
             &self.params_buffer,
             144,
             bytemuck::cast_slice(&[params.point_size]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            160,
+            bytemuck::cast_slice(&[params.add_point_border as u32]),
         );
     }
 

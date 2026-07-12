@@ -183,6 +183,7 @@ impl Generator for Stereometer {
         GenCbParams::Particle2D(Particle2DCbParams {
             render_mode: s.render_mode,
             point_size,
+            add_point_border: true,
             live_pos: std::mem::take(&mut s.live_buffer),
             trace_pos: s.trace_buffer.clone(),
 
@@ -524,7 +525,7 @@ impl Stereometer {
     }
 
     pub fn draw(&mut self, p: &AudioPlayer, export_sample_idx: Option<usize>) {
-        let num_channels = p.contents.num_channels as usize;
+        let num_ch = p.contents.num_channels as usize;
 
         let sample_pos = p.position().as_secs_f64();
         let sample_idx =
@@ -538,7 +539,7 @@ impl Stereometer {
         let live_window = p
             .contents
             .samples
-            .get(sample_idx * num_channels..(sample_idx + self.live_density.count()) * num_channels)
+            .get(sample_idx * num_ch..(sample_idx + self.live_density.count() + 1) * num_ch)
             .unwrap_or_default();
 
         self.clear_live_buffers();
@@ -552,7 +553,7 @@ impl Stereometer {
         let trace_window = p
             .contents
             .samples
-            .get(last_idx * num_channels..sample_idx * num_channels)
+            .get(last_idx * num_ch..sample_idx * num_ch)
             .unwrap_or_default();
 
         trace_window.chunks_exact(2).for_each(|s| {

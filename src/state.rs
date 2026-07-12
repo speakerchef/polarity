@@ -409,7 +409,7 @@ impl Default for AppState {
                 .show_left_panel(true)
                 .show_pinned_folders(true)
                 .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
-            gen_kind: GenKindLabel::Fluidwave,
+            gen_kind: GenKindLabel::Oscilloscope,
             stereometer_render_resources: None,
             fluid_render_resources: None,
             bloom_render_resources: None,
