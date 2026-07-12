@@ -94,6 +94,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     env_c.run_differential_follower(pl, None);
     env_d.run_differential_follower(pl, None);
     st.active_gen().prepare(pl, None);
+
     let renderer_params = st.build_renderer_callback_params(true, 0);
     let efx_params = st.build_effects_callback_params();
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
@@ -110,8 +111,8 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
             ..efx_params
         },
     ));
-    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-        rect,
-        OutputCallback,
-    ));
+    // ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+    //     rect,
+    //     OutputCallback,
+    // ));
 }

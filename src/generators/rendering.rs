@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
@@ -12,24 +14,25 @@ use crate::traits::Textured;
 use crate::ui::canvas::{NUM_PARTICLES, TARGET_DT};
 use crate::{
     LinearRgba,
-    generators::stereometer::{MAX_TRACE_POINT_DENSITY, RenderMode, VERTICES_PER_QUAD},
+    generators::stereometer::{MAX_TRACE_POINT_DENSITY, ParticleRenderMode, VERTICES_PER_QUAD},
 };
 
 const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
 
-pub struct StereoCbParams {
-    pub render_mode: RenderMode,
+#[derive(Default, Clone)]
+pub struct Particle2DCbParams {
+    pub render_mode: ParticleRenderMode,
     pub point_size: f32,
 
     pub live_pos: Vec<Pos2>,
-    pub trace_pos: Vec<Pos2>,
+    pub trace_pos: VecDeque<Pos2>,
 
-    pub live_low_pos: Vec<Pos2>,
-    pub live_mid_pos: Vec<Pos2>,
-    pub live_high_pos: Vec<Pos2>,
-    pub trace_low_pos: Vec<Pos2>,
-    pub trace_mid_pos: Vec<Pos2>,
-    pub trace_high_pos: Vec<Pos2>,
+    pub live_low: Vec<Pos2>,
+    pub live_mid: Vec<Pos2>,
+    pub live_high: Vec<Pos2>,
+    pub trace_low: VecDeque<Pos2>,
+    pub trace_mid: VecDeque<Pos2>,
+    pub trace_high: VecDeque<Pos2>,
 
     pub fs_color: LinearRgba,
     pub lb_color: LinearRgba,
@@ -37,6 +40,7 @@ pub struct StereoCbParams {
     pub hb_color: LinearRgba,
 }
 
+#[derive(Clone)]
 pub struct FluidCbParams {
     pub color_mode: ColorMode,
     pub uniform_color: crate::Rgba,
@@ -61,7 +65,7 @@ pub struct FluidCbParams {
 }
 
 pub enum GenCbParams {
-    Stereo(StereoCbParams),
+    Particle2D(Particle2DCbParams),
     Fwave(FluidCbParams),
 }
 impl GenCbParams {
@@ -71,11 +75,11 @@ impl GenCbParams {
         queue: &wgpu::Queue,
         command_encoder: &mut wgpu::CommandEncoder,
     ) {
-        let stereo_res: &StereometerRenderResources = res.get().unwrap();
+        let p2d_res: &P2DRenderResources = res.get().unwrap();
         let fluid_res: &FluidRenderResources = res.get().unwrap();
         match self {
-            GenCbParams::Stereo(stereo) => {
-                stereo_res.prepare(queue, stereo);
+            GenCbParams::Particle2D(p2d) => {
+                p2d_res.prepare(queue, p2d);
             }
             GenCbParams::Fwave(fwave) => {
                 fluid_res.prepare(queue, fwave);
@@ -101,7 +105,7 @@ impl GenCbParams {
         command_encoder: &mut wgpu::CommandEncoder,
         target_texture_view: wgpu::TextureView,
     ) {
-        let stereo_res: &StereometerRenderResources = res.get().unwrap();
+        let stereo_res: &P2DRenderResources = res.get().unwrap();
         let fluid_res: &FluidRenderResources = res.get().unwrap();
         let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("src pass"),
@@ -120,18 +124,17 @@ impl GenCbParams {
             multiview_mask: None,
         });
         match self {
-            GenCbParams::Stereo(stereo) => {
+            GenCbParams::Particle2D(stereo) => {
                 let n = match stereo.render_mode {
-                    RenderMode::FullSpectrum => {
+                    ParticleRenderMode::FullSpectrum => {
                         (stereo.live_pos.len() + stereo.trace_pos.len()) as u32
                     }
-                    RenderMode::MultiBand => {
-                        let live = stereo.live_low_pos.len()
-                            + stereo.live_mid_pos.len()
-                            + stereo.live_high_pos.len();
-                        let trace = stereo.trace_low_pos.len()
-                            + stereo.trace_mid_pos.len()
-                            + stereo.trace_high_pos.len();
+                    ParticleRenderMode::MultiBand => {
+                        let live =
+                            stereo.live_low.len() + stereo.live_mid.len() + stereo.live_high.len();
+                        let trace = stereo.trace_low.len()
+                            + stereo.trace_mid.len()
+                            + stereo.trace_high.len();
                         (live + trace) as u32
                     }
                 };
@@ -160,7 +163,7 @@ impl Textured for SrcRenderResources {
     }
 }
 
-pub struct StereometerRenderResources {
+pub struct P2DRenderResources {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
@@ -168,28 +171,30 @@ pub struct StereometerRenderResources {
     pub alpha_buffer: wgpu::Buffer,
 }
 #[allow(clippy::too_many_arguments)]
-impl StereometerRenderResources {
-    fn prepare(&self, queue: &wgpu::Queue, stereo: &StereoCbParams) {
-        let pos = match stereo.render_mode {
-            RenderMode::FullSpectrum => {
-                let mut pos = stereo.live_pos.clone();
-                pos.extend(&stereo.trace_pos);
+impl P2DRenderResources {
+    fn prepare(&self, queue: &wgpu::Queue, params: &Particle2DCbParams) {
+        let (live_len, trace_len) = (params.live_pos.len(), params.trace_pos.len());
+        let (live_mb_len, trace_mb_len) = (params.live_low.len(), params.trace_low.len());
+        let pos = match params.render_mode {
+            ParticleRenderMode::FullSpectrum => {
+                let mut pos = Vec::<Pos2>::new();
+                pos.extend(&params.live_pos);
+                pos.extend(&params.trace_pos);
                 pos
             }
-            RenderMode::MultiBand => {
-                let mut pos = stereo.live_low_pos.clone();
-                pos.extend(&stereo.live_mid_pos);
-                pos.extend(&stereo.live_high_pos);
-                pos.extend(&stereo.trace_low_pos);
-                pos.extend(&stereo.trace_mid_pos);
-                pos.extend(&stereo.trace_high_pos);
+            ParticleRenderMode::MultiBand => {
+                let mut pos = Vec::<Pos2>::new();
+                pos.extend(&params.live_low);
+                pos.extend(&params.live_mid);
+                pos.extend(&params.live_high);
+                pos.extend(&params.trace_low);
+                pos.extend(&params.trace_mid);
+                pos.extend(&params.trace_high);
                 pos
             }
         };
-        let (live_len, trace_len) = (stereo.live_pos.len(), stereo.trace_pos.len());
-        let (live_mb_len, trace_mb_len) = (stereo.live_low_pos.len(), stereo.trace_low_pos.len());
 
-        let alphas: Vec<f32> = if matches!(stereo.render_mode, RenderMode::MultiBand) {
+        let alphas: Vec<f32> = if matches!(params.render_mode, ParticleRenderMode::MultiBand) {
             (0..trace_mb_len)
                 .map(|i| {
                     (i as f32 / (MAX_TRACE_POINT_DENSITY * VERTICES_PER_QUAD) as f32).powf(1.75)
@@ -205,10 +210,10 @@ impl StereometerRenderResources {
         queue.write_buffer(&self.alpha_buffer, 0, bytemuck::cast_slice(&alphas));
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&pos));
 
-        let fs_color = stereo.fs_color;
-        let lb_color = stereo.lb_color;
-        let mb_color = stereo.mb_color;
-        let hb_color = stereo.hb_color;
+        let fs_color = params.fs_color;
+        let lb_color = params.lb_color;
+        let mb_color = params.mb_color;
+        let hb_color = params.hb_color;
 
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[live_len]));
         queue.write_buffer(&self.params_buffer, 16, bytemuck::cast_slice(&[trace_len]));
@@ -245,12 +250,14 @@ impl StereometerRenderResources {
         queue.write_buffer(
             &self.params_buffer,
             128,
-            bytemuck::cast_slice(&[matches!(stereo.render_mode, RenderMode::MultiBand) as u32]),
+            bytemuck::cast_slice(&[
+                matches!(params.render_mode, ParticleRenderMode::MultiBand) as u32
+            ]),
         );
         queue.write_buffer(
             &self.params_buffer,
             144,
-            bytemuck::cast_slice(&[stereo.point_size]),
+            bytemuck::cast_slice(&[params.point_size]),
         );
     }
 
@@ -430,25 +437,27 @@ impl FluidRenderResources {
     }
     fn compute(&self, compute_pass: &mut wgpu::ComputePass<'_>) {
         const WORKGROUP_SIZE: u32 = 256;
+        let num_groups: u32 =
+            ((NUM_PARTICLES * NUM_PARTICLES * 4) as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
         compute_pass.set_pipeline(&self.positions_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
-        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+        compute_pass.dispatch_workgroups(num_groups, 1, 1);
 
         compute_pass.set_pipeline(&self.density_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
-        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+        compute_pass.dispatch_workgroups(num_groups, 1, 1);
 
         compute_pass.set_pipeline(&self.viscosity_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
-        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+        compute_pass.dispatch_workgroups(num_groups, 1, 1);
 
         compute_pass.set_pipeline(&self.pressure_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
-        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+        compute_pass.dispatch_workgroups(num_groups, 1, 1);
 
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[0]);
-        compute_pass.dispatch_workgroups(WORKGROUP_SIZE, 1, 1);
+        compute_pass.dispatch_workgroups(num_groups, 1, 1);
     }
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
         render_pass.set_pipeline(&self.pipeline);
@@ -462,21 +471,21 @@ pub struct RendererCallback {
     pub params: GenCbParams,
 }
 pub fn run_source_render_pipeline(
-    data: &RendererCallback,
+    params: &GenCbParams,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     command_encoder: &mut wgpu::CommandEncoder,
     res: &mut egui_wgpu::CallbackResources,
     dim: (u32, u32),
 ) {
-    data.params.prepare_resources(res, queue, command_encoder);
+    params.prepare_resources(res, queue, command_encoder);
     let src_view = get_texture_view(
         res.get_mut::<SrcRenderResources>().unwrap(),
         device,
         dim,
         true,
     );
-    data.params.paint(res, command_encoder, src_view);
+    params.paint(res, command_encoder, src_view);
 }
 
 fn get_texture_view<T: Textured>(
@@ -537,14 +546,21 @@ impl egui_wgpu::CallbackTrait for RendererCallback {
             (self.canvas_size.x * ppp) as u32,
             (self.canvas_size.y * ppp) as u32,
         );
-        run_source_render_pipeline(self, device, queue, command_encoder, resources, (w, h));
+        run_source_render_pipeline(
+            &self.params,
+            device,
+            queue,
+            command_encoder,
+            resources,
+            (w, h),
+        );
         Vec::new()
     }
 
     fn paint(
         &self,
         _info: egui::PaintCallbackInfo,
-        _render_pass: &mut wgpu::RenderPass<'static>,
+        _render_pass: &mut wgpu::RenderPass<'_>,
         _resources: &egui_wgpu::CallbackResources,
     ) {
     }

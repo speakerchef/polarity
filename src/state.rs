@@ -23,7 +23,7 @@ use crate::{
         fluidwave::Fluidwave,
         rendering::{
             EffectsRenderResources, FluidCbParams, FluidRenderResources, GenCbParams,
-            OutputResources, StereoCbParams, StereometerRenderResources,
+            OutputResources, P2DRenderResources, Particle2DCbParams,
         },
         stereometer::Stereometer,
     },
@@ -207,7 +207,7 @@ pub struct AppState {
     pub env_b: Option<Envelope>,
     pub env_c: Option<Envelope>,
     pub env_d: Option<Envelope>,
-    pub stereometer_render_resources: Option<StereometerRenderResources>,
+    pub stereometer_render_resources: Option<P2DRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
     pub bloom_render_resources: Option<EffectsRenderResources>,
     pub output_render_resources: Option<OutputResources>,
@@ -274,18 +274,18 @@ impl AppState {
                     s.point_size + env(s.point_size_mod_src, s.point_size_rng) * MAX_POINT_SIZE;
 
                 let s = &mut self.stereo;
-                GenCbParams::Stereo(StereoCbParams {
+                GenCbParams::Particle2D(Particle2DCbParams {
                     render_mode: s.render_mode,
                     point_size,
                     live_pos: std::mem::take(&mut s.live_buffer),
-                    trace_pos: s.trace_buffer.clone().into(),
+                    trace_pos: s.trace_buffer.clone(),
 
-                    live_low_pos: std::mem::take(&mut s.live_low_buffer),
-                    live_mid_pos: std::mem::take(&mut s.live_mid_buffer),
-                    live_high_pos: std::mem::take(&mut s.live_high_buffer),
-                    trace_low_pos: s.trace_low_buffer.clone().into(),
-                    trace_mid_pos: s.trace_mid_buffer.clone().into(),
-                    trace_high_pos: s.trace_high_buffer.clone().into(),
+                    live_low: std::mem::take(&mut s.live_low_buffer),
+                    live_mid: std::mem::take(&mut s.live_mid_buffer),
+                    live_high: std::mem::take(&mut s.live_high_buffer),
+                    trace_low: s.trace_low_buffer.clone(),
+                    trace_mid: s.trace_mid_buffer.clone(),
+                    trace_high: s.trace_high_buffer.clone(),
 
                     fs_color: s.fs_color.into(),
                     lb_color: s.mb_color[0].into(),

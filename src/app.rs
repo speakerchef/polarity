@@ -68,7 +68,7 @@ fn render_wgpu_frame(
 
     // Main pipeline
     run_source_render_pipeline(
-        &render_data,
+        &render_data.params,
         device,
         queue,
         &mut command_encoder,

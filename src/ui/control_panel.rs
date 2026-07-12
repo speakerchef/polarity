@@ -1,4 +1,5 @@
 use crate::generators::Envelope;
+use crate::generators::stereometer::ParticleRenderMode;
 use crate::traits::Labeled;
 use crate::ui::{control_panel_widgets::*, palette as plt};
 use crate::{GenKindLabel, state::*};
@@ -47,27 +48,28 @@ fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
 
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     let mut open = std::mem::take(&mut st.bool);
-    section_header_submenu(ui, "RENDER", &mut st.bool.render_open);
-    if st.bool.render_open {
+    section_header_submenu(ui, "RENDER", &mut open.render_open);
+    if open.render_open {
         st.active_gen().draw_render_menu(ui, &mut open);
     }
-
-    if matches!(st.gen_kind, GenKindLabel::Stereometer) {
+    if matches!(st.gen_kind, GenKindLabel::Stereometer)
+        && matches!(st.stereo.render_mode, ParticleRenderMode::FullSpectrum)
+        && open.filtering_open
+    {
+        section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
         st.stereo.draw_filtering_options(ui, &mut open);
     }
-
-    section_header_submenu(ui, "COLOR", &mut st.bool.color_open);
-    if st.bool.color_open {
+    section_header_submenu(ui, "COLOR", &mut open.color_open);
+    if open.color_open {
         st.active_gen().draw_color_menu(ui, &mut open);
     }
-
-    section_header_submenu(ui, "VISUAL", &mut st.bool.visual_open);
-    if st.bool.visual_open {
+    section_header_submenu(ui, "VISUAL", &mut open.visual_open);
+    if open.visual_open {
         st.active_gen().draw_visual_menu(ui, &mut open);
     }
+    section_header_submenu(ui, "REACTIVITY", &mut open.envelope_follower_open);
     st.bool = open;
 
-    section_header_submenu(ui, "REACTIVITY", &mut st.bool.envelope_follower_open);
     draw_reactivity_options(st, ui);
 }
 

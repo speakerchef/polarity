@@ -6,8 +6,8 @@ use wgpu::{Device, util::DeviceExt};
 use crate::{
     generators::{
         rendering::{
-            EffectsRenderResources, FluidRenderResources, OutputResources, SrcRenderResources,
-            StereometerRenderResources,
+            EffectsRenderResources, FluidRenderResources, OutputResources, P2DRenderResources,
+            SrcRenderResources,
         },
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
     },
@@ -31,56 +31,55 @@ fn init_src_render_resources(st: &mut AppState, wgpu_render_state: &egui_wgpu::R
         .callback_resources
         .insert(live_res);
 }
-fn build_stereometer_render_resources(
+fn build_particle2d_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
-) -> StereometerRenderResources {
+) -> P2DRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("stereometer"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/stereometer_shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/particle2d_shader.wgsl").into()),
     });
 
     let num_params = 10;
-    let stereometer_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("stereometer"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
-                    },
-                    count: None,
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("stereometer"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: NonZeroU64::new(16 * num_params),
-                    },
-                    count: None,
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: NonZeroU64::new(16 * num_params),
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
-                    },
-                    count: None,
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16),
                 },
-            ],
-        });
+                count: None,
+            },
+        ],
+    });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("stereometer"),
-        bind_group_layouts: &[Some(&stereometer_bind_group_layout)],
+        bind_group_layouts: &[Some(&bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -131,9 +130,9 @@ fn build_stereometer_render_resources(
         mapped_at_creation: false,
     });
 
-    let stereometer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("stereometer"),
-        layout: &stereometer_bind_group_layout,
+        layout: &bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -149,24 +148,23 @@ fn build_stereometer_render_resources(
             },
         ],
     });
-    StereometerRenderResources {
+    P2DRenderResources {
         pipeline,
-        bind_group: stereometer_bind_group,
+        bind_group,
         vertex_buffer,
         params_buffer,
         alpha_buffer,
     }
 }
 
-fn init_stereometer_render_resources(
+fn init_particle2d_render_resources(
     st: &mut AppState,
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let live_res = build_stereometer_render_resources(device, wgpu_render_state);
-    let export_res = build_stereometer_render_resources(device, wgpu_render_state);
+    let live_res = build_particle2d_render_resources(device, wgpu_render_state);
+    let export_res = build_particle2d_render_resources(device, wgpu_render_state);
     st.resources.insert(export_res);
-    // st.stereometer_render_resources = Some(export_res);
     wgpu_render_state
         .renderer
         .write()
@@ -317,6 +315,7 @@ fn init_effects_render_resources(
 fn build_output_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
+    full_output_buf: bool,
 ) -> OutputResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("output"),
@@ -394,14 +393,19 @@ fn build_output_render_resources(
         mipmap_filter: wgpu::MipmapFilterMode::Linear,
         ..Default::default()
     });
-    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
-        contents: bytemuck::cast_slice(&[0f32; 4]), // 16 bytes aligned
+        size: 16, // 16 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
     });
     let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("output buffer"),
-        size: (4320 * 4320 * size_of::<u32>()) as u64,
+        size: if full_output_buf {
+            (4320 * 4320 * size_of::<u32>()) as u64
+        } else {
+            16
+        },
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
@@ -641,6 +645,7 @@ fn build_fluid_render_resources(
         cache: None,
     });
     static POS: [[f32; 8]; (NUM_PARTICLES * NUM_PARTICLES) as usize] = generate_particle_grid();
+    let total_num_particles = (NUM_PARTICLES.pow(2) * 4) as usize;
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("fluid vertex buffer"),
         contents: bytemuck::cast_slice(POS.as_flattened()),
@@ -658,13 +663,13 @@ fn build_fluid_render_resources(
     });
     let velocity_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("fluid velocity buffer"),
-        size: (size_of::<[f32; 2]>() * (4096) * (4096)) as u64,
+        size: (size_of::<[f32; 2]>() * total_num_particles) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
     let speaker_position = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("fluid speaker_positions buffer"),
-        size: ((size_of::<f32>() * 2) * 4096 * 4096) as u64,
+        size: 16,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
@@ -765,8 +770,8 @@ fn init_output_render_resources(
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let live_res = build_output_render_resources(device, wgpu_render_state);
-    let export_res = build_output_render_resources(device, wgpu_render_state);
+    let live_res = build_output_render_resources(device, wgpu_render_state, false);
+    let export_res = build_output_render_resources(device, wgpu_render_state, true);
     st.resources.insert(export_res);
     wgpu_render_state
         .renderer
@@ -798,7 +803,7 @@ pub fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
     let device = &wgpu_render_state.device;
 
     init_src_render_resources(st, wgpu_render_state);
-    init_stereometer_render_resources(st, device, wgpu_render_state);
+    init_particle2d_render_resources(st, device, wgpu_render_state);
     init_effects_render_resources(st, device, wgpu_render_state);
     init_output_render_resources(st, device, wgpu_render_state);
     init_fluid_render_resources(st, device, wgpu_render_state);

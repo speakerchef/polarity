@@ -147,6 +147,7 @@ fn cs_calculate_predicted_positions(@builtin(global_invocation_id) id: vec3u) {
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn cs_calculate_densities(@builtin(global_invocation_id) id: vec3u) {
     let i = id.x;
+    if i >= arrayLength(&positions) { return; }
     densities[i] = calculate_density(predicted_positions[i]);
 }
 

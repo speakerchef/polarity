@@ -8,8 +8,10 @@ use crate::{
 };
 
 pub mod fluidwave;
+pub mod oscilloscope;
 pub mod rendering;
 pub mod stereometer;
+
 labeled_enum!(ChromaType {
     Linear => "Linear",
     Radial => "Radial",

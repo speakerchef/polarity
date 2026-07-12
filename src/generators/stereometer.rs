@@ -17,7 +17,7 @@ labeled_enum!(StereometerKind {
     ScaledLissajous => "Scaled Lissajous",
 }, ScaledLissajous);
 
-labeled_enum!(RenderMode {
+labeled_enum!(ParticleRenderMode {
     FullSpectrum => "Full Spectrum",
     MultiBand    => "Multi-Band",
 }, MultiBand);
@@ -71,7 +71,7 @@ impl TraceDensity {
     }
 }
 
-impl Labeled for RenderMode {
+impl Labeled for ParticleRenderMode {
     fn text(self) -> &'static str {
         self.label()
     }
@@ -108,7 +108,7 @@ const LINEAR_BIPOLAR_SF: f32 = 0.5;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Stereometer {
     pub kind: StereometerKind,
-    pub render_mode: RenderMode,
+    pub render_mode: ParticleRenderMode,
 
     pub live_density: LiveDensity,
     pub trace_density: TraceDensity,
@@ -177,7 +177,7 @@ impl Generator for Stereometer {
             ui,
             "MODE",
             &mut self.render_mode,
-            RenderMode::ALL,
+            ParticleRenderMode::ALL,
             &mut open.render_mode_options_open,
             false,
         );
@@ -193,12 +193,12 @@ impl Generator for Stereometer {
 
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, _bool: &mut BoolStates) {
         match self.render_mode {
-            RenderMode::FullSpectrum => {
+            ParticleRenderMode::FullSpectrum => {
                 slider_row(ui, "RED", &mut self.fs_color.r, 0.0, 255.0, 0, false);
                 slider_row(ui, "GREEN", &mut self.fs_color.g, 0.0, 255.0, 0, false);
                 slider_row(ui, "BLUE", &mut self.fs_color.b, 0.0, 255.0, 0, false);
             }
-            RenderMode::MultiBand => {
+            ParticleRenderMode::MultiBand => {
                 for (band, name) in ["LOW BAND", "MID BAND", "HIGH BAND"].iter().enumerate() {
                     static_label(ui, name);
                     slider_row(ui, "RED", &mut self.mb_color[band].r, 0.0, 255.0, 0, false);
@@ -299,7 +299,7 @@ impl Default for Stereometer {
             point_size_mod_open: false,
             point_size_rng: 0.0,
             kind: StereometerKind::default(),
-            render_mode: RenderMode::MultiBand,
+            render_mode: ParticleRenderMode::MultiBand,
             live_density: LiveDensity::Ultra,
             trace_density: TraceDensity::High,
             filter_mode: FilterMode::Off,
@@ -328,30 +328,25 @@ enum FilterBand {
 
 impl Stereometer {
     pub fn draw_filtering_options(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
-        if matches!(self.render_mode, RenderMode::FullSpectrum) {
-            section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
-            if open.filtering_open {
-                dropdown_row(
-                    ui,
-                    "FILTER",
-                    &mut self.filter_mode,
-                    FilterMode::ALL,
-                    &mut open.filter_mode_options_open,
-                    false,
-                );
-                if open.set_default_freqs {
-                    let f = match self.filter_mode {
-                        FilterMode::Off => 1.0,
-                        FilterMode::Lpf => 200.,
-                        FilterMode::Bpf => 1000.,
-                        FilterMode::Hpf => 5000.,
-                    };
-                    self.filter_freq = f;
-                    self.last_freq = f;
-                }
-                slider_row(ui, "FREQ", &mut self.filter_freq, 1.0, 20000.0, 0, false);
-            }
+        dropdown_row(
+            ui,
+            "FILTER",
+            &mut self.filter_mode,
+            FilterMode::ALL,
+            &mut open.filter_mode_options_open,
+            false,
+        );
+        if open.set_default_freqs {
+            let f = match self.filter_mode {
+                FilterMode::Off => 1.0,
+                FilterMode::Lpf => 200.,
+                FilterMode::Bpf => 1000.,
+                FilterMode::Hpf => 5000.,
+            };
+            self.filter_freq = f;
+            self.last_freq = f;
         }
+        slider_row(ui, "FREQ", &mut self.filter_freq, 1.0, 20000.0, 0, false);
     }
     fn filter_fs(&mut self, is_live: bool, l: f32, r: f32) -> (f32, f32) {
         if is_live {
@@ -429,7 +424,7 @@ impl Stereometer {
 
     fn set_positions(&mut self, is_live: bool, l: f32, r: f32) {
         match self.render_mode {
-            RenderMode::FullSpectrum => {
+            ParticleRenderMode::FullSpectrum => {
                 let (l, r) = self.filter_fs(is_live, l, r);
                 let (l, r) = self.get_coord_from_meterkind(l, r);
                 let pos = std::iter::repeat_n(pos2(l, r), 6);
@@ -439,7 +434,7 @@ impl Stereometer {
                     self.trace_buffer.extend(pos);
                 }
             }
-            RenderMode::MultiBand => {
+            ParticleRenderMode::MultiBand => {
                 let (lowl, lowr) = self.filter_mb(is_live, FilterBand::Low, l, r);
                 let (midl, midr) = self.filter_mb(is_live, FilterBand::Mid, l, r);
                 let (highl, highr) = self.filter_mb(is_live, FilterBand::High, l, r);
