@@ -440,6 +440,7 @@ impl Default for AppState {
             cur_frame_idx: 0,
             bool: BoolStates {
                 show_fullscreen_button: true,
+                dark_mode: true,
                 ..BoolStates::default()
             },
         }

@@ -334,7 +334,6 @@ pub struct FluidRenderResources {
     pub render_bind_group: wgpu::BindGroup,
     pub compute_bind_group: wgpu::BindGroup,
     pub params_buffer: wgpu::Buffer,
-    pub speaker_position: wgpu::Buffer,
     pub debug_storage: wgpu::Buffer,
     pub debug_staging: wgpu::Buffer,
 }

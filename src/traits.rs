@@ -2,13 +2,15 @@ use eframe::egui;
 
 use crate::{
     audio::audio_player::AudioPlayer,
-    generators::{PostFx, fluidwave::ModSrc, rendering::GenCbParams},
+    generators::{PostFx, rendering::GenCbParams},
     state::{AppState, BoolStates},
 };
 
 pub trait Labeled: PartialEq + Copy {
     fn text(self) -> &'static str;
 }
+
+#[allow(unused)]
 pub trait Generator {
     fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>);
     fn into_gen_callback_params(&mut self, st: &AppState, live: bool, fps: usize) -> GenCbParams;

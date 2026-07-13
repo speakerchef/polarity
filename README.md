@@ -48,6 +48,7 @@
   - [x] Variable simulation speed
 - [ ] Non frequency-based Oscilloscope class generators
   - [x] Waveform window view
+  - [x] Circular waveform
   - [ ] Rotating shapes that morph into waveform / stereometer positions and return to shape
   - [ ] Abstract reactive formations (x3)
 - [ ] frequency-based generators (FFT)

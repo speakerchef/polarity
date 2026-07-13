@@ -472,17 +472,6 @@ fn build_fluid_render_resources(
                 },
                 count: None,
             },
-            // speaker position
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
-                },
-                count: None,
-            },
         ],
     });
     let compute_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -549,17 +538,6 @@ fn build_fluid_render_resources(
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
-                },
-                count: None,
-            },
-            // Predicted positions
-            wgpu::BindGroupLayoutEntry {
-                binding: 6,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(16),
                 },
@@ -667,12 +645,6 @@ fn build_fluid_render_resources(
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
-    let speaker_position = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("fluid speaker_positions buffer"),
-        size: 16,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        mapped_at_creation: false,
-    });
     let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
         size: num_params * 16, // 16 bytes aligned
@@ -709,10 +681,6 @@ fn build_fluid_render_resources(
                 binding: 2,
                 resource: params_buffer.as_entire_binding(),
             },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: speaker_position.as_entire_binding(),
-            },
         ],
     });
     let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -743,10 +711,6 @@ fn build_fluid_render_resources(
                 binding: 5,
                 resource: pred_pos_buffer.as_entire_binding(),
             },
-            wgpu::BindGroupEntry {
-                binding: 6,
-                resource: speaker_position.as_entire_binding(),
-            },
         ],
     });
     FluidRenderResources {
@@ -759,7 +723,6 @@ fn build_fluid_render_resources(
         render_bind_group,
         compute_bind_group,
         params_buffer,
-        speaker_position,
         debug_storage,
         debug_staging,
     }
