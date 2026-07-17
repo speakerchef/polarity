@@ -388,7 +388,7 @@ impl Default for Fluidwave {
             viscosity_amount: 0.007,
             // point_size: 0.0045,
             point_size: 0.0020,
-            env_range: 90.0,
+            env_range: 77.0,
             efx: PostFx {
                 bloom_mod_src: ModSrc::EnvC,
                 vignette_mod_src: ModSrc::EnvC,

@@ -35,6 +35,12 @@ impl Labeled for ChromaType {
     }
 }
 
+pub fn radial_scale(scale_factor: f32, x: f32, y: f32) -> f32 {
+    let mag = (x * x + y * y).sqrt();
+    let scaled = mag.powf(1.0 - scale_factor);
+    if mag > 1e-6 { scaled / mag } else { 0.0 }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
 pub struct PostFx {
     //states

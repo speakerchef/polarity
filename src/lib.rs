@@ -10,6 +10,7 @@ mod wgpu_init;
 
 use crate::{generators::oscilloscope::Oscilloscope, traits::Labeled};
 pub use app::PolarityApp;
+use eframe::egui::{Pos2, pos2};
 
 use crate::generators::{fluidwave::Fluidwave, stereometer::Stereometer};
 
@@ -28,6 +29,61 @@ macro_rules! labeled_enum {
             fn default() -> Self { $name::$def }
         }
     };
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Vec3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+fn vec3(x: f32, y: f32, z: f32) -> Vec3 {
+    Vec3 { x, y, z }
+}
+impl std::ops::Sub for Vec3 {
+    type Output = Vec3;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+impl std::ops::Add for Vec3 {
+    type Output = Vec3;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+impl std::ops::Mul for Vec3 {
+    type Output = Vec3;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            z: self.z * rhs.z,
+        }
+    }
+}
+impl std::ops::Div for Vec3 {
+    type Output = Vec3;
+    fn div(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+            z: self.z / rhs.z,
+        }
+    }
+}
+impl Into<Pos2> for Vec3 {
+    fn into(self) -> Pos2 {
+        pos2(self.x, self.y)
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]

@@ -250,7 +250,7 @@ impl PolarityApp {
             && self.st.env_a.is_none()
             && self.st.env_b.is_none()
         {
-            self.st.env_a = Some(Envelope::new(1., 100., -0.01, p.contents.sample_rate));
+            self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
             self.st.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
             self.st.env_c = Some(Envelope::new(75., 800., 0.0, p.contents.sample_rate));
             self.st.env_d = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));

@@ -9,6 +9,7 @@ use crate::{
     generators::{
         PostFx,
         fluidwave::ModSrc,
+        radial_scale,
         rendering::{GenCbParams, Particle2DCbParams},
         stereometer::ParticleRenderMode,
     },
@@ -21,7 +22,8 @@ use crate::{
 
 labeled_enum!(OscilloscopeKind {
     Waveform => "Waveform",
-    CircularWaveform => "Circular Waveform" 
+    CircularWaveform => "Circular Waveform" ,
+    DelayPlot => "Delay Plot",
 }, Waveform);
 impl Labeled for OscilloscopeKind {
     fn text(self) -> &'static str {
@@ -30,7 +32,8 @@ impl Labeled for OscilloscopeKind {
 }
 labeled_enum!(WaveformDir {
     In => "Inward",
-Out => "Outward"
+    Out => "Outward",
+    Bipolar => "Bipolar"
 }, In);
 
 impl Labeled for WaveformDir {
@@ -55,6 +58,10 @@ pub struct Oscilloscope {
     continuous: bool,
     phase_aligned: bool,
     circular_wave_radius: f32,
+    delay_samples: f32,
+    use_rotation: bool,
+    angle: f32,
+    oversampling: bool,
 
     #[serde(skip)]
     live_buffer: Vec<Pos2>,
@@ -68,31 +75,36 @@ impl Default for Oscilloscope {
     fn default() -> Self {
         Self {
             window_sz: 25.0,
-            kind: OscilloscopeKind::CircularWaveform,
+            kind: OscilloscopeKind::DelayPlot,
             wave_dir: WaveformDir::In,
-            continuous: true,
+            continuous: false,
             phase_aligned: true,
             circular_wave_radius: 0.7,
+            delay_samples: 113.0,
+            use_rotation: false,
+            angle: 100.0,
+            oversampling: true,
             // fs_color: Rgba {
             //     r: 0.,
             //     g: 255.,
             //     b: 160.,
             //     a: 255.0,
             // },
-            // fs_color: Rgba {
-            //     r: 80.,
-            //     g: 60.,
-            //     b: 255.,
-            //     a: 255.0,
-            // },
             fs_color: Rgba {
                 r: 80.,
-                g: 255.,
-                b: 25.,
+                g: 60.,
+                b: 255.,
                 a: 255.0,
             },
+            // fs_color: Rgba {
+            //     r: 80.,
+            //     g: 255.,
+            //     b: 25.,
+            //     a: 255.0,
+            // },
             efx: PostFx {
                 use_bloom: true,
+                bloom: 3.0,
                 bloom_mod_src: ModSrc::EnvA,
                 bloom_range: 20.0,
                 use_vignette: true,
@@ -124,7 +136,7 @@ fn get_audio_frame(pl: &AudioPlayer, idx: usize, num_ch: usize) -> (f32, f32) {
     let s = &pl.contents.samples;
     (
         *s.get(idx * num_ch).unwrap_or(&0_f32),
-        *s.get((idx + 1) * num_ch).unwrap_or(&0_f32),
+        *s.get(idx * num_ch + 1).unwrap_or(&0_f32),
     )
 }
 
@@ -133,23 +145,47 @@ impl Oscilloscope {
         &self,
         x: f32,
         cur_sample: f32,
+        delay: (f32, f32),
         angle: &mut f32,
         angular_inc: f32,
-        phase: f32,
+        pl_pos: f32,
     ) -> Pos2 {
         match self.kind {
             OscilloscopeKind::Waveform => pos2(x, cur_sample),
             OscilloscopeKind::CircularWaveform => {
                 let r = self.circular_wave_radius;
-                let theta = *angle + phase;
+                let theta = *angle + pl_pos;
                 let mut circle_pos = pos2(theta.sin(), theta.cos()) * r;
                 let dir = circle_pos / r;
                 circle_pos += match self.wave_dir {
                     WaveformDir::In => (dir * -cur_sample.abs() * r).to_vec2(),
                     WaveformDir::Out => (dir * cur_sample.abs() * (1.0 - r)).to_vec2(),
+                    WaveformDir::Bipolar => (dir * cur_sample * (1.0 - r)).to_vec2(),
                 };
                 *angle += angular_inc * 2.0;
                 circle_pos
+            }
+            OscilloscopeKind::DelayPlot => {
+                let (x, y, z) = (cur_sample, delay.0, delay.1);
+                let freq = 0.1;
+                if !self.use_rotation {
+                    return pos2(x * angle.sin() + z * angle.cos(), y);
+                }
+                let angle = (pl_pos * freq * TAU) % TAU;
+                let pitch: f32 = 0.3;
+
+                let x1 = x * angle.cos() + z * angle.sin();
+                let z1 = -x * angle.sin() + z * angle.cos();
+                let y2 = y * pitch.cos() - z1 * pitch.sin();
+                let z2 = y * pitch.sin() + z1 * pitch.cos();
+
+                const CAMERA_Z: f32 = 3.0;
+                const SCREEN_SCALE: f32 = 0.7;
+
+                let depth = (CAMERA_Z - z2).max(0.1);
+                let perspective = CAMERA_Z / depth;
+
+                pos2(x1, y2) * perspective * SCREEN_SCALE
             }
         }
     }
@@ -186,6 +222,7 @@ impl Oscilloscope {
     pub fn draw(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
         let sr = pl.contents.sample_rate as usize;
         let num_ch = pl.contents.num_channels as usize;
+        let s = &pl.contents.samples;
         let mut start_idx =
             export_sample_idx.unwrap_or_else(|| (pl.position().as_secs_f64() * sr as f64) as usize);
         let gap = (Duration::from_millis(self.window_sz as u64).as_secs_f32() * sr as f32) as usize;
@@ -195,11 +232,37 @@ impl Oscilloscope {
             self.align_phase(&mut start_idx, &mut end_idx, pl, num_ch);
         }
 
-        let live_window = pl
-            .contents
-            .samples
+        let mut last_l = *s.get(start_idx * num_ch).unwrap_or(&0_f32);
+        let mut last_r = *s.get(start_idx * num_ch + 1).unwrap_or(&0_f32);
+
+        const OS_FACTOR: usize = 10;
+        let live_window = s
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
+
+        let live_window = if self.oversampling {
+            &live_window
+                .chunks_exact(num_ch)
+                .flat_map(|s| {
+                    let (l, r) = (s[0], *s.last().unwrap_or(&s[0]));
+                    let (dl, dr) = (l - last_l, r - last_r);
+                    let (il, ir) = (dl / OS_FACTOR as f32, dr / OS_FACTOR as f32);
+                    let (mut cl, mut cr) = (last_l, last_r);
+                    let v: Vec<_> = (0..OS_FACTOR)
+                        .flat_map(|_| {
+                            let o = [cl, cr];
+                            cl += il;
+                            cr += ir;
+                            o
+                        })
+                        .collect();
+                    (last_l, last_r) = (l, r);
+                    v
+                })
+                .collect::<Vec<f32>>()
+        } else {
+            live_window
+        };
 
         let mut x: f32 = -1.0;
         let mut last_pos = Pos2::ZERO;
@@ -212,15 +275,35 @@ impl Oscilloscope {
         let mut angle: f32 = 0.0;
         let angular_increment = TAU / live_window.len() as f32;
         self.live_buffer = live_window
-            .chunks_exact(2)
-            .flat_map(|s| {
-                let (l, r) = (s.first().unwrap_or(&0_f32), s.last().unwrap_or(&0_f32));
-                let cur_sample = (l + r) / 2.0 * self.max_height;
-                let mut pos: Vec<Pos2> = Vec::new();
+            .chunks_exact(num_ch)
+            .enumerate()
+            .flat_map(|(i, s)| {
+                let (l, _r) = (s.first().unwrap_or(&0_f32), s.last().unwrap_or(&0_f32));
+                let cur_sample = l * if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                    self.max_height
+                } else {
+                    1.0
+                };
 
+                let cur_idx = start_idx + i;
+                let delay_y = get_audio_frame(
+                    pl,
+                    cur_idx + OS_FACTOR * self.delay_samples as usize,
+                    num_ch,
+                )
+                .0;
+                let delay_z = get_audio_frame(
+                    pl,
+                    cur_idx + 2 * OS_FACTOR * self.delay_samples as usize,
+                    num_ch,
+                )
+                .1;
+
+                let mut pos: Vec<Pos2> = Vec::new();
                 let cur_pos = self.get_position_from_kind(
                     x,
                     cur_sample,
+                    (delay_y, delay_z),
                     &mut angle,
                     angular_increment,
                     pl.position().as_secs_f32(),
@@ -290,14 +373,16 @@ impl Generator for Oscilloscope {
                 &mut open.render_mode_options_open,
                 false,
             );
-            dropdown_row(
-                ui,
-                "DIRECTION",
-                &mut self.wave_dir,
-                WaveformDir::ALL,
-                &mut open.force_direction_options_open,
-                false,
-            );
+            if matches!(self.kind, OscilloscopeKind::CircularWaveform) {
+                dropdown_row(
+                    ui,
+                    "DIRECTION",
+                    &mut self.wave_dir,
+                    WaveformDir::ALL,
+                    &mut open.force_direction_options_open,
+                    false,
+                );
+            }
         }
     }
 
@@ -322,6 +407,11 @@ impl Generator for Oscilloscope {
         if open.visual_open {
             toggle_button_row(ui, "CONTINUOUS", &mut self.continuous, false);
             toggle_button_row(ui, "PHASE ALIGNED", &mut self.phase_aligned, false);
+            toggle_button_row(ui, "UPSAMPLE", &mut self.oversampling, false);
+            if matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                toggle_button_row(ui, "ROTATION", &mut self.use_rotation, false);
+                slider_row(ui, "ANGLE", &mut self.angle, 0.0, 360.0, 0, false);
+            }
 
             if matches!(self.kind, OscilloscopeKind::CircularWaveform) {
                 slider_row(
@@ -336,7 +426,12 @@ impl Generator for Oscilloscope {
             }
 
             slider_row(ui, "WINDOW(ms)", &mut self.window_sz, 1.0, 750.0, 2, false);
-            slider_row(ui, "MAX HEIGHT", &mut self.max_height, 0.0, 1.0, 2, false);
+            if matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                slider_row(ui, "DELAY AMT", &mut self.delay_samples, 1., 512., 0, false);
+            }
+            if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                slider_row(ui, "MAX HEIGHT", &mut self.max_height, 0.0, 1.0, 2, false);
+            }
             mod_slider_row(
                 ui,
                 "POINT SIZE",

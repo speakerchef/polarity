@@ -1,6 +1,6 @@
 use crate::generators::fluidwave::ModSrc;
 use crate::generators::rendering::{GenCbParams, Particle2DCbParams};
-use crate::generators::{ChromaType, PostFx};
+use crate::generators::{ChromaType, PostFx, radial_scale};
 use crate::state::{AppState, BoolStates};
 use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
 use crate::ui::control_panel_widgets::{
@@ -440,24 +440,18 @@ impl Stereometer {
         }
     }
 
-    fn radial_scale(&self, x: f32, y: f32) -> f32 {
-        let mag = (x * x + y * y).sqrt();
-        let scaled = mag.powf(1.0 - self.radial_scale_factor);
-        if mag > 1e-6 { scaled / mag } else { 0.0 }
-    }
-
     fn get_coord_from_meterkind(&self, l: f32, r: f32) -> (f32, f32) {
         let res = match self.kind {
             StereometerKind::LinearBipolar => {
                 ((l - r) * LINEAR_BIPOLAR_SF, (l + r) * LINEAR_BIPOLAR_SF)
             }
             StereometerKind::ScaledBipolar => {
-                let rscale = self.radial_scale(l, r);
+                let rscale = radial_scale(self.radial_scale_factor, l, r);
                 ((l - r) * rscale / SQRT_3, (l + r) * rscale / SQRT_3)
             }
             StereometerKind::LinearLissajous => (l, r),
             StereometerKind::ScaledLissajous => {
-                let rscale = self.radial_scale(l, r);
+                let rscale = radial_scale(self.radial_scale_factor, l, r);
                 (l * rscale, r * rscale)
             }
         };

@@ -113,7 +113,7 @@ fn build_particle2d_render_resources(
         label: Some("live buffer"),
         size: ((size_of::<f32>() * 2)
             * (MAX_LIVE_POINT_DENSITY + MAX_TRACE_POINT_DENSITY)
-            * (VERTICES_PER_QUAD * 6)) as u64,
+            * (VERTICES_PER_QUAD * 32)) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
