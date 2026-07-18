@@ -1,4 +1,3 @@
-use biquad::*;
 use eframe::egui_wgpu::{self, wgpu};
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 use std::{
@@ -9,14 +8,13 @@ use std::{
 
 use crate::{
     Preset,
-    audio::{StereoFilter, audio_player::*},
+    audio::audio_player::*,
     generators::{
         Envelope,
         rendering::{
             OutputResources, RendererCallback, get_gpu_frame, run_effects_render_pipeline,
             run_output_render_pipeline, run_source_render_pipeline,
         },
-        stereometer::FilterMode,
     },
     state::PlaybackMode,
     ui::app_widgets::{main_window, menu_bar},
@@ -60,7 +58,10 @@ fn render_wgpu_frame(
     env_c.run_differential_follower(p, Some(export_sample_idx));
     env_d.run_differential_follower(p, Some(export_sample_idx));
 
-    st.active_gen().prepare(p, Some(export_sample_idx));
+    let mut fbank = std::mem::take(&mut st.filterbank);
+    st.active_gen()
+        .prepare(&mut fbank, p, Some(export_sample_idx));
+    st.filterbank = fbank;
 
     let render_data = RendererCallback {
         canvas_size: vec2(w as f32, h as f32),
@@ -203,7 +204,7 @@ impl eframe::App for PolarityApp {
 
         self.handle_audio_import(ctx);
         self.handle_playback(ctx);
-        self.update_filters();
+        self.st.update_filters(self.player.as_ref());
         self.handle_preset_state(ctx);
         self.handle_file_export(ctx, frame);
     }
@@ -233,10 +234,14 @@ impl PolarityApp {
     }
 
     fn spawn_audio_player(&mut self, path: PathBuf, paused: bool, clear_envelopes: bool) {
-        // Clear old player
+        // Clear old stuff
         self.player.take();
         self.st.stereo.clear_live_buffers();
         self.st.stereo.clear_trace_buffers();
+        self.st.filterbank.live_fs_filters.take();
+        self.st.filterbank.trace_fs_filters.take();
+        self.st.filterbank.live_mb_filters.take();
+        self.st.filterbank.trace_mb_filters.take();
         if clear_envelopes {
             self.st.env_a.take();
             self.st.env_b.take();
@@ -248,7 +253,6 @@ impl PolarityApp {
             .ok();
         if let Some(p) = &self.player
             && self.st.env_a.is_none()
-            && self.st.env_b.is_none()
         {
             self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
             self.st.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
@@ -277,82 +281,6 @@ impl PolarityApp {
         {
             let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
             self.spawn_audio_player(player.contents.path.to_path_buf(), paused, false);
-        }
-    }
-
-    pub fn update_filters(&mut self) {
-        if self.st.stereo.live_fs_filters.is_none()
-            && let Some(p) = &self.player
-        {
-            self.st.bool.set_default_freqs = true;
-            let st = &mut self.st.stereo;
-            let filters = Some((
-                StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., p.contents.sample_rate),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::BandPass,
-                    1000.,
-                    p.contents.sample_rate,
-                ),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::HighPass,
-                    3000.,
-                    p.contents.sample_rate,
-                ),
-            ));
-            st.live_fs_filters = filters.clone();
-            st.trace_fs_filters = filters.clone();
-            st.live_mb_filters = filters.clone();
-            st.trace_mb_filters = filters;
-        }
-
-        if self.st.stereo.live_fs_filters.is_some()
-            && let Some(p) = &self.player
-            && self.st.stereo.last_freq != self.st.stereo.filter_freq
-        {
-            self.st.bool.set_default_freqs = false;
-            let st = &mut self.st.stereo;
-            st.last_freq = st.filter_freq;
-            let livefs = st.live_fs_filters.as_mut().unwrap();
-            let tracefs = st.trace_fs_filters.as_mut().unwrap();
-            match st.filter_mode {
-                FilterMode::Off => (),
-                FilterMode::Lpf => {
-                    livefs.0 = StereoFilter::from_coeffs_butterworth(
-                        Type::LowPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.0 = StereoFilter::from_coeffs_butterworth(
-                        Type::LowPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                }
-                FilterMode::Bpf => {
-                    livefs.1 = StereoFilter::from_coeffs_butterworth(
-                        Type::BandPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.1 = StereoFilter::from_coeffs_butterworth(
-                        Type::BandPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                }
-                FilterMode::Hpf => {
-                    livefs.2 = StereoFilter::from_coeffs_butterworth(
-                        Type::HighPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.2 = StereoFilter::from_coeffs_butterworth(
-                        Type::HighPass,
-                        st.filter_freq,
-                        p.contents.sample_rate,
-                    );
-                }
-            }
         }
     }
 

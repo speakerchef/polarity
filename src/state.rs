@@ -1,14 +1,16 @@
 #![allow(dead_code)]
 use crate::{
+    audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
-        ChromaType, Envelope, fluidwave::ModSrc, oscilloscope::Oscilloscope,
-        rendering::EffectsCallback,
+        ChromaType, Envelope, FilterBank, fluidwave::ModSrc, oscilloscope::Oscilloscope,
+        rendering::EffectsCallback, stereometer::FilterMode,
     },
     traits::{ActiveGenerator, Generator, Labeled},
     ui::control_panel_widgets::{
         dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
     },
 };
+use biquad::*;
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -216,6 +218,8 @@ pub struct AppState {
     pub output_render_resources: Option<OutputResources>,
     pub resources: egui_wgpu::CallbackResources,
 
+    pub filterbank: FilterBank,
+
     pub preset_save_path: Option<PathBuf>,
     pub preset_load_path: Option<PathBuf>,
     pub preset_name: String,
@@ -242,6 +246,86 @@ impl AppState {
             GenKindLabel::Oscilloscope => &mut self.osci,
         }
     }
+
+    pub fn update_filters(&mut self, pl: Option<&AudioPlayer>) {
+        let Some(p) = pl else {
+            return;
+        };
+        let has_filters = self.filterbank.live_fs_filters.is_some();
+        let Some(fp) = self.active_gen().filter_params() else {
+            return;
+        };
+        if !has_filters {
+            self.bool.set_default_freqs = true;
+            let filters = Some((
+                StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., p.contents.sample_rate),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::BandPass,
+                    1000.,
+                    p.contents.sample_rate,
+                ),
+                StereoFilter::from_coeffs_butterworth(
+                    Type::HighPass,
+                    3000.,
+                    p.contents.sample_rate,
+                ),
+            ));
+            self.filterbank.live_fs_filters = filters.clone();
+            self.filterbank.trace_fs_filters = filters.clone();
+            self.filterbank.live_mb_filters = filters.clone();
+            self.filterbank.trace_mb_filters = filters;
+        } else if fp.last_freq != fp.filter_freq {
+            fp.last_freq = fp.filter_freq;
+            let filter_freq = fp.filter_freq;
+            self.bool.set_default_freqs = false;
+
+            let mut livefs = std::mem::take(&mut self.filterbank.live_fs_filters).expect("safe");
+            let mut tracefs = std::mem::take(&mut self.filterbank.trace_fs_filters).expect("safe");
+            let fmode = self.active_gen().filter_params().expect("safe").filter_mode;
+            match fmode {
+                FilterMode::Off => (),
+                FilterMode::Lpf => {
+                    livefs.0 = StereoFilter::from_coeffs_butterworth(
+                        Type::LowPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.0 = StereoFilter::from_coeffs_butterworth(
+                        Type::LowPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+                FilterMode::Bpf => {
+                    livefs.1 = StereoFilter::from_coeffs_butterworth(
+                        Type::BandPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.1 = StereoFilter::from_coeffs_butterworth(
+                        Type::BandPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+                FilterMode::Hpf => {
+                    livefs.2 = StereoFilter::from_coeffs_butterworth(
+                        Type::HighPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                    tracefs.2 = StereoFilter::from_coeffs_butterworth(
+                        Type::HighPass,
+                        filter_freq,
+                        p.contents.sample_rate,
+                    );
+                }
+            }
+            self.filterbank.live_fs_filters = Some(livefs);
+            self.filterbank.trace_fs_filters = Some(tracefs);
+        }
+    }
+
     pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
         let (Some(a), Some(b), Some(c), Some(d)) =
             (&self.env_a, &self.env_b, &self.env_c, &self.env_d)
@@ -415,6 +499,12 @@ impl Default for AppState {
             bloom_render_resources: None,
             output_render_resources: None,
             resources: egui_wgpu::CallbackResources::new(),
+            filterbank: FilterBank {
+                live_fs_filters: None,
+                trace_fs_filters: None,
+                live_mb_filters: None,
+                trace_mb_filters: None,
+            },
 
             export_config: ExportConfig::default(),
             writer_handle: None,

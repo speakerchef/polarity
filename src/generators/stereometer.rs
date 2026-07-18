@@ -1,12 +1,12 @@
 use crate::generators::fluidwave::ModSrc;
 use crate::generators::rendering::{GenCbParams, Particle2DCbParams};
-use crate::generators::{ChromaType, PostFx, radial_scale};
+use crate::generators::{ChromaType, FilterBank, FilterParams, PostFx, radial_scale};
 use crate::state::{AppState, BoolStates};
-use crate::traits::{ActiveGenerator, Generator, Labeled, PostFxParams};
+use crate::traits::{ActiveGenerator, Generator, Labeled, ParamAccess};
 use crate::ui::control_panel_widgets::{
     dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
 };
-use crate::{Rgba, audio::StereoFilter, labeled_enum};
+use crate::{Rgba, labeled_enum};
 use eframe::egui::{self, Pos2, pos2};
 use std::collections::VecDeque;
 
@@ -114,9 +114,7 @@ pub struct Stereometer {
     pub live_density: LiveDensity,
     pub trace_density: TraceDensity,
 
-    pub filter_mode: FilterMode,
-    pub filter_freq: f32,
-    pub last_freq: f32,
+    pub filter_params: Option<FilterParams>,
 
     pub fs_color: Rgba,
     pub mb_color: [Rgba; 3],
@@ -130,15 +128,6 @@ pub struct Stereometer {
 
     pub last_sample_idx: usize,
     pub efx: PostFx,
-
-    #[serde(skip)]
-    pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    #[serde(skip)]
-    pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    #[serde(skip)]
-    pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
-    #[serde(skip)]
-    pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 
     #[serde(skip)]
     pub live_buffer: Vec<Pos2>,
@@ -159,18 +148,21 @@ pub struct Stereometer {
 }
 
 impl ActiveGenerator for Stereometer {}
-impl PostFxParams for Stereometer {
+impl ParamAccess for Stereometer {
     fn post_fx(&self) -> PostFx {
         self.efx
     }
     fn post_fx_mut(&mut self) -> &mut PostFx {
         &mut self.efx
     }
+    fn filter_params(&mut self) -> Option<&mut FilterParams> {
+        self.filter_params.as_mut()
+    }
 }
 
 impl Generator for Stereometer {
-    fn prepare(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
-        self.draw(pl, export_sample_idx);
+    fn prepare(&mut self, f: &mut FilterBank, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
+        self.draw(f, pl, export_sample_idx);
     }
 
     fn into_gen_callback_params(&mut self, st: &AppState, _live: bool, _fps: usize) -> GenCbParams {
@@ -226,25 +218,26 @@ impl Generator for Stereometer {
     fn draw_filtering_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
         section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
         if matches!(self.render_mode, ParticleRenderMode::FullSpectrum) && open.filtering_open {
+            let fp = self.filter_params.as_mut().expect("created at constructor");
             dropdown_row(
                 ui,
                 "FILTER",
-                &mut self.filter_mode,
+                &mut fp.filter_mode,
                 FilterMode::ALL,
                 &mut open.filter_mode_options_open,
                 false,
             );
             if open.set_default_freqs {
-                let f = match self.filter_mode {
+                let f = match fp.filter_mode {
                     FilterMode::Off => 1.0,
                     FilterMode::Lpf => 200.,
                     FilterMode::Bpf => 1000.,
                     FilterMode::Hpf => 5000.,
                 };
-                self.filter_freq = f;
-                self.last_freq = f;
+                fp.filter_freq = f;
+                fp.last_freq = f;
             }
-            slider_row(ui, "FREQ", &mut self.filter_freq, 1.0, 20000.0, 0, false);
+            slider_row(ui, "FREQ", &mut fp.filter_freq, 1.0, 20000.0, 0, false);
         }
     }
 
@@ -331,8 +324,6 @@ impl Default for Stereometer {
     fn default() -> Self {
         // synthwave preset
         Self {
-            filter_freq: 1.0,
-            last_freq: 1.0,
             efx: PostFx {
                 bloom_mod_src: ModSrc::EnvB,
                 vignette_mod_src: ModSrc::EnvC,
@@ -365,11 +356,11 @@ impl Default for Stereometer {
             render_mode: ParticleRenderMode::MultiBand,
             live_density: LiveDensity::Ultra,
             trace_density: TraceDensity::High,
-            filter_mode: FilterMode::Off,
-            live_fs_filters: Default::default(),
-            trace_fs_filters: Default::default(),
-            live_mb_filters: Default::default(),
-            trace_mb_filters: Default::default(),
+            filter_params: Some(FilterParams {
+                filter_freq: 1.0,
+                last_freq: 1.0,
+                filter_mode: FilterMode::Off,
+            }),
             live_buffer: Default::default(),
             live_low_buffer: Default::default(),
             live_mid_buffer: Default::default(),
@@ -390,10 +381,11 @@ enum FilterBand {
 }
 
 impl Stereometer {
-    fn filter_fs(&mut self, is_live: bool, l: f32, r: f32) -> (f32, f32) {
+    fn filter_fs(&mut self, f: &mut FilterBank, is_live: bool, l: f32, r: f32) -> (f32, f32) {
+        let fp = &mut self.filter_params.expect("safe");
         if is_live {
-            if let Some(live_fs) = &mut self.live_fs_filters {
-                match self.filter_mode {
+            if let Some(live_fs) = &mut f.live_fs_filters {
+                match fp.filter_mode {
                     FilterMode::Off => (l, r),
                     FilterMode::Lpf => live_fs.0.run(l, r),
                     FilterMode::Bpf => live_fs.1.run(l, r),
@@ -403,8 +395,8 @@ impl Stereometer {
                 (l, r)
             }
         } else {
-            if let Some(trace_fs) = &mut self.trace_fs_filters {
-                match self.filter_mode {
+            if let Some(trace_fs) = &mut f.trace_fs_filters {
+                match fp.filter_mode {
                     FilterMode::Off => (l, r),
                     FilterMode::Lpf => trace_fs.0.run(l, r),
                     FilterMode::Bpf => trace_fs.1.run(l, r),
@@ -416,9 +408,16 @@ impl Stereometer {
         }
     }
 
-    fn filter_mb(&mut self, is_live: bool, band: FilterBand, l: f32, r: f32) -> (f32, f32) {
+    fn filter_mb(
+        &mut self,
+        f: &mut FilterBank,
+        is_live: bool,
+        band: FilterBand,
+        l: f32,
+        r: f32,
+    ) -> (f32, f32) {
         if is_live {
-            if let Some(live) = &mut self.live_mb_filters {
+            if let Some(live) = &mut f.live_mb_filters {
                 match band {
                     FilterBand::Low => live.0.run(l, r),
                     FilterBand::Mid => live.1.run(l, r),
@@ -428,7 +427,7 @@ impl Stereometer {
                 (l, r)
             }
         } else {
-            if let Some(trace) = &mut self.trace_mb_filters {
+            if let Some(trace) = &mut f.trace_mb_filters {
                 match band {
                     FilterBand::Low => trace.0.run(l, r),
                     FilterBand::Mid => trace.1.run(l, r),
@@ -458,10 +457,10 @@ impl Stereometer {
         (res.0.min(1.0), res.1.min(1.0))
     }
 
-    fn set_positions(&mut self, is_live: bool, l: f32, r: f32) {
+    fn set_positions(&mut self, f: &mut FilterBank, is_live: bool, l: f32, r: f32) {
         match self.render_mode {
             ParticleRenderMode::FullSpectrum => {
-                let (l, r) = self.filter_fs(is_live, l, r);
+                let (l, r) = self.filter_fs(f, is_live, l, r);
                 let (l, r) = self.get_coord_from_meterkind(l, r);
                 if is_live {
                     self.live_buffer.push(pos2(l, r));
@@ -470,9 +469,9 @@ impl Stereometer {
                 }
             }
             ParticleRenderMode::MultiBand => {
-                let (lowl, lowr) = self.filter_mb(is_live, FilterBand::Low, l, r);
-                let (midl, midr) = self.filter_mb(is_live, FilterBand::Mid, l, r);
-                let (highl, highr) = self.filter_mb(is_live, FilterBand::High, l, r);
+                let (lowl, lowr) = self.filter_mb(f, is_live, FilterBand::Low, l, r);
+                let (midl, midr) = self.filter_mb(f, is_live, FilterBand::Mid, l, r);
+                let (highl, highr) = self.filter_mb(f, is_live, FilterBand::High, l, r);
                 let (lowl, lowr) = self.get_coord_from_meterkind(lowl, lowr);
                 let (midl, midr) = self.get_coord_from_meterkind(midl, midr);
                 let (highl, highr) = self.get_coord_from_meterkind(highl, highr);
@@ -518,7 +517,7 @@ impl Stereometer {
         self.trace_high_buffer.clear();
     }
 
-    pub fn draw(&mut self, p: &AudioPlayer, export_sample_idx: Option<usize>) {
+    pub fn draw(&mut self, f: &mut FilterBank, p: &AudioPlayer, export_sample_idx: Option<usize>) {
         let num_ch = p.contents.num_channels as usize;
 
         let sample_pos = p.position().as_secs_f64();
@@ -540,7 +539,7 @@ impl Stereometer {
         live_window.chunks_exact(2).for_each(|s| {
             let l = s.first().unwrap();
             let r = s.last().unwrap_or(l);
-            self.set_positions(is_live, *l, *r);
+            self.set_positions(f, is_live, *l, *r);
         });
 
         is_live = false;
@@ -553,7 +552,7 @@ impl Stereometer {
         trace_window.chunks_exact(2).for_each(|s| {
             let l = s.first().unwrap();
             let r = s.last().unwrap_or(l);
-            self.set_positions(is_live, *l, *r);
+            self.set_positions(f, is_live, *l, *r);
         });
         self.limit_trace_buffers();
         self.last_sample_idx = sample_idx;

@@ -2,7 +2,7 @@ use biquad::*;
 
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
-    generators::fluidwave::ModSrc,
+    generators::{fluidwave::ModSrc, stereometer::FilterMode},
     labeled_enum,
     traits::Labeled,
 };
@@ -39,6 +39,20 @@ pub fn radial_scale(scale_factor: f32, x: f32, y: f32) -> f32 {
     let mag = (x * x + y * y).sqrt();
     let scaled = mag.powf(1.0 - scale_factor);
     if mag > 1e-6 { scaled / mag } else { 0.0 }
+}
+
+#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct FilterParams {
+    pub filter_mode: FilterMode,
+    pub last_freq: f32,
+    pub filter_freq: f32,
+}
+#[derive(Default)]
+pub struct FilterBank {
+    pub live_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+    pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]

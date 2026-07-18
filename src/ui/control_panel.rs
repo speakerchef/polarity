@@ -1,5 +1,4 @@
 use crate::generators::Envelope;
-use crate::generators::stereometer::ParticleRenderMode;
 use crate::traits::Labeled;
 use crate::ui::{control_panel_widgets::*, palette as plt};
 use crate::{GenKindLabel, state::*};
@@ -49,10 +48,7 @@ fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     let mut open = std::mem::take(&mut st.bool);
     st.active_gen().draw_render_menu(ui, &mut open);
-    if matches!(st.gen_kind, GenKindLabel::Stereometer)
-        && matches!(st.stereo.render_mode, ParticleRenderMode::FullSpectrum)
-        && open.filtering_open
-    {}
+    st.active_gen().draw_filtering_menu(ui, &mut open);
     st.active_gen().draw_color_menu(ui, &mut open);
     st.active_gen().draw_visual_menu(ui, &mut open);
     section_header_submenu(ui, "REACTIVITY", &mut open.envelope_follower_open);

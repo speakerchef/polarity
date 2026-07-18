@@ -88,7 +88,9 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     env_b.run_differential_follower(pl, None);
     env_c.run_differential_follower(pl, None);
     env_d.run_differential_follower(pl, None);
-    st.active_gen().prepare(pl, None);
+    let mut fbank = std::mem::take(&mut st.filterbank);
+    st.active_gen().prepare(&mut fbank, pl, None);
+    st.filterbank = fbank;
 
     let renderer_params = st.build_renderer_callback_params(true, 0);
     let efx_params = st.build_effects_callback_params();

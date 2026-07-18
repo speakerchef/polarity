@@ -4,12 +4,12 @@ use eframe::egui;
 
 use crate::{
     generators::{
-        ChromaType, MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV, TARGET_DT,
+        ChromaType, FilterBank, FilterParams, MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV, TARGET_DT,
         rendering::{FluidCbParams, GenCbParams},
     },
     labeled_enum,
     state::{AppState, BoolStates, DAMP_FACTOR},
-    traits::{ActiveGenerator, Generator, Labeled, PostFxParams},
+    traits::{ActiveGenerator, Generator, Labeled, ParamAccess},
     ui::{
         canvas::NUM_PARTICLES,
         control_panel_widgets::{
@@ -129,12 +129,15 @@ pub struct Fluidwave {
 }
 
 impl ActiveGenerator for Fluidwave {}
-impl PostFxParams for Fluidwave {
+impl ParamAccess for Fluidwave {
     fn post_fx(&self) -> PostFx {
         self.efx
     }
     fn post_fx_mut(&mut self) -> &mut PostFx {
         &mut self.efx
+    }
+    fn filter_params(&mut self) -> Option<&mut FilterParams> {
+        None
     }
 }
 
@@ -145,6 +148,7 @@ fn instant_default() -> Instant {
 impl Generator for Fluidwave {
     fn prepare(
         &mut self,
+        _f: &mut FilterBank,
         _pl: &crate::audio::audio_player::AudioPlayer,
         _export_sample_idx: Option<usize>,
     ) {
