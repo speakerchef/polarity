@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 egui-file-dialog = "0.13.0"
+rfd = "0.17.2"
 eframe = { version = "0.34.3" }
 rodio = { version = "0.22.2", features = ["playback"] }
 env_logger = "0.11"
@@ -30,3 +31,21 @@ lto = "thin"
 opt-level = 3
 strip = true
 panic = "abort"
+
+[package.metadata.bundle]
+name = "Polarity"
+identifier = "com.odsp.polarity"
+icon = []
+version = "0.0.1"
+# resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
+copyright = "Copyright (c) Sohan Nair 2026. All rights reserved."
+category = "Entertainment"
+short_description = "An example application."
+long_description = """
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna aliqua.  Ut
+enim ad minim veniam, quis nostrud exercitation ullamco laboris
+nisi ut aliquip ex ea commodo consequat.
+"""
+osx_depends = []
+osx_url_schemes = ["com.odsp.polarity"]

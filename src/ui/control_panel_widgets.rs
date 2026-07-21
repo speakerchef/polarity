@@ -1,11 +1,13 @@
 use crate::generators::fluidwave::ModSrc;
+use crate::ui::app_widgets::modal_button;
 use crate::ui::{ROUND_MAX, SHARP, apply_side_border};
 use crate::ui::{custom_text, get_text_size};
 use std::ops::RangeInclusive;
+use std::path::PathBuf;
 
 use eframe::egui::{
-    self, Align, Color32, CornerRadius, DragValue, FontFamily, FontId, Layout, Rect, Response,
-    Sense, Shadow, Stroke, StrokeKind, Vec2, pos2, vec2,
+    self, Align, Color32, CornerRadius, DragValue, FontFamily, FontId, Layout, Pos2, Rect,
+    Response, Sense, Shadow, Stroke, StrokeKind, Vec2, pos2, vec2,
 };
 
 use crate::traits::Labeled;
@@ -446,12 +448,12 @@ pub fn dropdown_row<T: Labeled>(
     options: &[T],
     open: &mut bool,
     bottom_border: bool,
-) {
+) -> Response {
     const SEL_W: f32 = 150.0;
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
-    let inner_rect = ui
+    let inner_resp = ui
         .allocate_ui_with_layout(
             vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
             egui::Layout::left_to_right(Align::Center),
@@ -461,13 +463,141 @@ pub fn dropdown_row<T: Labeled>(
                 dropdown_menu(ui, (SEL_W, plt::height::INNER), value, options, open);
             },
         )
-        .response
-        .rect;
+        .response;
     let bg_rect = egui::Shape::rect_filled(
         egui::Rect::from_min_size(
-            inner_rect.left_top(),
-            vec2(ui.available_width(), inner_rect.height()),
+            inner_resp.rect.left_top(),
+            vec2(ui.available_width(), inner_resp.rect.height()),
         ),
+        SHARP,
+        plt::INK,
+    );
+    ui.painter().set(bg, bg_rect.clone());
+    let br = bg_rect.visual_bounding_rect();
+    apply_side_border(ui, br, bottom_border);
+    // close dropdown if clicked elsewhere
+    ui.ctx().input(|i| {
+        if i.pointer.primary_clicked()
+            && !br.contains(i.pointer.interact_pos().unwrap_or_default())
+            && !inner_resp
+                .rect
+                .contains(i.pointer.interact_pos().unwrap_or_default())
+        {
+            *open = false;
+        }
+    });
+    inner_resp
+}
+pub fn path_picker(
+    ui: &mut egui::Ui,
+    path: Option<&PathBuf>,
+    top_left: Pos2,
+    w: f32,
+    label: &str,
+    open: &mut bool,
+    bottom_border: bool,
+) {
+    const PAD: f32 = 12.0;
+
+    let bg = ui.painter().add(egui::Shape::Noop);
+    let mut inner_rect = egui::Rect::NOTHING;
+
+    let outer_rect = ui
+        .allocate_rect(
+            egui::Rect::from_min_size(top_left, vec2(w, plt::height::INNER)),
+            egui::Sense::focusable_noninteractive(),
+        )
+        .rect;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(outer_rect), |ui| {
+        inner_rect = ui
+            .allocate_ui_with_layout(
+                vec2(w, plt::height::DROPDOWN_ITEM),
+                egui::Layout::left_to_right(Align::Center),
+                |ui| {
+                    let font = FontId {
+                        size: plt::font_size::TINY,
+                        family: FontFamily::Name("inter_medium".into()),
+                    };
+                    let (tw, _) = get_text_size(ui, label, font.clone()).into();
+                    let path_rect = outer_rect;
+                    ui.add_space(PAD);
+                    label_text(ui, label, tw + PAD * 2.0);
+
+                    let path_name_rect_width = w - (plt::height::INNER + tw + 50.0);
+                    let vertical_offset = (plt::height::DROPDOWN_ITEM - plt::height::INNER) / 2.0;
+                    let path_name_rect = ui
+                        .allocate_rect(
+                            egui::Rect::from_min_size(
+                                path_rect.left_top()
+                                    + vec2(
+                                        PAD * 2.5 + tw,
+                                        (path_rect.height() - plt::height::INNER) / 2.0
+                                            + vertical_offset,
+                                    ),
+                                vec2(path_name_rect_width, plt::height::INNER),
+                            ),
+                            egui::Sense::focusable_noninteractive(),
+                        )
+                        .rect;
+                    ui.painter().rect_filled(path_name_rect, SHARP, plt::BLACK);
+                    ui.painter().rect_stroke(
+                        path_name_rect,
+                        SHARP,
+                        border(ui.style().visuals.dark_mode),
+                        StrokeKind::Inside,
+                    );
+
+                    let (cw, th) = get_text_size(ui, "K", font.clone()).into();
+                    custom_text(
+                        ui,
+                        &if let Some(path) = &path {
+                            // length limiting
+                            let dir = path.to_string_lossy().to_string();
+                            let lw = path_name_rect.width();
+                            let limit = (lw / cw) as usize;
+                            if dir.len() > limit {
+                                let mut out = "...".to_string();
+                                out.push_str(
+                                    &path.to_string_lossy().to_string()[dir.len() - limit..],
+                                );
+                                out
+                            } else {
+                                path.to_string_lossy().to_string()
+                            }
+                        } else {
+                            "".to_string()
+                        },
+                        font,
+                        path_name_rect.center() - vec2(0.0, th / 2.0),
+                        plt::letter_spacing::MINIMAL,
+                        plt::TEXT,
+                        Align::Center,
+                    );
+
+                    // Browse path
+                    modal_button(
+                        ui,
+                        path_rect.left_top()
+                            + vec2(
+                                path_rect.width() - (plt::height::INNER + 12.0),
+                                (path_rect.height() - (plt::height::INNER - 1.0)) / 2.0
+                                    + vertical_offset,
+                            ),
+                        vec2(plt::height::INNER + 4.0, plt::height::INNER - 1.0),
+                        "\u{e2c7}",
+                        plt::font_size::ICON,
+                        plt::YELLO,
+                        open,
+                        true,
+                    );
+                },
+            )
+            .response
+            .rect;
+    });
+
+    let bg_rect = egui::Shape::rect_filled(
+        egui::Rect::from_min_size(inner_rect.left_top(), vec2(w, inner_rect.height())),
         SHARP,
         plt::INK,
     );

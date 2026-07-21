@@ -8,12 +8,12 @@ use crate::{
     state::{AppState, ExportQuality, Fps, Resolution},
     ui::{
         SHARP, canvas, control_panel,
-        control_panel_widgets::{dropdown_row, menu_bar_option},
+        control_panel_widgets::{dropdown_row, menu_bar_option, path_picker},
         custom_text, get_text_size, palette as plt, timeline,
         timeline_widgets::border,
     },
 };
-use eframe::egui::{self, pos2};
+use eframe::egui::{self, FontFamily, pos2};
 use eframe::egui::{Align, FontId, Key, Pos2, StrokeKind, Vec2, vec2};
 use egui_winit::winit::dpi::LogicalSize;
 
@@ -328,14 +328,45 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.bool.show_export_fps,
                         false,
                     );
-                    dropdown_row(
+                    let path_rect = dropdown_row(
                         ui,
                         "Quality",
                         &mut st.export_config.quality,
                         ExportQuality::ALL,
                         &mut st.bool.show_export_quality,
                         false,
+                    )
+                    .rect;
+
+                    path_picker(
+                        ui,
+                        st.export_path.as_ref(),
+                        path_rect.left_bottom(),
+                        rw,
+                        "Export Location:",
+                        &mut st.bool.open_export_path_picker,
+                        true,
                     );
+
+                    let font = FontId {
+                        size: plt::font_size::TINY,
+                        family: FontFamily::Name("inter_medium".into()),
+                    };
+
+                    ////TODO: Make texedit a widget
+                    //let (_, th) = get_text_size(ui, "Preset Name:", font.clone()).into();
+                    //custom_text(
+                    //    ui,
+                    //    "Preset Name:",
+                    //    font.clone(),
+                    //    path_rect.left_center() + vec2(12.0, -th / 2.0),
+                    //    plt::letter_spacing::BASE,
+                    //    plt::TEXT,
+                    //    Align::LEFT,
+                    //);
+                    //
+                    //ui.text_edit_singleline(&mut st.export_file_name)
+                    //    .set_intrinsic_size(ui.content_rect().size());
                 });
 
                 ui.painter().rect_stroke(
@@ -509,153 +540,15 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 StrokeKind::Inside,
             );
             if st.bool.show_preset_save_modal {
-                ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                    let path_rect = ui
-                        .allocate_rect(
-                            egui::Rect::from_min_size(
-                                resp.rect.left_top(),
-                                vec2(resp.rect.width(), OPTION_H),
-                            ),
-                            egui::Sense::focusable_noninteractive(),
-                        )
-                        .rect;
-                    ui.painter()
-                        .rect_filled(path_rect, SHARP, plt::BG(ui.visuals().dark_mode));
-                    ui.painter().rect_stroke(
-                        path_rect,
-                        SHARP,
-                        border(ui.style().visuals.dark_mode),
-                        StrokeKind::Outside,
-                    );
-                    let font = FontId {
-                        size: plt::font_size::META,
-                        family: egui::FontFamily::Name("inter_medium".into()),
-                    };
-                    let (tw, th) = get_text_size(ui, "Save Location:", font.clone()).into();
-                    custom_text(
-                        ui,
-                        "Save Location:",
-                        font.clone(),
-                        path_rect.left_center() + vec2(12.0, -th / 2.0),
-                        plt::letter_spacing::BASE,
-                        plt::TEXT,
-                        Align::LEFT,
-                    );
-
-                    // Path name slot
-                    let path_name_rect_width = path_rect.width() - (INNER_H + tw + 56.0);
-                    let path_name_rect = ui
-                        .allocate_rect(
-                            egui::Rect::from_min_size(
-                                path_rect.left_top()
-                                    + vec2(36.0 + tw, (path_rect.height() - INNER_H) / 2.0),
-                                vec2(path_name_rect_width, INNER_H),
-                            ),
-                            egui::Sense::focusable_noninteractive(),
-                        )
-                        .rect;
-                    ui.painter().rect_filled(path_name_rect, SHARP, plt::BLACK);
-                    ui.painter().rect_stroke(
-                        path_name_rect,
-                        SHARP,
-                        border(ui.style().visuals.dark_mode),
-                        StrokeKind::Inside,
-                    );
-
-                    let (cw, th) = get_text_size(ui, "K", font.clone()).into();
-                    custom_text(
-                        ui,
-                        &if let Some(path) = &st.preset_save_path {
-                            // length limiting
-                            let dir = path.to_string_lossy().to_string();
-                            let lw = path_name_rect.width();
-                            let limit = (lw / cw) as usize;
-                            if dir.len() > limit {
-                                let mut out = "...".to_string();
-                                out.push_str(
-                                    &path.to_string_lossy().to_string()[dir.len() - limit..],
-                                );
-                                out
-                            } else {
-                                path.to_string_lossy().to_string()
-                            }
-                        } else {
-                            "".to_string()
-                        },
-                        font,
-                        path_name_rect.center() - vec2(0.0, th / 2.0),
-                        plt::letter_spacing::MINIMAL,
-                        plt::TEXT,
-                        Align::Center,
-                    );
-
-                    // Browse path
-                    modal_button(
-                        ui,
-                        path_rect.left_top()
-                            + vec2(
-                                path_rect.width() - (INNER_H + 12.0),
-                                (path_rect.height() - (INNER_H)) / 2.0,
-                            ),
-                        vec2(INNER_H + 4.0, INNER_H),
-                        "\u{e2c7}",
-                        plt::font_size::ICON,
-                        plt::YELLO,
-                        &mut st.bool.open_preset_save_file_picker,
-                        true,
-                    );
-                });
-                ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                    let area_rect = ui
-                        .allocate_rect(
-                            egui::Rect::from_min_size(
-                                resp.rect.right_top() - vec2(resp.rect.width(), -OPTION_H),
-                                vec2(resp.rect.width(), OPTION_H),
-                            ),
-                            egui::Sense::focusable_noninteractive(),
-                        )
-                        .rect;
-                    ui.painter()
-                        .rect_filled(area_rect, SHARP, plt::BG(ui.visuals().dark_mode));
-                    ui.painter().rect_stroke(
-                        area_rect,
-                        SHARP,
-                        border(ui.style().visuals.dark_mode),
-                        StrokeKind::Outside,
-                    );
-                    let font = FontId {
-                        size: plt::font_size::META,
-                        family: egui::FontFamily::Name("inter_medium".into()),
-                    };
-                    let (_, th) = get_text_size(ui, "Preset Name:", font.clone()).into();
-                    custom_text(
-                        ui,
-                        "Preset Name:",
-                        font.clone(),
-                        area_rect.left_center() + vec2(12.0, -th / 2.0),
-                        plt::letter_spacing::BASE,
-                        plt::TEXT,
-                        Align::LEFT,
-                    );
-
-                    let (tw, _) = get_text_size(ui, "Save Location:", font.clone()).into();
-                    let preset_name_rect_width = area_rect.width() - (INNER_H + tw + 56.0);
-                    let preset_name_rect = ui
-                        .allocate_rect(
-                            egui::Rect::from_min_size(
-                                area_rect.left_top()
-                                    + vec2(tw + 36.0, (area_rect.height() - INNER_H) / 2.0),
-                                // vec2(area_rect.width() / 4.0, INNER_H),
-                                vec2(preset_name_rect_width, INNER_H),
-                            ),
-                            egui::Sense::focusable_noninteractive(),
-                        )
-                        .rect;
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(preset_name_rect), |ui| {
-                        ui.text_edit_singleline(&mut st.preset_name)
-                            .set_intrinsic_size(ui.content_rect().size());
-                    });
-                });
+                path_picker(
+                    ui,
+                    st.preset_save_path.as_ref(),
+                    resp.rect.left_top(),
+                    resp.rect.width(),
+                    "Save Location:",
+                    &mut st.bool.open_preset_save_file_picker,
+                    true,
+                );
 
                 modal_button(
                     ui,
@@ -677,10 +570,6 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.bool.save_preset,
                     false,
                 );
-                // disallow empty preset names
-                if st.bool.save_preset && st.preset_name.is_empty() {
-                    st.bool.save_preset = false;
-                }
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_preset_save_modal = false;
                 }

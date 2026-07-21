@@ -12,15 +12,14 @@ use crate::{
 };
 use biquad::*;
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
 use eframe::{
-    egui::{self, Align2, Pos2, vec2},
+    egui::{self, Pos2},
     egui_wgpu,
 };
-use egui_file_dialog::{self as fd, FileDialog};
 
 use crate::{
     GenKindLabel, Preset,
@@ -184,8 +183,6 @@ pub struct BoolStates {
     pub show_preset_load_modal: bool,
     pub open_preset_save_file_picker: bool,
     pub open_preset_load_file_picker: bool,
-    pub picked_preset_save_dir: bool,
-    pub picked_preset_load_file: bool,
     pub show_file_options: bool,
     pub window_drag_tooltip_modal_open: bool,
     pub show_fullscreen_button: bool,
@@ -193,6 +190,7 @@ pub struct BoolStates {
     pub show_export_resolution: bool,
     pub show_export_fps: bool,
     pub show_export_quality: bool,
+    pub open_export_path_picker: bool,
     pub export_sample_idx: usize,
     pub show_export_modal: bool,
     pub start_render: bool,
@@ -201,8 +199,6 @@ pub struct BoolStates {
 }
 
 pub struct AppState {
-    pub audio_file_dialog: FileDialog,
-    pub preset_file_dialog: FileDialog,
     pub playback_mode: PlaybackMode,
     pub gen_kind: GenKindLabel,
     pub stereo: Stereometer,
@@ -222,13 +218,13 @@ pub struct AppState {
 
     pub preset_save_path: Option<PathBuf>,
     pub preset_load_path: Option<PathBuf>,
-    pub preset_name: String,
 
     pub window_drag_tooltip_modal_deadline: Option<Instant>,
 
     pub bool: BoolStates,
 
     // Export states
+    pub export_path: Option<PathBuf>,
     pub export_config: ExportConfig,
     pub writer_handle: Option<std::thread::JoinHandle<()>>,
     pub logger_handle: Option<std::thread::JoinHandle<()>>,
@@ -473,26 +469,6 @@ impl Default for AppState {
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
         let (stereo, fwave, osci) = (preset.stereometer, preset.fluidwave, preset.oscilloscope);
         Self {
-            audio_file_dialog: FileDialog::new()
-                .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
-                .show_left_panel(true)
-                .show_pinned_folders(true)
-                .add_file_filter(
-                    "Audio",
-                    fd::Filter::new(|path: &Path| {
-                        path.extension().unwrap_or_default() == "wav"
-                            || path.extension().unwrap_or_default() == "mp3"
-                    }),
-                )
-                .default_file_filter("Audio")
-                .allow_file_overwrite(true)
-                .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
-
-            preset_file_dialog: FileDialog::new()
-                .opening_mode(egui_file_dialog::OpeningMode::LastPickedDir)
-                .show_left_panel(true)
-                .show_pinned_folders(true)
-                .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)),
             gen_kind: GenKindLabel::Oscilloscope,
             stereometer_render_resources: None,
             fluid_render_resources: None,
@@ -506,6 +482,7 @@ impl Default for AppState {
                 trace_mb_filters: None,
             },
 
+            export_path: None,
             export_config: ExportConfig::default(),
             writer_handle: None,
             logger_handle: None,
@@ -525,7 +502,6 @@ impl Default for AppState {
             window_drag_tooltip_modal_deadline: None,
             preset_save_path: None,
             preset_load_path: None,
-            preset_name: String::default(),
 
             cur_frame_idx: 0,
             bool: BoolStates {

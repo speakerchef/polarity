@@ -1,4 +1,7 @@
-use eframe::egui_wgpu::{self, wgpu};
+use eframe::{
+    egui::TextBuffer,
+    egui_wgpu::{self, wgpu},
+};
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 use std::{
     io::Write,
@@ -94,6 +97,9 @@ fn render_wgpu_frame(
 }
 
 fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32, u32)) {
+    let Some(output_path) = st.export_path.as_ref() else {
+        return;
+    };
     let (w, h) = (dim.0, dim.1);
     let quality = st.export_config.quality.value();
     let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
@@ -111,7 +117,7 @@ fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32
         .pix_fmt("yuv444p")
         .codec_audio("aac")
         .args(["-b:a", "320k"])
-        .args(["-y", "out.mp4"])
+        .args(["-y", output_path.to_string_lossy().as_str()])
         .spawn()
         .unwrap();
 
@@ -179,18 +185,6 @@ fn export_batched_frames(
     }
 }
 
-fn update_preset_path(new_path: PathBuf, dst_path: &mut Option<PathBuf>, modal_open: &mut bool) {
-    if let Some(oldpath) = &dst_path {
-        if *oldpath != new_path {
-            *dst_path = Some(new_path);
-            *modal_open = true;
-        }
-    } else {
-        *dst_path = Some(new_path);
-        *modal_open = true;
-    }
-}
-
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         // debug_window(ui, &mut self.st);
@@ -202,10 +196,10 @@ impl eframe::App for PolarityApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.bool.dark_mode);
 
-        self.handle_audio_import(ctx);
+        self.handle_audio_import();
         self.handle_playback(ctx);
         self.st.update_filters(self.player.as_ref());
-        self.handle_preset_state(ctx);
+        self.handle_preset_state();
         self.handle_file_export(ctx, frame);
     }
 }
@@ -284,63 +278,45 @@ impl PolarityApp {
         }
     }
 
-    fn handle_audio_import(&mut self, ctx: &egui::Context) {
-        // Open audio import dialog
+    fn handle_audio_import(&mut self) {
         if self.st.bool.import_open {
-            self.st.audio_file_dialog.pick_file();
             self.st.bool.import_open = false;
             self.st.bool.start_render = false;
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Audio", &["wav", "mp3", "ogg", "m4a"])
+                .pick_file()
+            {
+                self.load_file(path);
+            };
         }
-
-        // Check if user picked an audio file
-        if let Some(path) = self
-            .st
-            .audio_file_dialog
-            .update(ctx)
-            .picked()
-            .map(|p| p.to_path_buf())
-        {
-            self.load_file(path);
-        };
     }
 
-    fn handle_preset_state(&mut self, ctx: &egui::Context) {
-        let fd = &mut self.st.preset_file_dialog;
+    fn handle_preset_state(&mut self) {
         if self.st.bool.open_preset_save_file_picker {
-            fd.pick_directory();
             self.st.bool.open_preset_save_file_picker = false;
             self.st.bool.show_preset_save_modal = false;
-            self.st.bool.picked_preset_save_dir = true;
+            if let Some(save_path) = rfd::FileDialog::new()
+                .add_filter("JSON", &["json"])
+                .set_can_create_directories(true)
+                .set_directory("~/")
+                .save_file()
+            {
+                self.st.preset_save_path = Some(save_path)
+            }
         }
         if self.st.bool.open_preset_load_file_picker {
-            fd.pick_file();
             self.st.bool.open_preset_load_file_picker = false;
             self.st.bool.show_preset_load_modal = false;
-            self.st.bool.picked_preset_load_file = true;
-        }
 
-        if self.st.bool.picked_preset_save_dir {
-            let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
-                return;
-            };
-            update_preset_path(
-                newpath,
-                &mut self.st.preset_save_path,
-                &mut self.st.bool.show_preset_save_modal,
-            );
-            self.st.bool.picked_preset_save_dir = false;
-        };
-        if self.st.bool.picked_preset_load_file {
-            let Some(newpath) = fd.update(ctx).picked().map(|p| p.to_path_buf()) else {
-                return;
-            };
-            update_preset_path(
-                newpath,
-                &mut self.st.preset_load_path,
-                &mut self.st.bool.show_preset_load_modal,
-            );
-            self.st.bool.picked_preset_load_file = false;
-        };
+            if let Some(load_path) = rfd::FileDialog::new()
+                .add_filter("JSON", &["json"])
+                .set_can_create_directories(true)
+                .set_directory("~/")
+                .pick_file()
+            {
+                self.st.preset_load_path = Some(load_path)
+            }
+        }
 
         if self.st.bool.save_preset {
             self.save_preset();
@@ -365,8 +341,7 @@ impl PolarityApp {
         let Some(path) = &self.st.preset_save_path else {
             return;
         };
-        std::fs::write(path.join(format!("{}.json", self.st.preset_name)), data)
-            .unwrap_or_else(|e| println!("Error saving preset: {e}"));
+        std::fs::write(path, data).unwrap_or_else(|e| println!("Error saving preset: {e}"));
     }
     fn load_preset(&mut self) {
         let Some(path) = &self.st.preset_load_path else {
@@ -383,7 +358,23 @@ impl PolarityApp {
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        if self.st.bool.open_export_path_picker {
+            self.st.bool.open_export_path_picker = false;
+            self.st.bool.show_export_modal = false;
+
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Video", &["mp4"])
+                .set_can_create_directories(true)
+                .save_file()
+            {
+                self.st.export_path.take();
+                self.st.export_path = Some(path);
+                self.st.bool.show_export_modal = true;
+            }
+        }
+
         if let Some(p) = &self.player
+            && self.st.export_path.is_some()
             && (self.st.bool.start_render || self.st.bool.rendering)
         {
             self.st.bool.start_render = false;
@@ -401,6 +392,7 @@ impl PolarityApp {
                 self.st.prev_export_timestamp = Some(Instant::now());
                 self.st.export_elapsed_time = Some(Duration::default());
             }
+
             export_batched_frames(&mut self.st, p, wgpu_render_state);
             ctx.request_repaint();
         }

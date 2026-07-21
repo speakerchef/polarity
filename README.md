@@ -8,7 +8,7 @@
 ---
 
 > [!NOTE]
-> Currently in a super early prototyping stage.
+> Currently in ~alpha
 
 ### V1 MVP Roadmap (Complete)
 
