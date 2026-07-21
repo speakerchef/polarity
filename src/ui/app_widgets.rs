@@ -347,26 +347,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.bool.open_export_path_picker,
                         true,
                     );
-
-                    let font = FontId {
-                        size: plt::font_size::TINY,
-                        family: FontFamily::Name("inter_medium".into()),
-                    };
-
-                    ////TODO: Make texedit a widget
-                    //let (_, th) = get_text_size(ui, "Preset Name:", font.clone()).into();
-                    //custom_text(
-                    //    ui,
-                    //    "Preset Name:",
-                    //    font.clone(),
-                    //    path_rect.left_center() + vec2(12.0, -th / 2.0),
-                    //    plt::letter_spacing::BASE,
-                    //    plt::TEXT,
-                    //    Align::LEFT,
-                    //);
-                    //
-                    //ui.text_edit_singleline(&mut st.export_file_name)
-                    //    .set_intrinsic_size(ui.content_rect().size());
                 });
 
                 const BUTTON_H: f32 = 30.0;
