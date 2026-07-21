@@ -255,7 +255,7 @@ pub fn modal_button(
         rect,
         SHARP,
         border(ui.style().visuals.dark_mode),
-        egui::StrokeKind::Outside,
+        egui::StrokeKind::Middle,
     );
 
     let font = FontId {
@@ -302,13 +302,13 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
             let resp = ui.allocate_rect(
                 egui::Rect::from_min_size(
                     ui.content_rect().center().sub(vec2(rw / 2.0, rh / 2.0)),
-                    vec2(rw, 0.0),
+                    vec2(rw, rh),
                 ),
                 egui::Sense::click(),
             );
 
             ui.painter()
-                .rect_filled(resp.rect, SHARP, plt::BG(ui.style().visuals.dark_mode));
+                .rect_filled(resp.rect, SHARP, plt::BG(ui.visuals().dark_mode));
 
             if !st.bool.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
@@ -369,13 +369,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     //    .set_intrinsic_size(ui.content_rect().size());
                 });
 
-                ui.painter().rect_stroke(
-                    resp.rect,
-                    SHARP,
-                    border(ui.style().visuals.dark_mode),
-                    StrokeKind::Inside,
-                );
-
                 const BUTTON_H: f32 = 30.0;
                 modal_button(
                     ui,
@@ -403,6 +396,12 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
             } else {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
                     let uirect = ui.available_rect_before_wrap();
+                    ui.painter().rect_stroke(
+                        uirect,
+                        SHARP,
+                        border(ui.visuals().dark_mode),
+                        StrokeKind::Outside,
+                    );
                     const BAR_H: f32 = 30.0;
                     let bar_w: f32 = uirect.width() / 1.25;
                     let pbar_resp = ui.allocate_rect(
@@ -416,8 +415,8 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     ui.painter().rect_stroke(
                         resp.rect,
                         SHARP,
-                        border(ui.style().visuals.dark_mode),
-                        StrokeKind::Inside,
+                        border(ui.visuals().dark_mode),
+                        StrokeKind::Outside,
                     );
 
                     let font_id = FontId {
