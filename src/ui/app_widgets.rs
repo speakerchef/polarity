@@ -313,13 +313,13 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
             const BUTTON_H: f32 = 30.0;
             if !st.bool.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
+                    ui.painter().rect_stroke(
+                        resp.rect,
+                        SHARP,
+                        border(ui.visuals().dark_mode),
+                        StrokeKind::Middle,
+                    );
                     if !st.bool.export_enabled {
-                        ui.painter().rect_stroke(
-                            resp.rect,
-                            SHARP,
-                            border(ui.visuals().dark_mode),
-                            StrokeKind::Middle,
-                        );
                         custom_text(
                             ui,
                             "Export not enabled on this device; Missing 'ffmpeg'. \nEither install manually or use live mode.",

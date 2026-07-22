@@ -248,7 +248,12 @@ impl AppState {
         let Some(p) = pl else {
             return;
         };
-        let has_filters = self.filterbank.live_fs_filters.is_some();
+        let fb = &self.filterbank;
+        let has_filters = fb.live_fs_filters.is_some()
+            && fb.trace_fs_filters.is_some()
+            && fb.live_mb_filters.is_some()
+            && fb.trace_mb_filters.is_some();
+
         let Some(fp) = self.active_gen().filter_params() else {
             return;
         };

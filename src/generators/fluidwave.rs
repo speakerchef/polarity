@@ -370,14 +370,14 @@ impl Default for Fluidwave {
             frame_time_accumulator: 0.0,
             color_mode: ColorMode::VelocityGradient,
             color_invert: false,
-            luminance_mode: false,
+            luminance_mode: true,
 
             luminance_floor: 5.0,
             luminance_mode_mod_open: false,
-            luminance_floor_mod_src: ModSrc::EnvC,
-            luminance_floor_rng: 100.0,
+            luminance_floor_mod_src: ModSrc::None,
+            luminance_floor_rng: 0.0,
 
-            color_arrangement: ColorArrangement::Gbr,
+            color_arrangement: ColorArrangement::Grb,
             uniform_color: crate::Rgba::new(255, 255, 255, 255),
             last_idx: 0,
             energy_transfer_mode: EnergyTransferMode::ForceField,

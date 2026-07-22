@@ -1,11 +1,12 @@
 use core::f32;
 use std::{collections::VecDeque, f32::consts::TAU, time::Duration};
 
+use biquad::Type;
 use eframe::egui::{Pos2, Vec2, lerp, pos2};
 
 use crate::{
     Rgba,
-    audio::audio_player::AudioPlayer,
+    audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
         FilterBank, FilterParams, PostFx,
         fluidwave::ModSrc,
@@ -42,11 +43,41 @@ impl Labeled for WaveformDir {
     }
 }
 
+labeled_enum!(DelayDivision {
+    Div64 => "1 / 64",
+    Div32 => "1 / 32",
+    Div16 => "1 / 16",
+    Div8 => "1 / 8",
+}, Div64);
+
+impl DelayDivision {
+    fn value(&self) -> f32 {
+        match self {
+            Self::Div64 => 1.0 / 64.0,
+            Self::Div32 => 1.0 / 32.0,
+            Self::Div16 => 1.0 / 16.0,
+            Self::Div8 => 1.0 / 8.0,
+        }
+    }
+}
+
+impl Labeled for DelayDivision {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Oscilloscope {
     kind: OscilloscopeKind,
     wave_dir: WaveformDir,
-    window_sz: f32,
+    waveform_window_sz: f32,
+    delay_plot_density: f32,
+    sample_rate: Option<usize>,
+    #[serde(skip)]
+    lpf: Option<StereoFilter>,
+    #[serde(skip)]
+    last_freq: f32,
 
     fs_color: Rgba,
     efx: PostFx,
@@ -58,7 +89,13 @@ pub struct Oscilloscope {
     continuous: bool,
     phase_aligned: bool,
     circular_wave_radius: f32,
+
+    default_delay_set: bool,
     delay_samples: f32,
+    delay_division: DelayDivision,
+    use_delay_division: bool,
+    delay_div_open: bool,
+
     use_rotation: bool,
     angle: f32,
     upsample_factor: f32,
@@ -79,32 +116,50 @@ pub struct Oscilloscope {
 impl Default for Oscilloscope {
     fn default() -> Self {
         Self {
-            // window_sz: 25.0,
-            window_sz: 100.0,
+            waveform_window_sz: 25.0,
+            delay_plot_density: 250.0,
             kind: OscilloscopeKind::DelayPlot,
             wave_dir: WaveformDir::In,
+            sample_rate: None,
+            lpf: None,
+            last_freq: 500.0,
+
             continuous: false,
             phase_aligned: true,
             circular_wave_radius: 0.7,
-            delay_samples: 113.0,
+
+            default_delay_set: false,
+            delay_samples: 0.0,
+            delay_division: DelayDivision::default(),
+            use_delay_division: true,
+            delay_div_open: false,
+
             use_rotation: true,
             angle: 100.0,
             upsample_factor: 1.0,
-            camera_z: 10.0,
+            camera_z: 4.0,
             total_scale: 0.6,
             rot_freq: 0.1,
             pitch: 0.3,
+            //purple aura
             fs_color: Rgba {
                 r: 80.,
                 g: 60.,
                 b: 255.,
                 a: 255.0,
             },
+            //fire orange
+            // fs_color: Rgba {
+            //     r: 255.0,
+            //     g: 75.0,
+            //     b: 0.,
+            //     a: 255.0,
+            // },
             filter_params: {
                 Some(FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,
-                    last_freq: 450.0,
-                    filter_freq: 450.0,
+                    last_freq: 500.0,
+                    filter_freq: 500.0,
                 })
             },
             low_end_focus: true,
@@ -112,9 +167,9 @@ impl Default for Oscilloscope {
 
             efx: PostFx {
                 use_bloom: true,
-                bloom: 3.0,
+                bloom: 2.2,
                 bloom_mod_src: ModSrc::EnvA,
-                bloom_range: 20.0,
+                bloom_range: 40.0,
                 use_vignette: true,
                 use_chroma: true,
                 chroma_shift_mod_src: ModSrc::EnvB,
@@ -123,7 +178,7 @@ impl Default for Oscilloscope {
                 chroma_type: super::ChromaType::Radial,
                 ..Default::default()
             },
-            point_size: 0.0025,
+            point_size: 0.0015,
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,
@@ -219,9 +274,16 @@ impl Oscilloscope {
                 let perspective = self.camera_z / depth;
 
                 const MIN_OFFSET: f32 = 0.1;
-                let mut offset = 10.0 / self.camera_z.max(3.5) * MIN_OFFSET;
-                if self.pitch.abs() < 0.1 {
-                    offset -= lerp(0.0..=offset, 1.0 - (10.0 * self.pitch.abs()));
+                const MAX_OFFSET: f32 = 2.85;
+                // let mut offset = 10.0 / self.camera_z.max(3.5) * MIN_OFFSET;
+                let mut offset = (10.0 / self.camera_z).min(MAX_OFFSET) * MIN_OFFSET;
+
+                const PITCH_THRESH: f32 = 0.3;
+                if self.pitch.abs() < PITCH_THRESH {
+                    offset -= lerp(
+                        0.0..=offset,
+                        (PITCH_THRESH - self.pitch.abs()) / PITCH_THRESH,
+                    );
                 }
                 offset *= self.pitch.signum();
                 pos2(x1, y2 + offset) * perspective * self.total_scale
@@ -229,15 +291,13 @@ impl Oscilloscope {
         }
     }
 
-    fn filter_samples(&self, f: &mut FilterBank, l: f32, r: f32) -> (f32, f32) {
+    fn filter_samples(&mut self, f: &mut FilterBank, l: f32, r: f32) -> (f32, f32) {
         if l.abs() >= self.filter_bypass_threshold || r.abs() >= self.filter_bypass_threshold {
             return (l, r);
         }
-        let fil = f
-            .live_fs_filters
-            .as_mut()
-            .expect("filter cannot exist without audio");
-
+        let Some(fil) = f.live_fs_filters.as_mut() else {
+            return (l, r);
+        };
         let fp = self.filter_params.expect("safe");
         match fp.filter_mode {
             FilterMode::Off => (l, r),
@@ -249,11 +309,26 @@ impl Oscilloscope {
 
     pub fn draw(&mut self, f: &mut FilterBank, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
         let sr = pl.contents.sample_rate as usize;
+        self.sample_rate = Some(sr);
+        if !self.default_delay_set {
+            self.delay_samples = sr as f32 * DelayDivision::default().value();
+            self.default_delay_set = true;
+        }
+        if self.use_delay_division {
+            self.delay_samples = sr as f32 * self.delay_division.value();
+        }
+
         let num_ch = pl.contents.num_channels as usize;
         let s = &pl.contents.samples;
         let mut start_idx =
             export_sample_idx.unwrap_or_else(|| (pl.position().as_secs_f64() * sr as f64) as usize);
-        let gap = (Duration::from_millis(self.window_sz as u64).as_secs_f32() * sr as f32) as usize;
+        let gap = (Duration::from_millis(if matches!(self.kind, OscilloscopeKind::DelayPlot) {
+            self.delay_plot_density
+        } else {
+            self.waveform_window_sz
+        } as u64)
+        .as_secs_f32()
+            * sr as f32) as usize;
         let mut end_idx = start_idx + gap + 1;
 
         if self.phase_aligned {
@@ -291,6 +366,7 @@ impl Oscilloscope {
         } else {
             live_window
         };
+
         let dist = |pos: Vec2| {
             let dx = pos.x;
             let dy = pos.y;
@@ -307,28 +383,47 @@ impl Oscilloscope {
             .enumerate()
             .flat_map(|(i, s)| {
                 let l = s[0];
-                let cur_sample = l * if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
-                    self.max_height
-                } else {
-                    1.0
-                };
                 let cur_idx = start_idx + i;
-                let mut delay_l = get_audio_frame(
+                let delay_l = get_audio_frame(
                     pl,
                     cur_idx + us_factor * self.delay_samples as usize,
                     num_ch,
                 )
                 .0;
-                let mut delay_r = get_audio_frame(
+                let delay_r = get_audio_frame(
                     pl,
                     cur_idx + 2 * us_factor * self.delay_samples as usize,
                     num_ch,
                 )
                 .1;
 
-                if self.low_end_focus {
-                    (delay_l, delay_r) = self.filter_samples(f, delay_l, delay_r);
+                if self.lpf.is_none()
+                    || self.last_freq != self.filter_params.expect("safe").filter_freq
+                {
+                    let fp = self.filter_params.as_mut().expect("safe");
+                    self.lpf = Some(StereoFilter::from_coeffs_butterworth(
+                        Type::LowPass,
+                        fp.filter_freq,
+                        sr as u32,
+                    ));
+                    self.last_freq = fp.filter_freq;
                 }
+                let fil2 = self.lpf.as_mut().expect("safe");
+
+                let ((l, _), (delay_l, delay_r)) = if self.low_end_focus {
+                    (
+                        fil2.run(l, delay_r),
+                        self.filter_samples(f, delay_l, delay_r),
+                    )
+                } else {
+                    ((l, 0_f32), (delay_l, delay_r))
+                };
+
+                let cur_sample = l * if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                    self.max_height
+                } else {
+                    1.0
+                };
 
                 let mut pos: Vec<Pos2> = Vec::new();
                 let cur_pos = self.get_position_from_kind(
@@ -453,32 +548,64 @@ impl Generator for Oscilloscope {
             }
             if matches!(self.kind, OscilloscopeKind::DelayPlot) {
                 toggle_button_row(ui, "ROTATION", &mut self.use_rotation, false);
-                toggle_button_row(ui, "EXTRA DEFINITION", &mut self.low_end_focus, false);
+                toggle_button_row(ui, "EXTRA DEFINITION (LPF)", &mut self.low_end_focus, false);
                 if !self.use_rotation {
                     slider_row(ui, "ANGLE", &mut self.angle, 0.0, 360.0, 0, false);
                 }
                 slider_row(ui, "DISTANCE", &mut self.camera_z, 1.0, 10.0, 1, false);
                 slider_row(ui, "SCALE", &mut self.total_scale, 0.1, 1.0, 2, false);
-                slider_row(ui, "DELAY AMT", &mut self.delay_samples, 1., 512., 0, false);
+
+                if let Some(sr) = self.sample_rate {
+                    toggle_button_row(ui, "DELAY DIVISIONS", &mut self.use_delay_division, false);
+                    if self.use_delay_division {
+                        dropdown_row(
+                            ui,
+                            "DELAY",
+                            &mut self.delay_division,
+                            DelayDivision::ALL,
+                            &mut self.delay_div_open,
+                            false,
+                        );
+                    } else {
+                        slider_row(
+                            ui,
+                            "DELAY",
+                            &mut self.delay_samples,
+                            1.,
+                            sr as f32 / 8.0,
+                            0,
+                            false,
+                        );
+                    }
+                }
             } else {
                 self.low_end_focus = false;
                 toggle_button_row(ui, "PHASE ALIGNED", &mut self.phase_aligned, false);
                 slider_row(ui, "MAX HEIGHT", &mut self.max_height, 0.0, 1.0, 2, false);
             }
 
-            slider_row(
-                ui,
-                if matches!(self.kind, OscilloscopeKind::DelayPlot) {
-                    "DENSITY"
-                } else {
-                    "WINDOW"
-                },
-                &mut self.window_sz,
-                1.0,
-                750.0,
-                2,
-                false,
-            );
+            if matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                slider_row(
+                    ui,
+                    "DENSITY",
+                    &mut self.delay_plot_density,
+                    10.0,
+                    1000.0,
+                    0,
+                    false,
+                );
+            } else {
+                slider_row(
+                    ui,
+                    "WINDOW(ms)",
+                    &mut self.waveform_window_sz,
+                    1.0,
+                    750.0,
+                    2,
+                    false,
+                );
+            }
+
             mod_slider_row(
                 ui,
                 "POINT SIZE",
@@ -522,7 +649,7 @@ impl Generator for Oscilloscope {
                     false,
                 );
                 let fp = self.filter_params.as_mut().expect("safe");
-                slider_row(ui, "LPF FREQ", &mut fp.filter_freq, 1.0, 20000.0, 0, false);
+                slider_row(ui, "LPF FREQ", &mut fp.filter_freq, 1.0, 1000.0, 0, false);
             }
         }
     }
