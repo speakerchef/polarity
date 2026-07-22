@@ -386,7 +386,8 @@ impl Default for Fluidwave {
             pressure_multiplier: 150.0,
             envelope_pressure_link: true,
             target_density: (NUM_PARTICLES as f32 * 78.57).round(),
-            smoothing_radius: 0.10,
+            // smoothing_radius: 0.10,
+            smoothing_radius: 0.20,
             edge_damping_factor: 0.75,
             near_pressure_multiplier: 7.0,
             viscosity_amount: 0.007,
@@ -408,7 +409,7 @@ impl Default for Fluidwave {
                 chroma_shift: 0.0,
                 chroma_shift_range: 100.0,
                 chroma_blur: 4.0,
-                chroma_type: ChromaType::Linear,
+                chroma_type: ChromaType::Radial,
             },
         }
     }

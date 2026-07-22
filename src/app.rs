@@ -213,6 +213,7 @@ impl PolarityApp {
             .unwrap_or_default();
         self.st.stereo = p.stereometer;
         self.st.fwave = p.fluidwave;
+        self.st.osci = p.oscilloscope;
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {

@@ -337,7 +337,8 @@ impl Oscilloscope {
                     (delay_l, delay_r),
                     &mut angle,
                     angular_increment,
-                    pl.position().as_secs_f32(),
+                    (start_idx as f32 / pl.contents.samples.len() as f32)
+                        * pl.contents.duration.as_secs_f32(),
                 );
                 pos.push(cur_pos);
 
