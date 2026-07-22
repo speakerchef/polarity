@@ -36,158 +36,8 @@ pub struct PolarityApp {
 
 const BATCH_SIZE: usize = 30;
 
-fn render_wgpu_frame(
-    st: &mut AppState,
-    p: &AudioPlayer,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    fps: usize,
-    dim: (u32, u32),
-) -> Vec<u8> {
-    let (w, h) = (dim.0, dim.1);
-    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("export command encoder"),
-    });
-    let frac = st.cur_frame_idx as f32 / fps as f32;
-    let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
-
-    let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
-        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
-    else {
-        return vec![0];
-    };
-    env_a.run_differential_follower(p, Some(export_sample_idx));
-    env_b.run_differential_follower(p, Some(export_sample_idx));
-    env_c.run_differential_follower(p, Some(export_sample_idx));
-    env_d.run_differential_follower(p, Some(export_sample_idx));
-
-    let mut fbank = std::mem::take(&mut st.filterbank);
-    st.active_gen()
-        .prepare(&mut fbank, p, Some(export_sample_idx));
-    st.filterbank = fbank;
-
-    let render_data = RendererCallback {
-        canvas_size: vec2(w as f32, h as f32),
-        params: st.build_renderer_callback_params(false, fps),
-    };
-
-    // Main pipeline
-    run_source_render_pipeline(
-        &render_data.params,
-        device,
-        queue,
-        &mut command_encoder,
-        &mut st.resources,
-        dim,
-    );
-    let effects_data = st.build_effects_callback_params();
-    run_effects_render_pipeline(
-        &effects_data,
-        device,
-        queue,
-        &mut command_encoder,
-        &mut st.resources,
-    );
-
-    // Output
-    let out_res = st.resources.get::<OutputResources>().unwrap();
-    run_output_render_pipeline(&mut command_encoder, out_res);
-    queue.submit(Some(command_encoder.finish()));
-    get_gpu_frame(device, out_res)
-}
-
-fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32, u32)) {
-    let Some(output_path) = st.export_path.as_ref() else {
-        return;
-    };
-    let (w, h) = (dim.0, dim.1);
-    let quality = st.export_config.quality.value();
-    let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
-
-    let mut output = FfmpegCommand::new()
-        .format("rawvideo")
-        .args(["-pixel_format", "bgra"])
-        .size(w, h)
-        .rate(fps as f32)
-        .input("-")
-        .input(p.contents.path.to_string_lossy())
-        .codec_video("libx264")
-        .crf(quality as u32)
-        .preset("veryfast")
-        .pix_fmt("yuv444p")
-        .codec_audio("aac")
-        .args(["-b:a", "320k"])
-        .args(["-y", output_path.to_string_lossy().as_str()])
-        .spawn()
-        .unwrap();
-
-    let mut stdin = output.take_stdin().unwrap();
-    let (tx, rx) = flume::bounded::<Vec<u8>>(4);
-    let write_handle = std::thread::spawn(move || {
-        rx.iter().for_each(|frame| {
-            stdin.write_all(&frame).unwrap();
-        });
-        drop(stdin);
-    });
-    let log_handle = std::thread::spawn(move || {
-        for event in output.iter().unwrap() {
-            match event {
-                FfmpegEvent::Log(_, _) => (),
-                FfmpegEvent::Error(_e) => (),
-                FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
-                FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
-                _ => (),
-            }
-        }
-        output.wait().unwrap();
-    });
-    st.writer_handle = Some(write_handle);
-    st.logger_handle = Some(log_handle);
-    st.export_tx = Some(tx);
-    st.export_config.total_frames = total_frames as usize;
-}
-
-fn export_batched_frames(
-    st: &mut AppState,
-    p: &AudioPlayer,
-    wgpu_render_state: &egui_wgpu::RenderState,
-) {
-    let fps = st.export_config.frame_rate.value();
-    let canvas_size = st.export_config.resolution.value();
-    let (w, h) = (canvas_size.0, canvas_size.1);
-
-    // Spawn writer thread for entire job
-    if st.writer_handle.is_none() {
-        spawn_ffmpeg_writer(st, p, fps, (w, h));
-    }
-
-    let device = &wgpu_render_state.device;
-    let queue = &wgpu_render_state.queue;
-
-    for _ in 0..BATCH_SIZE {
-        if st.cur_frame_idx >= st.export_config.total_frames || st.bool.export_canceled {
-            drop(std::mem::take(&mut st.export_tx));
-            st.writer_handle.take().unwrap().join().unwrap();
-            st.logger_handle.take().unwrap().join().unwrap();
-            st.bool.rendering = false;
-            st.bool.show_export_modal = false;
-            st.cur_frame_idx = 0;
-            st.export_elapsed_time.take();
-            st.prev_export_timestamp.take();
-            st.export_config.total_frames = 0;
-            st.bool.export_canceled = false;
-            println!("Finished");
-            break;
-        }
-        let frame = render_wgpu_frame(st, p, device, queue, fps, (w, h));
-        st.export_tx.as_ref().unwrap().send(frame).unwrap();
-        st.cur_frame_idx += 1;
-    }
-}
-
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        // debug_window(ui, &mut self.st);
         if !self.st.bool.fullscreen {
             menu_bar(&mut self.st, ui);
         }
@@ -200,7 +50,9 @@ impl eframe::App for PolarityApp {
         self.handle_playback(ctx);
         self.st.update_filters(self.player.as_ref());
         self.handle_preset_state();
-        self.handle_file_export(ctx, frame);
+        if self.st.bool.export_enabled {
+            self.handle_file_export(ctx, frame);
+        }
     }
 }
 
@@ -210,6 +62,12 @@ impl PolarityApp {
         let mut st = AppState::default();
         theme::apply_theme(&cc.egui_ctx, st.bool.dark_mode);
         setup_wgpu(&mut st, cc);
+
+        unsafe { std::env::set_var("KEEP_ONLY_FFMPEG", "true") };
+        // cannot export without ffmpeg
+        ffmpeg_sidecar::download::auto_download()
+            .unwrap_or_else(|_| st.bool.export_enabled = false);
+
         Self {
             st,
             ..Default::default()
@@ -377,6 +235,12 @@ impl PolarityApp {
             && self.st.export_path.is_some()
             && (self.st.bool.start_render || self.st.bool.rendering)
         {
+            if !self.st.bool.export_enabled {
+                self.st.bool.start_render = false;
+                self.st.bool.rendering = false;
+                return;
+            }
+
             self.st.bool.start_render = false;
             self.st.bool.rendering = true;
             let wgpu_render_state = frame
@@ -396,6 +260,155 @@ impl PolarityApp {
             export_batched_frames(&mut self.st, p, wgpu_render_state);
             ctx.request_repaint();
         }
+    }
+}
+
+fn render_wgpu_frame(
+    st: &mut AppState,
+    p: &AudioPlayer,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    fps: usize,
+    dim: (u32, u32),
+) -> Vec<u8> {
+    let (w, h) = (dim.0, dim.1);
+    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("export command encoder"),
+    });
+    let frac = st.cur_frame_idx as f32 / fps as f32;
+    let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
+
+    let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
+        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
+    else {
+        return vec![0];
+    };
+    env_a.run_differential_follower(p, Some(export_sample_idx));
+    env_b.run_differential_follower(p, Some(export_sample_idx));
+    env_c.run_differential_follower(p, Some(export_sample_idx));
+    env_d.run_differential_follower(p, Some(export_sample_idx));
+
+    let mut fbank = std::mem::take(&mut st.filterbank);
+    st.active_gen()
+        .prepare(&mut fbank, p, Some(export_sample_idx));
+    st.filterbank = fbank;
+
+    let render_data = RendererCallback {
+        canvas_size: vec2(w as f32, h as f32),
+        params: st.build_renderer_callback_params(false, fps),
+    };
+
+    // Main pipeline
+    run_source_render_pipeline(
+        &render_data.params,
+        device,
+        queue,
+        &mut command_encoder,
+        &mut st.resources,
+        dim,
+    );
+    let effects_data = st.build_effects_callback_params();
+    run_effects_render_pipeline(
+        &effects_data,
+        device,
+        queue,
+        &mut command_encoder,
+        &mut st.resources,
+    );
+
+    // Output
+    let out_res = st.resources.get::<OutputResources>().unwrap();
+    run_output_render_pipeline(&mut command_encoder, out_res);
+    queue.submit(Some(command_encoder.finish()));
+    get_gpu_frame(device, out_res)
+}
+
+fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32, u32)) {
+    let Some(output_path) = st.export_path.as_ref() else {
+        return;
+    };
+    let (w, h) = (dim.0, dim.1);
+    let quality = st.export_config.quality.value();
+    let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
+
+    let mut output = FfmpegCommand::new()
+        .format("rawvideo")
+        .args(["-pixel_format", "bgra"])
+        .size(w, h)
+        .rate(fps as f32)
+        .input("-")
+        .input(p.contents.path.to_string_lossy())
+        .codec_video("libx264")
+        .crf(quality as u32)
+        .preset("veryfast")
+        .pix_fmt("yuv444p")
+        .codec_audio("aac")
+        .args(["-b:a", "320k"])
+        .args(["-y", output_path.to_string_lossy().as_str()])
+        .spawn()
+        .unwrap();
+
+    let mut stdin = output.take_stdin().unwrap();
+    let (tx, rx) = flume::bounded::<Vec<u8>>(4);
+    let write_handle = std::thread::spawn(move || {
+        rx.iter().for_each(|frame| {
+            stdin.write_all(&frame).unwrap();
+        });
+        drop(stdin);
+    });
+    let log_handle = std::thread::spawn(move || {
+        for event in output.iter().unwrap() {
+            match event {
+                FfmpegEvent::Log(_, _) => (),
+                FfmpegEvent::Error(_e) => (),
+                FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
+                FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
+                _ => (),
+            }
+        }
+        output.wait().unwrap();
+    });
+    st.writer_handle = Some(write_handle);
+    st.logger_handle = Some(log_handle);
+    st.export_tx = Some(tx);
+    st.export_config.total_frames = total_frames as usize;
+}
+
+fn export_batched_frames(
+    st: &mut AppState,
+    p: &AudioPlayer,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let fps = st.export_config.frame_rate.value();
+    let canvas_size = st.export_config.resolution.value();
+    let (w, h) = (canvas_size.0, canvas_size.1);
+
+    // Spawn writer thread for entire job
+    if st.writer_handle.is_none() {
+        spawn_ffmpeg_writer(st, p, fps, (w, h));
+    }
+
+    let device = &wgpu_render_state.device;
+    let queue = &wgpu_render_state.queue;
+
+    for _ in 0..BATCH_SIZE {
+        if st.cur_frame_idx >= st.export_config.total_frames || st.bool.export_canceled {
+            drop(std::mem::take(&mut st.export_tx));
+            st.writer_handle.take().unwrap().join().unwrap();
+            st.logger_handle.take().unwrap().join().unwrap();
+            st.bool.rendering = false;
+            st.bool.show_export_modal = false;
+            st.cur_frame_idx = 0;
+            st.export_elapsed_time.take();
+            st.prev_export_timestamp.take();
+            st.export_config.total_frames = 0;
+            st.bool.export_canceled = false;
+            println!("Finished");
+            break;
+        }
+        let frame = render_wgpu_frame(st, p, device, queue, fps, (w, h));
+        st.export_tx.as_ref().unwrap().send(frame).unwrap();
+        st.cur_frame_idx += 1;
     }
 }
 

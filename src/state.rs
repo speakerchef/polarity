@@ -138,6 +138,7 @@ pub struct BoolStates {
     pub gen_open: bool,
     pub render_open: bool,
     pub render_mode_options_open: bool,
+    pub export_enabled: bool,
 
     pub energy_transfer_mode_options_open: bool,
     pub force_direction_options_open: bool,
@@ -507,6 +508,7 @@ impl Default for AppState {
             bool: BoolStates {
                 show_fullscreen_button: true,
                 dark_mode: true,
+                export_enabled: true,
                 ..BoolStates::default()
             },
         }

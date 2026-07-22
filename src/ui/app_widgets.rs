@@ -310,8 +310,30 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
             ui.painter()
                 .rect_filled(resp.rect, SHARP, plt::BG(ui.visuals().dark_mode));
 
+            const BUTTON_H: f32 = 30.0;
             if !st.bool.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
+                    if !st.bool.export_enabled {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            SHARP,
+                            border(ui.visuals().dark_mode),
+                            StrokeKind::Middle,
+                        );
+                        custom_text(
+                            ui,
+                            "Export not enabled on this device; Missing 'ffmpeg'. \nEither install manually or use live mode.",
+                            FontId {
+                                size: plt::font_size::MED,
+                                family: egui::FontFamily::Name("inter_regular".into()),
+                            },
+                            resp.rect.center() - vec2(0.0, BUTTON_H),
+                            plt::letter_spacing::MINIMAL,
+                            plt::YELLO,
+                            Align::Center,
+                        );
+                        return;
+                    }
                     dropdown_row(
                         ui,
                         "Resolution",
@@ -349,7 +371,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     );
                 });
 
-                const BUTTON_H: f32 = 30.0;
                 modal_button(
                     ui,
                     resp.rect.left_bottom() - vec2(0.0, BUTTON_H),
@@ -370,6 +391,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     &mut st.bool.start_render,
                     false,
                 );
+
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_export_modal = false;
                 }
