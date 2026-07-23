@@ -8,7 +8,10 @@ mod traits;
 mod ui;
 mod wgpu_init;
 
-use crate::{generators::oscilloscope::Oscilloscope, traits::Labeled};
+use crate::{
+    generators::{oscilloscope::Oscilloscope, polar_patterns::PolarPatterns},
+    traits::Labeled,
+};
 pub use app::PolarityApp;
 
 use crate::generators::{fluidwave::Fluidwave, stereometer::Stereometer};
@@ -30,11 +33,12 @@ macro_rules! labeled_enum {
     };
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Preset {
     pub stereometer: Stereometer,
     pub fluidwave: Fluidwave,
     pub oscilloscope: Oscilloscope,
+    pub polar_patterns: PolarPatterns,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -84,7 +88,8 @@ labeled_enum!(GenKindLabel{
     Stereometer=> "Stereometer",
     Fluidwave => "Fluidwave",
     Oscilloscope => "Oscilloscope",
-}, Stereometer);
+    PolarPatterns => "Polar Patterns"
+}, PolarPatterns);
 
 impl Labeled for GenKindLabel {
     fn text(self) -> &'static str {

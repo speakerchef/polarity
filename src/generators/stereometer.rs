@@ -216,28 +216,30 @@ impl Generator for Stereometer {
     }
 
     fn draw_filtering_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
-        section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
-        if matches!(self.render_mode, ParticleRenderMode::FullSpectrum) && open.filtering_open {
-            let fp = self.filter_params.as_mut().expect("created at constructor");
-            dropdown_row(
-                ui,
-                "FILTER",
-                &mut fp.filter_mode,
-                FilterMode::ALL,
-                &mut open.filter_mode_options_open,
-                false,
-            );
-            if open.set_default_freqs {
-                let f = match fp.filter_mode {
-                    FilterMode::Off => 1.0,
-                    FilterMode::Lpf => 200.,
-                    FilterMode::Bpf => 1000.,
-                    FilterMode::Hpf => 5000.,
-                };
-                fp.filter_freq = f;
-                fp.last_freq = f;
+        if matches!(self.render_mode, ParticleRenderMode::FullSpectrum) {
+            section_header_submenu(ui, "FILTERING", &mut open.filtering_open);
+            if matches!(self.render_mode, ParticleRenderMode::FullSpectrum) && open.filtering_open {
+                let fp = self.filter_params.as_mut().expect("created at constructor");
+                dropdown_row(
+                    ui,
+                    "FILTER",
+                    &mut fp.filter_mode,
+                    FilterMode::ALL,
+                    &mut open.filter_mode_options_open,
+                    false,
+                );
+                if open.set_default_freqs {
+                    let f = match fp.filter_mode {
+                        FilterMode::Off => 1.0,
+                        FilterMode::Lpf => 200.,
+                        FilterMode::Bpf => 1000.,
+                        FilterMode::Hpf => 5000.,
+                    };
+                    fp.filter_freq = f;
+                    fp.last_freq = f;
+                }
+                slider_row(ui, "FREQ", &mut fp.filter_freq, 1.0, 20000.0, 0, false);
             }
-            slider_row(ui, "FREQ", &mut fp.filter_freq, 1.0, 20000.0, 0, false);
         }
     }
 

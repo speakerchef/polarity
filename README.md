@@ -35,7 +35,7 @@
 
 ### V2 Roadmap (In Progress)
 
-- [ ] Build/packaging system to get `.app`
+- [x] Build/packaging system to get `.app`
 - [x] Simple and Advanced mode toggle
 - [x] Particle / Fluid simulation motion generator
   - [x] No-gravity based fluid Canvas
@@ -49,7 +49,7 @@
 - [ ] Non frequency-based Oscilloscope class generators
   - [x] Waveform window view
   - [x] Circular waveform
-  - [ ] Rotating shapes that morph into waveform / stereometer positions and return to shape
+  - [x] Delay plot
   - [ ] Abstract reactive formations (x3)
 - [ ] frequency-based generators (FFT)
   - [ ] frequency-bin-max Generators:

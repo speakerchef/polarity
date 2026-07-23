@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use biquad::*;
+use rustfft::{Fft, num_complex::Complex};
 
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
@@ -9,6 +12,7 @@ use crate::{
 
 pub mod fluidwave;
 pub mod oscilloscope;
+pub mod polar_patterns;
 pub mod rendering;
 pub mod stereometer;
 
@@ -203,4 +207,45 @@ impl Envelope {
         self.cur_envelope = frame_max;
         self.last_idx = sample_idx;
     }
+}
+
+pub fn fft_max_frequency_bin(
+    fft: Arc<dyn Fft<f32>>,
+    buffer: &[f32],
+    num_ch: usize,
+    sample_rate: usize,
+) -> f32 {
+    let mut fft_buf: Vec<Complex<f32>> = buffer
+        .chunks_exact(num_ch)
+        .map(|s| Complex::new(s[0], 0.0))
+        .collect();
+    let n = fft_buf.len();
+    fft.process(&mut fft_buf);
+
+    let spectrum = fft_buf
+        .get(..=n / 2)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .map(|(bin, s)| {
+            let freq = (bin * sample_rate) as f32 / n as f32;
+
+            let boundary = freq.round() as usize == sample_rate / 2 || freq.round() == 0.0;
+            let scale = if boundary { 1.0 } else { 2.0 };
+            let magnitude = 2.0 * s.norm() * scale / n as f32;
+            (freq, magnitude)
+        })
+        .collect::<Vec<(f32, f32)>>();
+
+    let mut max_freq = 0.0;
+    let _ = spectrum.iter().fold(0.0, |acc, s| {
+        if s.1 > acc {
+            max_freq = s.0;
+            s.1
+        } else {
+            acc
+        }
+    });
+
+    max_freq
 }

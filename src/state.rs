@@ -3,7 +3,7 @@ use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
         ChromaType, Envelope, FilterBank, fluidwave::ModSrc, oscilloscope::Oscilloscope,
-        rendering::EffectsCallback, stereometer::FilterMode,
+        polar_patterns::PolarPatterns, rendering::EffectsCallback, stereometer::FilterMode,
     },
     traits::{ActiveGenerator, Generator, Labeled},
     ui::control_panel_widgets::{
@@ -205,6 +205,8 @@ pub struct AppState {
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
     pub osci: Oscilloscope,
+    pub polar_pat: PolarPatterns,
+
     pub env_a: Option<Envelope>,
     pub env_b: Option<Envelope>,
     pub env_c: Option<Envelope>,
@@ -241,6 +243,7 @@ impl AppState {
             GenKindLabel::Stereometer => &mut self.stereo,
             GenKindLabel::Fluidwave => &mut self.fwave,
             GenKindLabel::Oscilloscope => &mut self.osci,
+            GenKindLabel::PolarPatterns => &mut self.polar_pat,
         }
     }
 
@@ -356,14 +359,17 @@ impl AppState {
         let mut stereo = std::mem::take(&mut self.stereo);
         let mut fwave = std::mem::take(&mut self.fwave);
         let mut osci = std::mem::take(&mut self.osci);
+        let mut polar_pat = std::mem::take(&mut self.polar_pat);
         let ret = match self.gen_kind {
             GenKindLabel::Stereometer => stereo.into_gen_callback_params(self, live, fps),
             GenKindLabel::Fluidwave => fwave.into_gen_callback_params(self, live, fps),
             GenKindLabel::Oscilloscope => osci.into_gen_callback_params(self, live, fps),
+            GenKindLabel::PolarPatterns => polar_pat.into_gen_callback_params(self, live, fps),
         };
         self.stereo = stereo;
         self.fwave = fwave;
         self.osci = osci;
+        self.polar_pat = polar_pat;
 
         ret
     }
@@ -473,9 +479,14 @@ impl Default for AppState {
     fn default() -> Self {
         let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
-        let (stereo, fwave, osci) = (preset.stereometer, preset.fluidwave, preset.oscilloscope);
+        let (stereo, fwave, osci, polar_pat) = (
+            preset.stereometer,
+            preset.fluidwave,
+            preset.oscilloscope,
+            preset.polar_patterns,
+        );
         Self {
-            gen_kind: GenKindLabel::Oscilloscope,
+            gen_kind: GenKindLabel::default(),
             stereometer_render_resources: None,
             fluid_render_resources: None,
             bloom_render_resources: None,
@@ -500,6 +511,8 @@ impl Default for AppState {
             stereo,
             fwave,
             osci,
+            polar_pat,
+
             env_a: None,
             env_b: None,
             env_c: None,

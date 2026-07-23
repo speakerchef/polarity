@@ -193,6 +193,7 @@ impl PolarityApp {
             stereometer: self.st.stereo.clone(),
             fluidwave: self.st.fwave.clone(),
             oscilloscope: self.st.osci.clone(),
+            polar_patterns: self.st.polar_pat.clone(),
         }) else {
             return;
         };
@@ -214,6 +215,7 @@ impl PolarityApp {
         self.st.stereo = p.stereometer;
         self.st.fwave = p.fluidwave;
         self.st.osci = p.oscilloscope;
+        self.st.polar_pat = p.polar_patterns;
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {

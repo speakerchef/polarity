@@ -240,8 +240,6 @@ impl Generator for Fluidwave {
         }
     }
 
-    fn draw_filtering_menu(&mut self, _ui: &mut egui::Ui, _open: &mut BoolStates) {}
-
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
         section_header_submenu(ui, "COLOR", &mut open.color_open);
         if open.color_open {
