@@ -2,8 +2,9 @@
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
-        ChromaType, Envelope, FilterBank, fluidwave::ModSrc, oscilloscope::Oscilloscope,
-        polar_patterns::PolarPatterns, rendering::EffectsCallback, stereometer::FilterMode,
+        ChromaType, EnvelopeBank, FilterBank, chladni::Chladni, fluidwave::ModSrc,
+        oscilloscope::Oscilloscope, polar_patterns::PolarPatterns, rendering::EffectsCallback,
+        stereometer::FilterMode,
     },
     traits::{ActiveGenerator, Generator, Labeled},
     ui::control_panel_widgets::{
@@ -22,7 +23,7 @@ use eframe::{
 };
 
 use crate::{
-    GenKindLabel, Preset,
+    GenKind, Preset,
     generators::{
         fluidwave::Fluidwave,
         rendering::{
@@ -134,6 +135,8 @@ pub struct ExportConfig {
 }
 #[derive(Default)]
 pub struct BoolStates {
+    pub debug_file_loaded: bool,
+
     pub gen_kind_options_open: bool,
     pub gen_open: bool,
     pub render_open: bool,
@@ -201,22 +204,20 @@ pub struct BoolStates {
 
 pub struct AppState {
     pub playback_mode: PlaybackMode,
-    pub gen_kind: GenKindLabel,
+    pub gen_kind: GenKind,
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
     pub osci: Oscilloscope,
     pub polar_pat: PolarPatterns,
+    pub chladni: Chladni,
 
-    pub env_a: Option<Envelope>,
-    pub env_b: Option<Envelope>,
-    pub env_c: Option<Envelope>,
-    pub env_d: Option<Envelope>,
     pub stereometer_render_resources: Option<P2DRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
     pub bloom_render_resources: Option<EffectsRenderResources>,
     pub output_render_resources: Option<OutputResources>,
     pub resources: egui_wgpu::CallbackResources,
 
+    pub env_bank: EnvelopeBank,
     pub filterbank: FilterBank,
 
     pub preset_save_path: Option<PathBuf>,
@@ -240,10 +241,11 @@ pub struct AppState {
 impl AppState {
     pub fn active_gen(&mut self) -> &mut dyn ActiveGenerator {
         match self.gen_kind {
-            GenKindLabel::Stereometer => &mut self.stereo,
-            GenKindLabel::Fluidwave => &mut self.fwave,
-            GenKindLabel::Oscilloscope => &mut self.osci,
-            GenKindLabel::PolarPatterns => &mut self.polar_pat,
+            GenKind::Stereometer => &mut self.stereo,
+            GenKind::Fluidwave => &mut self.fwave,
+            GenKind::Oscilloscope => &mut self.osci,
+            GenKind::PolarPatterns => &mut self.polar_pat,
+            GenKind::Chladni => &mut self.chladni,
         }
     }
 
@@ -331,52 +333,33 @@ impl AppState {
         }
     }
 
-    pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
-        let (Some(a), Some(b), Some(c), Some(d)) =
-            (&self.env_a, &self.env_b, &self.env_c, &self.env_d)
-        else {
-            return 0.0;
-        };
-        match src {
-            ModSrc::None => 0.0,
-            ModSrc::EnvA => a.envelope(range),
-            ModSrc::EnvB => b.envelope(range),
-            ModSrc::EnvC => c.envelope(range),
-            ModSrc::EnvD => d.envelope(range),
-        }
-    }
-    pub fn get_envelope(&self, src: ModSrc) -> Option<&Envelope> {
-        match src {
-            ModSrc::None => None,
-            ModSrc::EnvA => self.env_a.as_ref(),
-            ModSrc::EnvB => self.env_b.as_ref(),
-            ModSrc::EnvC => self.env_c.as_ref(),
-            ModSrc::EnvD => self.env_d.as_ref(),
-        }
-    }
-
     pub fn build_renderer_callback_params(&mut self, live: bool, fps: usize) -> GenCbParams {
         let mut stereo = std::mem::take(&mut self.stereo);
         let mut fwave = std::mem::take(&mut self.fwave);
         let mut osci = std::mem::take(&mut self.osci);
         let mut polar_pat = std::mem::take(&mut self.polar_pat);
+        let mut chladni = std::mem::take(&mut self.chladni);
         let ret = match self.gen_kind {
-            GenKindLabel::Stereometer => stereo.into_gen_callback_params(self, live, fps),
-            GenKindLabel::Fluidwave => fwave.into_gen_callback_params(self, live, fps),
-            GenKindLabel::Oscilloscope => osci.into_gen_callback_params(self, live, fps),
-            GenKindLabel::PolarPatterns => polar_pat.into_gen_callback_params(self, live, fps),
+            GenKind::Stereometer => stereo.into_gen_callback_params(self, live, fps),
+            GenKind::Fluidwave => fwave.into_gen_callback_params(self, live, fps),
+            GenKind::Oscilloscope => osci.into_gen_callback_params(self, live, fps),
+            GenKind::PolarPatterns => polar_pat.into_gen_callback_params(self, live, fps),
+            GenKind::Chladni => chladni.into_gen_callback_params(self, live, fps),
         };
         self.stereo = stereo;
         self.fwave = fwave;
         self.osci = osci;
         self.polar_pat = polar_pat;
+        self.chladni = chladni;
 
         ret
     }
 
     pub fn build_effects_callback_params(&mut self) -> EffectsCallback {
         let fx = self.active_gen().post_fx();
-        let env = |src: ModSrc, range: f32| -> f32 { self.envelope_value_from_mod_src(src, range) };
+        let env = |src: ModSrc, range: f32| -> f32 {
+            self.env_bank.envelope_value_from_mod_src(src, range)
+        };
         let (brng, vrng, csh_rng) = (fx.bloom_range, fx.vignette_range, fx.chroma_shift_range);
         let (bsrc, vsrc, csh_src) = (
             fx.bloom_mod_src,
@@ -479,25 +462,23 @@ impl Default for AppState {
     fn default() -> Self {
         let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
-        let (stereo, fwave, osci, polar_pat) = (
+        let (stereo, fwave, osci, polar_pat, chladni) = (
             preset.stereometer,
             preset.fluidwave,
             preset.oscilloscope,
             preset.polar_patterns,
+            preset.chladni,
         );
         Self {
-            gen_kind: GenKindLabel::default(),
+            gen_kind: GenKind::default(),
             stereometer_render_resources: None,
             fluid_render_resources: None,
             bloom_render_resources: None,
             output_render_resources: None,
             resources: egui_wgpu::CallbackResources::new(),
-            filterbank: FilterBank {
-                live_fs_filters: None,
-                trace_fs_filters: None,
-                live_mb_filters: None,
-                trace_mb_filters: None,
-            },
+
+            filterbank: FilterBank::default(),
+            env_bank: EnvelopeBank::default(),
 
             export_path: None,
             export_config: ExportConfig::default(),
@@ -512,11 +493,7 @@ impl Default for AppState {
             fwave,
             osci,
             polar_pat,
-
-            env_a: None,
-            env_b: None,
-            env_c: None,
-            env_d: None,
+            chladni,
 
             window_drag_tooltip_modal_deadline: None,
             preset_save_path: None,

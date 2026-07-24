@@ -125,7 +125,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
 pub fn main_window(
     ui: &mut egui::Ui,
     st: &mut AppState,
-    player: &mut Option<AudioPlayer>,
+    player: Option<&AudioPlayer>,
     frame: &eframe::Frame,
 ) {
     let mut resp = egui::CentralPanel::default()

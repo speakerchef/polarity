@@ -1,17 +1,12 @@
-use std::{
-    collections::VecDeque,
-    f32::consts::{PI, TAU},
-    sync::Arc,
-};
+use std::{collections::VecDeque, f32::consts::TAU};
 
 use eframe::egui::{Pos2, lerp, pos2};
-use rustfft::{Fft, FftPlanner};
 
 use crate::{
     Rgba,
     audio::audio_player::AudioPlayer,
     generators::{
-        FilterBank, FilterParams, PostFx, fft_max_frequency_bin,
+        EnvelopeBank, FftPass, FftWindow, FilterBank, FilterParams, PostFx, fft_max_frequency_bin,
         fluidwave::ModSrc,
         positional_interp_upsampling,
         rendering::{GenCbParams, Particle2DCbParams},
@@ -35,15 +30,6 @@ impl Labeled for PatternKind {
     }
 }
 
-pub struct FftPass {
-    pub fft: Arc<dyn Fft<f32>>,
-}
-impl Clone for FftPass {
-    fn clone(&self) -> Self {
-        fft_pass_default()
-    }
-}
-
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PolarPatterns {
     kind: PatternKind,
@@ -59,6 +45,8 @@ pub struct PolarPatterns {
     scale: f32,
     upsample_factor: f32,
 
+    fft_window: FftWindow,
+
     point_size: f32,
     point_size_mod_src: ModSrc,
     point_size_rng: f32,
@@ -70,16 +58,8 @@ pub struct PolarPatterns {
     live_buffer: Vec<Pos2>,
     #[serde(skip)]
     trace_buffer: VecDeque<Pos2>,
-    #[serde(skip, default = "fft_pass_default")]
+    #[serde(skip)]
     fft_pass: FftPass,
-}
-
-const FFT_WINDOW: usize = 8192;
-
-fn fft_pass_default() -> FftPass {
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(FFT_WINDOW);
-    FftPass { fft }
 }
 
 impl Default for PolarPatterns {
@@ -100,7 +80,7 @@ impl Default for PolarPatterns {
             },
             live_buffer: Default::default(),
             trace_buffer: Default::default(),
-            fft_pass: fft_pass_default(),
+            fft_pass: FftPass::default(),
             use_3d: true,
             use_rotation: true,
             angle: 0.0,
@@ -109,6 +89,8 @@ impl Default for PolarPatterns {
             rot_speed: 0.2,
             scale: 0.8,
             upsample_factor: 8.0,
+
+            fft_window: FftWindow::W8192,
 
             efx: PostFx {
                 use_bloom: true,
@@ -143,7 +125,7 @@ impl PolarPatterns {
         let s = &pl.contents.samples;
         let start_idx =
             export_sample_idx.unwrap_or_else(|| (pl.position().as_secs_f64() * sr as f64) as usize);
-        let gap = FFT_WINDOW - 1;
+        let gap = self.fft_window.value() - 1;
         let end_idx = start_idx + gap + 1;
         let window = s
             .get(start_idx * num_ch..end_idx * num_ch)
@@ -214,7 +196,7 @@ impl PolarPatterns {
     }
 
     fn get_polar_speed(&self, window: &[f32], num_ch: usize, sr: usize) -> f32 {
-        let freq = fft_max_frequency_bin(self.fft_pass.fft.clone(), window, num_ch, sr);
+        let freq = fft_max_frequency_bin(self.fft_pass.fft.clone(), window, num_ch, sr).frequency;
         (freq * 2.0).round()
     }
 }
@@ -224,6 +206,7 @@ impl Generator for PolarPatterns {
     fn prepare(
         &mut self,
         _f: &mut FilterBank,
+        _env: &EnvelopeBank,
         pl: &crate::audio::audio_player::AudioPlayer,
         export_sample_idx: Option<usize>,
     ) {
@@ -232,13 +215,14 @@ impl Generator for PolarPatterns {
 
     fn into_gen_callback_params(
         &mut self,
-        _st: &crate::state::AppState,
+        st: &crate::state::AppState,
         _live: bool,
         _fps: usize,
     ) -> super::rendering::GenCbParams {
+        let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
         GenCbParams::Particle2D(Particle2DCbParams {
             render_mode: ParticleRenderMode::FullSpectrum,
-            point_size: self.point_size,
+            point_size: self.point_size + env(self.point_size_mod_src, self.point_size_rng),
             live_pos: std::mem::take(&mut self.live_buffer),
             trace_pos: self.trace_buffer.clone(),
             fs_color: self.fs_color.into(),

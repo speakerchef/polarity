@@ -2,7 +2,7 @@ use eframe::egui;
 
 use crate::{
     audio::audio_player::AudioPlayer,
-    generators::{FilterBank, FilterParams, PostFx, rendering::GenCbParams},
+    generators::{EnvelopeBank, FilterBank, FilterParams, PostFx, rendering::GenCbParams},
     state::{AppState, BoolStates},
 };
 
@@ -15,6 +15,7 @@ pub trait Generator {
     fn prepare(
         &mut self,
         filterbank: &mut FilterBank,
+        env_bank: &EnvelopeBank,
         pl: &AudioPlayer,
         export_sample_idx: Option<usize>,
     );

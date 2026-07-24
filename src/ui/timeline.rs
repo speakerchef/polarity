@@ -11,7 +11,7 @@ const PLAY: &str = "\u{e037}";
 const PAUSE: &str = "\u{e034}";
 const SKIP_END: &str = "\u{e044}";
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &mut Option<AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)

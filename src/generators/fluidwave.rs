@@ -4,7 +4,8 @@ use eframe::egui;
 
 use crate::{
     generators::{
-        ChromaType, FilterBank, FilterParams, MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV, TARGET_DT,
+        ChromaType, EnvelopeBank, FilterBank, FilterParams, MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV,
+        TARGET_DT,
         rendering::{FluidCbParams, GenCbParams},
     },
     labeled_enum,
@@ -149,6 +150,7 @@ impl Generator for Fluidwave {
     fn prepare(
         &mut self,
         _f: &mut FilterBank,
+        _env: &EnvelopeBank,
         _pl: &crate::audio::audio_player::AudioPlayer,
         _export_sample_idx: Option<usize>,
     ) {
@@ -163,7 +165,7 @@ impl Generator for Fluidwave {
         const MAX_LUMINANCE_FLOOR: f32 = 100.0;
 
         let f = self;
-        let env = |src: ModSrc, range: f32| st.envelope_value_from_mod_src(src, range);
+        let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
         let luminance_floor = f.luminance_floor
             + env(f.luminance_floor_mod_src, f.luminance_floor_rng) * MAX_LUMINANCE_FLOOR;
 

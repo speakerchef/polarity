@@ -1,5 +1,5 @@
 use core::f32;
-use std::{collections::VecDeque, f32::consts::TAU, time::Duration};
+use std::{f32::consts::TAU, time::Duration};
 
 use biquad::Type;
 use eframe::egui::{Pos2, Vec2, lerp, pos2};
@@ -8,7 +8,7 @@ use crate::{
     Rgba,
     audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
-        FilterBank, FilterParams, PostFx,
+        EnvelopeBank, FilterBank, FilterParams, PostFx,
         fluidwave::ModSrc,
         positional_interp_upsampling,
         rendering::{GenCbParams, Particle2DCbParams},
@@ -110,8 +110,6 @@ pub struct Oscilloscope {
 
     #[serde(skip)]
     live_buffer: Vec<Pos2>,
-    #[serde(skip)]
-    trace_buffer: VecDeque<Pos2>,
 }
 
 impl Default for Oscilloscope {
@@ -187,7 +185,6 @@ impl Default for Oscilloscope {
             max_height: 0.7,
 
             live_buffer: Default::default(),
-            trace_buffer: Default::default(),
         }
     }
 }
@@ -430,6 +427,7 @@ impl Generator for Oscilloscope {
     fn prepare(
         &mut self,
         f: &mut FilterBank,
+        _env: &EnvelopeBank,
         pl: &crate::audio::audio_player::AudioPlayer,
         export_sample_idx: Option<usize>,
     ) {
@@ -438,18 +436,18 @@ impl Generator for Oscilloscope {
 
     fn into_gen_callback_params(
         &mut self,
-        _st: &crate::state::AppState,
+        st: &crate::state::AppState,
         _live: bool,
         _fps: usize,
     ) -> super::rendering::GenCbParams {
         let s = self;
+        let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
         GenCbParams::Particle2D(Particle2DCbParams {
             render_mode: ParticleRenderMode::FullSpectrum,
-            point_size: s.point_size,
+            point_size: s.point_size + env(s.point_size_mod_src, s.point_size_rng),
             add_point_border: false,
 
             live_pos: std::mem::take(&mut s.live_buffer),
-            trace_pos: s.trace_buffer.clone(),
 
             fs_color: s.fs_color.into(),
             ..Default::default()

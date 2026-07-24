@@ -181,12 +181,30 @@ pub fn mod_button(
         *mod_menu_open = !*mod_menu_open;
     }
     let (bg, fg) = if *mod_menu_open {
-        (plt::TEXT, plt::INK)
+        (
+            if !matches!(value, ModSrc::None) {
+                plt::YELLO
+            } else {
+                plt::TEXT
+            },
+            plt::INK,
+        )
     } else {
         if resp.hovered() {
             (plt::YELLO, plt::INK)
         } else {
-            (plt::SURFACE_HOVER(ui.visuals().dark_mode), plt::TEXT)
+            (
+                if !matches!(value, ModSrc::None) {
+                    plt::YELLO
+                } else {
+                    plt::SURFACE_HOVER(ui.visuals().dark_mode)
+                },
+                if !matches!(value, ModSrc::None) {
+                    plt::INK
+                } else {
+                    plt::TEXT
+                },
+            )
         }
     };
     ui.painter().rect_filled(inner, SHARP, bg);
@@ -198,13 +216,20 @@ pub fn mod_button(
     let (_, th) = get_text_size(ui, "M", font.clone()).into();
     custom_text(
         ui,
-        "•",
+        match value {
+            ModSrc::None => "•",
+            ModSrc::EnvA => "A",
+            ModSrc::EnvB => "B",
+            ModSrc::EnvC => "C",
+            ModSrc::EnvD => "D",
+        },
         font.clone(),
         inner.center() - vec2(0.0, th / 2.0),
         0.0,
         fg,
         Align::Center,
     );
+    let mut dropdown_rect = inner;
     if *mod_menu_open {
         let resp = egui::Area::new(label.to_string().into())
             .movable(false)
@@ -234,14 +259,15 @@ pub fn mod_button(
                 ui.painter()
                     .add(shadow.as_shape(ui.available_rect_before_wrap(), SHARP));
                 static_label(ui, "MODULATOR OPTIONS");
-                dropdown_row(
+                dropdown_rect = dropdown_row(
                     ui,
                     "MOD SOURCE",
                     value,
                     ModSrc::ALL,
                     mod_src_menu_open,
                     false,
-                );
+                )
+                .rect;
                 slider_row(ui, "RANGE", range, -100.0, 100.0, 0, false);
             })
             .response;
@@ -251,7 +277,8 @@ pub fn mod_button(
                 && (!resp
                     .interact_rect
                     .contains(i.pointer.interact_pos().unwrap_or_default())
-                    && !inner.contains(i.pointer.interact_pos().unwrap_or_default()))
+                    && !inner.contains(i.pointer.interact_pos().unwrap_or_default())
+                    && !dropdown_rect.contains(i.pointer.interact_pos().unwrap_or_default()))
             {
                 *mod_menu_open = false;
             }
@@ -453,6 +480,7 @@ pub fn dropdown_row<T: Labeled>(
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
+    let mut return_resp = None;
     let inner_resp = ui
         .allocate_ui_with_layout(
             vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
@@ -460,7 +488,13 @@ pub fn dropdown_row<T: Labeled>(
             |ui| {
                 ui.add_space(PAD);
                 label_text(ui, label, ui.available_width() - (SEL_W + PAD * 1.0));
-                dropdown_menu(ui, (SEL_W, plt::height::INNER), value, options, open);
+                return_resp = Some(dropdown_menu(
+                    ui,
+                    (SEL_W, plt::height::INNER),
+                    value,
+                    options,
+                    open,
+                ));
             },
         )
         .response;
@@ -486,7 +520,7 @@ pub fn dropdown_row<T: Labeled>(
             *open = false;
         }
     });
-    inner_resp
+    return_resp.unwrap_or(inner_resp)
 }
 pub fn path_picker(
     ui: &mut egui::Ui,
@@ -708,7 +742,7 @@ pub fn dropdown_menu<T: Labeled>(
     value: &mut T,
     options: &[T],
     open: &mut bool,
-) {
+) -> Response {
     let (inner, mut resp) = ui.allocate_exact_size(vec2(dim.0, dim.1), egui::Sense::click());
     resp = resp.on_hover_and_drag_cursor(egui::CursorIcon::PointingHand);
     if resp.clicked() {
@@ -763,7 +797,7 @@ pub fn dropdown_menu<T: Labeled>(
     );
 
     if *open {
-        egui::Area::new(egui::Id::new(value.text()).with("popup"))
+        resp = egui::Area::new(egui::Id::new(value.text()).with("popup"))
             .fixed_pos(inner.left_bottom())
             .order(egui::Order::Foreground)
             .show(ui.ctx(), |ui| {
@@ -778,7 +812,8 @@ pub fn dropdown_menu<T: Labeled>(
                         }
                     }
                 });
-            });
+            })
+            .response;
     }
     // close dropdown if clicked elsewhere
     ui.ctx().input(|i| {
@@ -788,6 +823,7 @@ pub fn dropdown_menu<T: Labeled>(
             *open = false;
         }
     });
+    resp
 }
 
 fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {

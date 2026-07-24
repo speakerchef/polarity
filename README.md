@@ -46,16 +46,17 @@
   - [x] Color gradient ordering options
   - [x] Extra color options (added inversion and luminance mode)
   - [x] Variable simulation speed
-- [ ] Non frequency-based Oscilloscope class generators
+- [x] Non frequency-based Oscilloscope class generators
   - [x] Waveform window view
   - [x] Circular waveform
   - [x] Delay plot
-  - [ ] Abstract reactive formations (x3)
 - [ ] frequency-based generators (FFT)
-  - [ ] frequency-bin-max Generators:
-    - [ ] Unipolar pattern
-    - [ ] Bipolar pattern
-    - [ ] Chladni plates
+  - [x] frequency-bin-max Generators:
+    - [x] Unipolar pattern
+    - [x] Bipolar pattern
+    - [x] Chladni plates
+  - [ ] full spectrum band-split generators:
+    - [ ] spectrogram
 - [ ] Live/RT mode
 - [x] Universal audio reactivity envelope structure.
 - [ ] Automation Envelopes / LFOs
@@ -66,18 +67,8 @@
 - [ ] Post-FX
   - [x] Chromatic aberration
   - [x] Vignette
-  - [ ] Warp effects
-    - [ ] Bulge
   - [ ] Filters
     - [ ] CRT Style
-
-#### Possible generator list
-
-- Oscilloscope
-  - polar space derived patterns and shapes
-    - pattern 1(NF): 0.8 + 2 • sin(cos(bø) • sin(ø • b/1000) • cos(ø) • sin(ø))
-    - pattern 2(NF): -35 • (cos(cos(43) - sin(cos(8.5))))/ (b • sin(cos(ø)) • cos(ø))
-    - pattern 3(F): A • \[sin | cos](2PI • f • dt)
 
 ### Author
 

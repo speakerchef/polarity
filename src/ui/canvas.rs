@@ -6,7 +6,7 @@ use eframe::egui::{self, Pos2, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
-use crate::GenKindLabel;
+use crate::GenKind;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::traits::Generator;
@@ -17,7 +17,7 @@ use crate::ui::{custom_text, palette};
 
 const MAX_VIGNETTE: f32 = 0.5;
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
     ui.ctx().request_repaint();
     egui::CentralPanel::default()
         .frame(
@@ -57,7 +57,7 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     pos
 }
 
-fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer>) {
+fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
     let (h, w) = (ui.available_height(), ui.available_width());
     // let l = h.min(w) * 0.99;
     let l = h.min(w);
@@ -75,22 +75,18 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: &Option<AudioPlayer
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
 
-    let (Some(pl), Some(env_a), Some(env_b), Some(env_c), Some(env_d)) = (
-        pl,
-        &mut st.env_a,
-        &mut st.env_b,
-        &mut st.env_c,
-        &mut st.env_d,
-    ) else {
+    let Some(pl) = pl else {
         return;
     };
-    env_a.run_differential_follower(pl, None);
-    env_b.run_differential_follower(pl, None);
-    env_c.run_differential_follower(pl, None);
-    env_d.run_differential_follower(pl, None);
+    st.env_bank.run_follower(pl, None);
+
     let mut fbank = std::mem::take(&mut st.filterbank);
-    st.active_gen().prepare(&mut fbank, pl, None);
+    let env_bank = std::mem::take(&mut st.env_bank);
+
+    st.active_gen().prepare(&mut fbank, &env_bank, pl, None);
+
     st.filterbank = fbank;
+    st.env_bank = env_bank;
 
     let renderer_params = st.build_renderer_callback_params(true, 0);
     let efx_params = st.build_effects_callback_params();

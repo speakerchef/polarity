@@ -36,12 +36,14 @@ pub struct PolarityApp {
 
 const BATCH_SIZE: usize = 30;
 
+const DEBUG: bool = true;
+
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if !self.st.bool.fullscreen {
             menu_bar(&mut self.st, ui);
         }
-        main_window(ui, &mut self.st, &mut self.player, frame);
+        main_window(ui, &mut self.st, self.player.as_ref(), frame);
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.bool.dark_mode);
@@ -87,29 +89,32 @@ impl PolarityApp {
 
     fn spawn_audio_player(&mut self, path: PathBuf, paused: bool, clear_envelopes: bool) {
         // Clear old stuff
+        let st = &mut self.st;
         self.player.take();
-        self.st.stereo.clear_live_buffers();
-        self.st.stereo.clear_trace_buffers();
-        self.st.filterbank.live_fs_filters.take();
-        self.st.filterbank.trace_fs_filters.take();
-        self.st.filterbank.live_mb_filters.take();
-        self.st.filterbank.trace_mb_filters.take();
+        st.stereo.clear_live_buffers();
+        st.stereo.clear_trace_buffers();
+        st.filterbank.live_fs_filters.take();
+        st.filterbank.trace_fs_filters.take();
+        st.filterbank.live_mb_filters.take();
+        st.filterbank.trace_mb_filters.take();
+
+        let env = &mut st.env_bank;
         if clear_envelopes {
-            self.st.env_a.take();
-            self.st.env_b.take();
-            self.st.env_c.take();
-            self.st.env_d.take();
+            env.env_a.take();
+            env.env_b.take();
+            env.env_c.take();
+            env.env_d.take();
         }
         self.player = AudioPlayer::new(path, paused)
             .inspect_err(|err| println!("error creating audio player: {}", err))
             .ok();
         if let Some(p) = &self.player
-            && self.st.env_a.is_none()
+            && env.env_a.is_none()
         {
-            self.st.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
-            self.st.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
-            self.st.env_c = Some(Envelope::new(75., 800., 0.0, p.contents.sample_rate));
-            self.st.env_d = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
+            env.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
+            env.env_b = Some(Envelope::new(1., 100., -0.40, p.contents.sample_rate));
+            env.env_c = Some(Envelope::new(75., 800., 0.0, p.contents.sample_rate));
+            env.env_d = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
         }
     }
 
@@ -137,6 +142,16 @@ impl PolarityApp {
     }
 
     fn handle_audio_import(&mut self) {
+        if DEBUG
+            && !self.st.bool.debug_file_loaded
+            && let Ok(path) = std::env::var("DEBUG_AUDIO_FILE_PATH")
+        {
+            println!("{path}");
+            self.load_file(path.into());
+            self.st.bool.debug_file_loaded = true;
+            return;
+        }
+
         if self.st.bool.import_open {
             self.st.bool.import_open = false;
             self.st.bool.start_render = false;
@@ -194,6 +209,7 @@ impl PolarityApp {
             fluidwave: self.st.fwave.clone(),
             oscilloscope: self.st.osci.clone(),
             polar_patterns: self.st.polar_pat.clone(),
+            chladni: self.st.chladni.clone(),
         }) else {
             return;
         };
@@ -216,6 +232,7 @@ impl PolarityApp {
         self.st.fwave = p.fluidwave;
         self.st.osci = p.oscilloscope;
         self.st.polar_pat = p.polar_patterns;
+        self.st.chladni = p.chladni;
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
@@ -281,20 +298,16 @@ fn render_wgpu_frame(
     let frac = st.cur_frame_idx as f32 / fps as f32;
     let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
-    let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
-        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
-    else {
-        return vec![0];
-    };
-    env_a.run_differential_follower(p, Some(export_sample_idx));
-    env_b.run_differential_follower(p, Some(export_sample_idx));
-    env_c.run_differential_follower(p, Some(export_sample_idx));
-    env_d.run_differential_follower(p, Some(export_sample_idx));
+    st.env_bank.run_follower(p, Some(export_sample_idx));
 
     let mut fbank = std::mem::take(&mut st.filterbank);
+    let env_bank = std::mem::take(&mut st.env_bank);
+
     st.active_gen()
-        .prepare(&mut fbank, p, Some(export_sample_idx));
+        .prepare(&mut fbank, &env_bank, p, Some(export_sample_idx));
+
     st.filterbank = fbank;
+    st.env_bank = env_bank;
 
     let render_data = RendererCallback {
         canvas_size: vec2(w as f32, h as f32),

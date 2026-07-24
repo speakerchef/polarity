@@ -1,6 +1,6 @@
 use crate::generators::fluidwave::ModSrc;
 use crate::generators::rendering::{GenCbParams, Particle2DCbParams};
-use crate::generators::{ChromaType, FilterBank, FilterParams, PostFx, radial_scale};
+use crate::generators::{ChromaType, EnvelopeBank, FilterBank, FilterParams, PostFx, radial_scale};
 use crate::state::{AppState, BoolStates};
 use crate::traits::{ActiveGenerator, Generator, Labeled, ParamAccess};
 use crate::ui::control_panel_widgets::{
@@ -161,14 +161,20 @@ impl ParamAccess for Stereometer {
 }
 
 impl Generator for Stereometer {
-    fn prepare(&mut self, f: &mut FilterBank, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
+    fn prepare(
+        &mut self,
+        f: &mut FilterBank,
+        _env: &EnvelopeBank,
+        pl: &AudioPlayer,
+        export_sample_idx: Option<usize>,
+    ) {
         self.draw(f, pl, export_sample_idx);
     }
 
     fn into_gen_callback_params(&mut self, st: &AppState, _live: bool, _fps: usize) -> GenCbParams {
         const MAX_POINT_SIZE: f32 = 0.01;
         let s = self;
-        let env = |src: ModSrc, range: f32| st.envelope_value_from_mod_src(src, range);
+        let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
         let point_size =
             s.point_size + env(s.point_size_mod_src, s.point_size_rng) * MAX_POINT_SIZE;
 

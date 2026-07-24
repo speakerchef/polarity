@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use biquad::*;
 use eframe::egui::{Pos2, pos2};
-use rustfft::{Fft, num_complex::Complex};
+use rustfft::{Fft, FftPlanner, num_complex::Complex};
 
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
@@ -11,6 +11,7 @@ use crate::{
     traits::Labeled,
 };
 
+pub mod chladni;
 pub mod fluidwave;
 pub mod oscilloscope;
 pub mod polar_patterns;
@@ -40,6 +41,48 @@ impl Labeled for ChromaType {
     }
 }
 
+labeled_enum!(FftWindow {
+    W1024 => "1024",
+    W2048 => "2048",
+    W4096 => "4096",
+    W8192 => "8192",
+    W16384 => "16384",
+}, W4096);
+
+impl Labeled for FftWindow {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
+impl FftWindow {
+    pub fn value(&self) -> usize {
+        match self {
+            Self::W1024 => 1024,
+            Self::W2048 => 2048,
+            Self::W4096 => 4096,
+            Self::W8192 => 8192,
+            Self::W16384 => 16384,
+        }
+    }
+}
+
+pub struct FftPass {
+    pub fft: Arc<dyn Fft<f32>>,
+}
+impl Default for FftPass {
+    fn default() -> Self {
+        let mut planner = FftPlanner::<f32>::new();
+        let fft = planner.plan_fft_forward(FftWindow::default().value());
+        FftPass { fft }
+    }
+}
+impl Clone for FftPass {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
 pub fn radial_scale(scale_factor: f32, x: f32, y: f32) -> f32 {
     let mag = (x * x + y * y).sqrt();
     let scaled = mag.powf(1.0 - scale_factor);
@@ -58,6 +101,53 @@ pub struct FilterBank {
     pub trace_fs_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
     pub live_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
     pub trace_mb_filters: Option<(StereoFilter, StereoFilter, StereoFilter)>,
+}
+#[derive(Default)]
+pub struct EnvelopeBank {
+    pub env_a: Option<Envelope>,
+    pub env_b: Option<Envelope>,
+    pub env_c: Option<Envelope>,
+    pub env_d: Option<Envelope>,
+}
+
+impl EnvelopeBank {
+    pub fn run_follower(&mut self, p: &AudioPlayer, export_sample_idx: Option<usize>) {
+        let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) = (
+            &mut self.env_a,
+            &mut self.env_b,
+            &mut self.env_c,
+            &mut self.env_d,
+        ) else {
+            return;
+        };
+        env_a.run_differential_follower(p, export_sample_idx);
+        env_b.run_differential_follower(p, export_sample_idx);
+        env_c.run_differential_follower(p, export_sample_idx);
+        env_d.run_differential_follower(p, export_sample_idx);
+    }
+    pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
+        let (Some(a), Some(b), Some(c), Some(d)) =
+            (&self.env_a, &self.env_b, &self.env_c, &self.env_d)
+        else {
+            return 0.0;
+        };
+        match src {
+            ModSrc::None => 0.0,
+            ModSrc::EnvA => a.envelope(range),
+            ModSrc::EnvB => b.envelope(range),
+            ModSrc::EnvC => c.envelope(range),
+            ModSrc::EnvD => d.envelope(range),
+        }
+    }
+    pub fn get_envelope(&self, src: ModSrc) -> Option<&Envelope> {
+        match src {
+            ModSrc::None => None,
+            ModSrc::EnvA => self.env_a.as_ref(),
+            ModSrc::EnvB => self.env_b.as_ref(),
+            ModSrc::EnvC => self.env_c.as_ref(),
+            ModSrc::EnvD => self.env_d.as_ref(),
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
@@ -233,12 +323,18 @@ fn positional_interp_upsampling(factor: f32, buf: &[Pos2]) -> Vec<Pos2> {
         .collect()
 }
 
-pub fn fft_max_frequency_bin(
+#[derive(Copy, Clone)]
+pub struct FftBin {
+    pub frequency: f32,
+    pub amplitude: f32,
+}
+
+pub fn fft_spectrum(
     fft: Arc<dyn Fft<f32>>,
     buffer: &[f32],
     num_ch: usize,
     sample_rate: usize,
-) -> f32 {
+) -> Vec<FftBin> {
     let mut fft_buf: Vec<Complex<f32>> = buffer
         .chunks_exact(num_ch)
         .map(|s| Complex::new(s[0], 0.0))
@@ -246,30 +342,44 @@ pub fn fft_max_frequency_bin(
     let n = fft_buf.len();
     fft.process(&mut fft_buf);
 
-    let spectrum = fft_buf
+    fft_buf
         .get(..=n / 2)
         .unwrap_or_default()
         .iter()
         .enumerate()
         .map(|(bin, s)| {
-            let freq = (bin * sample_rate) as f32 / n as f32;
+            let frequency = (bin * sample_rate) as f32 / n as f32;
 
-            let boundary = freq.round() as usize == sample_rate / 2 || freq.round() == 0.0;
+            let boundary =
+                frequency.round() as usize == sample_rate / 2 || frequency.round() == 0.0;
             let scale = if boundary { 1.0 } else { 2.0 };
-            let magnitude = 2.0 * s.norm() * scale / n as f32;
-            (freq, magnitude)
+            let amplitude = 2.0 * s.norm() * scale / n as f32;
+            FftBin {
+                frequency,
+                amplitude,
+            }
         })
-        .collect::<Vec<(f32, f32)>>();
+        .collect::<Vec<FftBin>>()
+}
 
-    let mut max_freq = 0.0;
-    let _ = spectrum.iter().fold(0.0, |acc, s| {
-        if s.1 > acc {
-            max_freq = s.0;
-            s.1
+pub fn fft_max_frequency_bin(
+    fft: Arc<dyn Fft<f32>>,
+    buffer: &[f32],
+    num_ch: usize,
+    sample_rate: usize,
+) -> FftBin {
+    let spectrum = fft_spectrum(fft, buffer, num_ch, sample_rate);
+    let mut frequency = 0.0;
+    let amplitude = spectrum.iter().fold(0.0, |acc, s| {
+        if s.amplitude > acc {
+            frequency = s.frequency;
+            s.amplitude
         } else {
             acc
         }
     });
-
-    max_freq
+    FftBin {
+        frequency,
+        amplitude,
+    }
 }

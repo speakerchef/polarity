@@ -1,12 +1,13 @@
 use crate::generators::Envelope;
 use crate::traits::Labeled;
 use crate::ui::{control_panel_widgets::*, palette as plt};
-use crate::{GenKindLabel, state::*};
+use crate::{GenKind, state::*};
 use eframe::egui::{self, vec2};
 
 fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
+    let b = &mut st.env_bank;
     let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) =
-        (&mut st.env_a, &mut st.env_b, &mut st.env_c, &mut st.env_d)
+        (&mut b.env_a, &mut b.env_b, &mut b.env_c, &mut b.env_d)
     else {
         return;
     };
@@ -110,7 +111,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                     ui,
                                     &gen_rect,
                                     &mut st.gen_kind,
-                                    GenKindLabel::ALL,
+                                    GenKind::ALL,
                                     &mut st.bool.gen_kind_options_open,
                                 );
                                 if st.bool.gen_open {
