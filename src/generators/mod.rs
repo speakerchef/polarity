@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use biquad::*;
+use eframe::egui::{Pos2, pos2};
 use rustfft::{Fft, num_complex::Complex};
 
 use crate::{
@@ -207,6 +208,29 @@ impl Envelope {
         self.cur_envelope = frame_max;
         self.last_idx = sample_idx;
     }
+}
+
+fn positional_interp_upsampling(factor: f32, buf: &[Pos2]) -> Vec<Pos2> {
+    let mut prev = buf.first().unwrap_or(&Pos2::ZERO);
+    buf.iter()
+        .flat_map(|pos| {
+            let dx = pos.x - prev.x;
+            let dy = pos.y - prev.y;
+            let ix = dx / factor;
+            let iy = dy / factor;
+
+            let (mut cx, mut cy) = (prev.x, prev.y);
+            let v = (0..factor as usize)
+                .map(|_| {
+                    cx += ix;
+                    cy += iy;
+                    pos2(cx, cy)
+                })
+                .collect::<Vec<Pos2>>();
+            prev = pos;
+            v
+        })
+        .collect()
 }
 
 pub fn fft_max_frequency_bin(

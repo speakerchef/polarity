@@ -10,6 +10,7 @@ use crate::{
     generators::{
         FilterBank, FilterParams, PostFx,
         fluidwave::ModSrc,
+        positional_interp_upsampling,
         rendering::{GenCbParams, Particle2DCbParams},
         stereometer::{FilterMode, ParticleRenderMode},
     },
@@ -136,8 +137,8 @@ impl Default for Oscilloscope {
 
             use_rotation: true,
             angle: 100.0,
-            upsample_factor: 1.0,
-            camera_z: 4.0,
+            upsample_factor: 4.0,
+            camera_z: 10.0,
             total_scale: 0.6,
             rot_freq: 0.1,
             pitch: 0.3,
@@ -158,8 +159,8 @@ impl Default for Oscilloscope {
             filter_params: {
                 Some(FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,
-                    last_freq: 500.0,
-                    filter_freq: 500.0,
+                    last_freq: 1000.0,
+                    filter_freq: 1000.0,
                 })
             },
             low_end_focus: true,
@@ -179,6 +180,7 @@ impl Default for Oscilloscope {
                 ..Default::default()
             },
             point_size: 0.0015,
+            // point_size: 0.0023,
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,
@@ -275,7 +277,6 @@ impl Oscilloscope {
 
                 const MIN_OFFSET: f32 = 0.1;
                 const MAX_OFFSET: f32 = 2.85;
-                // let mut offset = 10.0 / self.camera_z.max(3.5) * MIN_OFFSET;
                 let mut offset = (10.0 / self.camera_z).min(MAX_OFFSET) * MIN_OFFSET;
 
                 const PITCH_THRESH: f32 = 0.3;
@@ -335,37 +336,9 @@ impl Oscilloscope {
             self.align_phase(&mut start_idx, &mut end_idx, pl, num_ch);
         }
 
-        let mut last_l = *s.get(start_idx * num_ch).unwrap_or(&0_f32);
-        let mut last_r = *s.get(start_idx * num_ch + 1).unwrap_or(&0_f32);
-
         let live_window = s
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
-
-        let us_factor = self.upsample_factor as usize;
-        let live_window = if us_factor > 1 {
-            &live_window
-                .chunks_exact(num_ch)
-                .flat_map(|s| {
-                    let (l, r) = (s[0], *s.last().unwrap_or(&s[0]));
-                    let (dl, dr) = (l - last_l, r - last_r);
-                    let (il, ir) = (dl / self.upsample_factor, dr / self.upsample_factor);
-                    let (mut cl, mut cr) = (last_l, last_r);
-                    let v: Vec<_> = (0..us_factor)
-                        .flat_map(|_| {
-                            let o = [cl, cr];
-                            cl += il;
-                            cr += ir;
-                            o
-                        })
-                        .collect();
-                    (last_l, last_r) = (l, r);
-                    v
-                })
-                .collect::<Vec<f32>>()
-        } else {
-            live_window
-        };
 
         let dist = |pos: Vec2| {
             let dx = pos.x;
@@ -378,24 +351,15 @@ impl Oscilloscope {
 
         let mut angle: f32 = 0.0;
         let angular_increment = TAU / live_window.len() as f32;
-        self.live_buffer = live_window
+        let pos_buf: Vec<Pos2> = live_window
             .chunks_exact(num_ch)
             .enumerate()
             .flat_map(|(i, s)| {
                 let l = s[0];
                 let cur_idx = start_idx + i;
-                let delay_l = get_audio_frame(
-                    pl,
-                    cur_idx + us_factor * self.delay_samples as usize,
-                    num_ch,
-                )
-                .0;
-                let delay_r = get_audio_frame(
-                    pl,
-                    cur_idx + 2 * us_factor * self.delay_samples as usize,
-                    num_ch,
-                )
-                .1;
+                let delay_l = get_audio_frame(pl, cur_idx + self.delay_samples as usize, num_ch).0;
+                let delay_r =
+                    get_audio_frame(pl, cur_idx + 2 * self.delay_samples as usize, num_ch).1;
 
                 if self.lpf.is_none()
                     || self.last_freq != self.filter_params.expect("safe").filter_freq
@@ -456,6 +420,8 @@ impl Oscilloscope {
                 pos
             })
             .collect();
+
+        self.live_buffer = positional_interp_upsampling(self.upsample_factor, &pos_buf);
     }
 }
 
@@ -633,7 +599,7 @@ impl Generator for Oscilloscope {
                     "UPSAMPLE",
                     &mut self.upsample_factor,
                     1.0,
-                    10.0,
+                    32.0,
                     0,
                     false,
                 );

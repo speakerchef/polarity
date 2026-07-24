@@ -1,16 +1,21 @@
-use std::{collections::VecDeque, f32::consts::TAU, sync::Arc};
+use std::{
+    collections::VecDeque,
+    f32::consts::{PI, TAU},
+    sync::Arc,
+};
 
-use eframe::egui::{Pos2, pos2};
+use eframe::egui::{Pos2, lerp, pos2};
 use rustfft::{Fft, FftPlanner};
 
 use crate::{
     Rgba,
     audio::audio_player::AudioPlayer,
     generators::{
-        PostFx, fft_max_frequency_bin,
+        FilterBank, FilterParams, PostFx, fft_max_frequency_bin,
         fluidwave::ModSrc,
+        positional_interp_upsampling,
         rendering::{GenCbParams, Particle2DCbParams},
-        stereometer::ParticleRenderMode,
+        stereometer::{FilterMode, ParticleRenderMode},
     },
     labeled_enum,
     traits::{ActiveGenerator, Generator, Labeled, ParamAccess},
@@ -22,7 +27,7 @@ use crate::{
 labeled_enum!(PatternKind {
     Unipolar => "Unipolar",
     Bipolar => "Bipolar",
-}, Bipolar);
+}, Unipolar);
 
 impl Labeled for PatternKind {
     fn text(self) -> &'static str {
@@ -48,16 +53,18 @@ pub struct PolarPatterns {
     use_3d: bool,
     use_rotation: bool,
     angle: f32,
+    camera_z: f32,
     pitch: f32,
     rot_speed: f32,
     scale: f32,
-    camera_z: f32,
     upsample_factor: f32,
 
     point_size: f32,
     point_size_mod_src: ModSrc,
     point_size_rng: f32,
     point_size_mod_open: bool,
+
+    filter_params: Option<FilterParams>,
 
     #[serde(skip)]
     live_buffer: Vec<Pos2>,
@@ -79,10 +86,16 @@ impl Default for PolarPatterns {
     fn default() -> Self {
         Self {
             kind: PatternKind::default(),
+            // fs_color: Rgba {
+            //     r: 64.0,
+            //     g: 93.0,
+            //     b: 65.0,
+            //     a: 255.0,
+            // },
             fs_color: Rgba {
-                r: 255.0,
-                g: 93.0,
-                b: 0.0,
+                r: 76.0,
+                g: 113.0,
+                b: 88.0,
                 a: 255.0,
             },
             live_buffer: Default::default(),
@@ -91,15 +104,15 @@ impl Default for PolarPatterns {
             use_3d: true,
             use_rotation: true,
             angle: 0.0,
-            pitch: 0.0,
-            rot_speed: 0.4,
-            scale: 0.8,
             camera_z: 10.0,
+            pitch: 0.2,
+            rot_speed: 0.2,
+            scale: 0.8,
             upsample_factor: 8.0,
 
             efx: PostFx {
                 use_bloom: true,
-                bloom: 1.5,
+                bloom: 1.,
                 bloom_mod_src: ModSrc::EnvB,
                 bloom_range: 20.0,
                 use_vignette: true,
@@ -110,6 +123,11 @@ impl Default for PolarPatterns {
                 chroma_type: super::ChromaType::Radial,
                 ..Default::default()
             },
+            filter_params: Some(FilterParams {
+                filter_mode: FilterMode::Lpf,
+                last_freq: 450.,
+                filter_freq: 450.,
+            }),
             point_size: 0.0015,
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
@@ -133,22 +151,26 @@ impl PolarPatterns {
 
         let n = window.len();
         let polar_speed = self.get_polar_speed(window, num_ch, sr);
+        let gap = sr / 32;
         let buf = (0..n)
             .map(|i| {
                 let l = window.get(i * num_ch).unwrap_or(&0_f32);
                 let r = window.get(i * num_ch + 1).unwrap_or(&0_f32);
-
+                let delay = window.get((i + gap) * num_ch + 1).unwrap_or(&0_f32);
                 let time = (start_idx + i) as f32 / sr as f32;
                 let theta = (TAU * polar_speed * time) % TAU;
 
+                let y_sample = if matches!(self.kind, PatternKind::Unipolar) {
+                    l
+                } else {
+                    r
+                };
+                let limit = (1.1 - y_sample.abs()).max(0.0).powf(2.0);
                 let (x, y, z) = (
                     l * theta.sin(),
-                    if matches!(self.kind, PatternKind::Unipolar) {
-                        l
-                    } else {
-                        r
-                    } * theta.cos(),
-                    (l - r),
+                    y_sample * theta.cos(),
+                    // ((l - r) * theta.tan()).clamp(-limit, limit),
+                    (delay * theta.tan()).clamp(-limit, limit),
                 );
 
                 if self.use_3d {
@@ -160,50 +182,40 @@ impl PolarPatterns {
                         self.angle / 360.0 * TAU
                     };
 
-                    let x1 = x * angle.cos() - z * angle.sin();
+                    let x1 = x * angle.cos() + z * angle.sin();
                     let z1 = -x * angle.sin() + z * angle.cos();
                     let y1 = y * self.pitch.cos() - z1 * self.pitch.sin();
 
                     let depth = (self.camera_z - z1).max(0.1);
                     let perspective = self.camera_z / depth;
 
-                    pos2(x1, y1) * self.scale * perspective
+                    const MIN_OFFSET: f32 = 0.1;
+                    const MAX_OFFSET: f32 = 5.0;
+                    let mut offset =
+                        ((10.0 / self.camera_z).min(MAX_OFFSET) * MIN_OFFSET).powf(2.0);
+
+                    const PITCH_THRESH: f32 = 0.2;
+                    if self.pitch.abs() < PITCH_THRESH {
+                        offset -= lerp(
+                            0.0..=offset,
+                            (PITCH_THRESH - self.pitch.abs()) / PITCH_THRESH,
+                        );
+                    }
+                    offset *= self.pitch.signum();
+
+                    pos2(x1, y1 + offset) * self.scale * perspective
                 } else {
                     pos2(x, y) * 0.99
                 }
             })
             .collect::<Vec<Pos2>>();
 
-        self.live_buffer = self.upsample(&buf);
+        self.live_buffer = positional_interp_upsampling(self.upsample_factor, &buf);
     }
 
     fn get_polar_speed(&self, window: &[f32], num_ch: usize, sr: usize) -> f32 {
         let freq = fft_max_frequency_bin(self.fft_pass.fft.clone(), window, num_ch, sr);
         (freq * 2.0).round()
-    }
-
-    fn upsample(&self, buf: &[Pos2]) -> Vec<Pos2> {
-        let us_factor = self.upsample_factor;
-        let mut prev = buf.first().unwrap_or(&Pos2::ZERO);
-        buf.iter()
-            .flat_map(|pos| {
-                let dx = pos.x - prev.x;
-                let dy = pos.y - prev.y;
-                let ix = dx / us_factor;
-                let iy = dy / us_factor;
-
-                let (mut cx, mut cy) = (prev.x, prev.y);
-                let v = (0..us_factor as usize)
-                    .map(|_| {
-                        cx += ix;
-                        cy += iy;
-                        pos2(cx, cy)
-                    })
-                    .collect::<Vec<Pos2>>();
-                prev = pos;
-                v
-            })
-            .collect()
     }
 }
 
@@ -211,7 +223,7 @@ impl ActiveGenerator for PolarPatterns {}
 impl Generator for PolarPatterns {
     fn prepare(
         &mut self,
-        _f: &mut super::FilterBank,
+        _f: &mut FilterBank,
         pl: &crate::audio::audio_player::AudioPlayer,
         export_sample_idx: Option<usize>,
     ) {
@@ -266,8 +278,8 @@ impl Generator for PolarPatterns {
                 if !self.use_rotation {
                     slider_row(ui, "ANGLE", &mut self.angle, 0.0, 360.0, 0, false);
                 }
+                slider_row(ui, "SCALE", &mut self.scale, 0.1, 0.8, 2, false);
                 slider_row(ui, "DISTANCE", &mut self.camera_z, 1.0, 10.0, 1, false);
-                slider_row(ui, "SCALE", &mut self.scale, 0.1, 1.0, 2, false);
             }
 
             slider_row(
@@ -294,7 +306,7 @@ impl Generator for PolarPatterns {
             if open.advanced_mode && self.use_3d {
                 static_label(ui, "ADVANCED");
                 slider_row(ui, "SPEED", &mut self.rot_speed, 0.01, 1.0, 2, false);
-                slider_row(ui, "PITCH", &mut self.pitch, 0.0, 1.0, 2, false);
+                slider_row(ui, "PITCH", &mut self.pitch, -1.0, 1.0, 2, false);
             }
         }
     }
@@ -308,6 +320,6 @@ impl ParamAccess for PolarPatterns {
         &mut self.efx
     }
     fn filter_params(&mut self) -> Option<&mut super::FilterParams> {
-        None
+        self.filter_params.as_mut()
     }
 }
