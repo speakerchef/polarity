@@ -32,6 +32,8 @@ impl Labeled for PatternKind {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PolarPatterns {
+    pub filter_params: Option<FilterParams>,
+
     kind: PatternKind,
     fs_color: Rgba,
     efx: PostFx,
@@ -51,8 +53,6 @@ pub struct PolarPatterns {
     point_size_mod_src: ModSrc,
     point_size_rng: f32,
     point_size_mod_open: bool,
-
-    filter_params: Option<FilterParams>,
 
     #[serde(skip)]
     live_buffer: Vec<Pos2>,
@@ -107,7 +107,7 @@ impl Default for PolarPatterns {
             },
             filter_params: Some(FilterParams {
                 filter_mode: FilterMode::Lpf,
-                last_freq: 450.,
+                last_freq: 0.0,
                 filter_freq: 450.,
             }),
             point_size: 0.0015,
@@ -213,7 +213,7 @@ impl Generator for PolarPatterns {
         self.draw(pl, export_sample_idx);
     }
 
-    fn into_gen_callback_params(
+    fn get_gen_callback_params(
         &mut self,
         st: &crate::state::AppState,
         _live: bool,

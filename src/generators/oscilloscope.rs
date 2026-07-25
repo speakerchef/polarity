@@ -70,6 +70,8 @@ impl Labeled for DelayDivision {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Oscilloscope {
+    pub filter_params: Option<FilterParams>,
+
     kind: OscilloscopeKind,
     wave_dir: WaveformDir,
     waveform_window_sz: f32,
@@ -104,7 +106,6 @@ pub struct Oscilloscope {
     total_scale: f32,
     rot_freq: f32,
     pitch: f32,
-    filter_params: Option<FilterParams>,
     low_end_focus: bool,
     filter_bypass_threshold: f32,
 
@@ -157,7 +158,7 @@ impl Default for Oscilloscope {
             filter_params: {
                 Some(FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,
-                    last_freq: 1000.0,
+                    last_freq: 0.0,
                     filter_freq: 1000.0,
                 })
             },
@@ -434,7 +435,7 @@ impl Generator for Oscilloscope {
         self.draw(f, pl, export_sample_idx);
     }
 
-    fn into_gen_callback_params(
+    fn get_gen_callback_params(
         &mut self,
         st: &crate::state::AppState,
         _live: bool,
@@ -614,6 +615,7 @@ impl Generator for Oscilloscope {
                 );
                 let fp = self.filter_params.as_mut().expect("safe");
                 slider_row(ui, "LPF FREQ", &mut fp.filter_freq, 1.0, 1000.0, 0, false);
+                fp.filter_freq = fp.filter_freq.round();
             }
         }
     }

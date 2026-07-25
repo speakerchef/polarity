@@ -334,8 +334,6 @@ pub struct FluidRenderResources {
     pub render_bind_group: wgpu::BindGroup,
     pub compute_bind_group: wgpu::BindGroup,
     pub params_buffer: wgpu::Buffer,
-    pub debug_storage: wgpu::Buffer,
-    pub debug_staging: wgpu::Buffer,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -788,13 +786,15 @@ pub fn run_output_render_pipeline(
     let tex = res.tex.as_ref().unwrap();
     let tex_img_copy = tex.as_image_copy();
 
+    let row_bytes = tex.width() * 4;
+    let padded_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     command_encoder.copy_texture_to_buffer(
         tex_img_copy,
         wgpu::TexelCopyBufferInfo {
             buffer: &res.output_buffer,
             layout: wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(size_of::<u32>() as u32 * tex.width().next_multiple_of(256)),
+                bytes_per_row: Some(padded_bytes),
                 rows_per_image: Some(tex.height()),
             },
         },
@@ -866,9 +866,7 @@ async fn read_output_buffer(
         let stride = size_of::<u32>();
         let mut display_data: Vec<u8> = Vec::with_capacity(w * h * stride);
 
-        let padded_w = w.next_multiple_of(256);
-
-        let start = padded_w * stride;
+        let start = (w * stride).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize);
         for i in 0..h {
             let offset = start * i;
             display_data.extend(&data[offset..offset + w * stride]);

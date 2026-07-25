@@ -5,13 +5,13 @@ edition = "2024"
 
 [dependencies]
 rfd = "0.17.2"
-eframe = { version = "0.34.3" }
+eframe = { version = "0.35.0" }
 rodio = { version = "0.22.2", features = ["playback"] }
 env_logger = "0.11"
-wgpu = { version = "29.0.3", features = ["dx12", "metal"] }
+wgpu = { version = "29.0.4", features = ["dx12", "metal"] }
 biquad = "0.6.0"
 bytemuck = "1.25.0"
-egui-winit = "0.34.3"
+egui-winit = "0.35.0"
 flume = "0.12.0"
 pollster = "1.0.1"
 ffmpeg-sidecar = "2.5.2"

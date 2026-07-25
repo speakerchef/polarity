@@ -1,7 +1,7 @@
-use crate::generators::Envelope;
+use crate::generators::{Envelope, GenKind};
+use crate::state::*;
 use crate::traits::Labeled;
 use crate::ui::{control_panel_widgets::*, palette as plt};
-use crate::{GenKind, state::*};
 use eframe::egui::{self, vec2};
 
 fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
@@ -96,13 +96,13 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
         .exact_size(320.0)
         .resizable(false)
         .frame(egui::Frame::NONE.fill(plt::BG(ui.style().visuals.dark_mode)))
-        .show_inside(ui, |ui| {
+        .show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 egui::Panel::right("control_panel_inner")
                     .exact_size(ui.available_size().x)
                     .resizable(false)
                     .frame(egui::Frame::new().inner_margin(12.0))
-                    .show_inside(ui, |ui| {
+                    .show(ui, |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             ui.vertical_centered(|ui| {
                                 let gen_rect =

@@ -23,6 +23,20 @@ pub const SUBSTEP_DIV: f32 = 6.0;
 pub const MIN_SUBSTEP_DIV: f32 = 3.0;
 pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
 
+labeled_enum!(GenKind{
+    Stereometer=> "Stereometer",
+    Fluidwave => "Fluidwave",
+    Oscilloscope => "Oscilloscope",
+    PolarPatterns => "Polar Patterns",
+    Chladni => "Chladni",
+}, Chladni);
+
+impl Labeled for GenKind {
+    fn text(self) -> &'static str {
+        self.label()
+    }
+}
+
 labeled_enum!(ChromaType {
     Linear => "Linear",
     Radial => "Radial",

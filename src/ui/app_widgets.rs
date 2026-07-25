@@ -8,7 +8,7 @@ use crate::{
     state::{AppState, ExportQuality, Fps, Resolution},
     ui::{
         SHARP, canvas, control_panel,
-        control_panel_widgets::{dropdown_row, menu_bar_option, path_picker},
+        control_panel_widgets::{dropdown_row, menu_bar_option, path_picker, toggle_button_row},
         custom_text, get_text_size, palette as plt, timeline,
         timeline_widgets::border,
     },
@@ -143,7 +143,7 @@ pub fn main_window(
                 })
                 .fill(plt::BG(st.bool.dark_mode)),
         )
-        .show_inside(ui, |ui| {
+        .show(ui, |ui| {
             if !st.bool.fullscreen {
                 timeline::draw(ui, st, player);
                 control_panel::draw(ui, st);
@@ -311,6 +311,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 .rect_filled(resp.rect, SHARP, plt::BG(ui.visuals().dark_mode));
 
             const BUTTON_H: f32 = 30.0;
+            let mut bottom_rect = resp.rect;
             if !st.bool.rendering {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
                     ui.painter().rect_stroke(
@@ -350,17 +351,23 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.bool.show_export_fps,
                         false,
                     );
-                    let path_rect = dropdown_row(
+                    dropdown_row(
                         ui,
                         "Quality",
                         &mut st.export_config.quality,
                         ExportQuality::ALL,
                         &mut st.bool.show_export_quality,
                         false,
+                    );
+                    let path_rect = toggle_button_row(
+                        ui,
+                        "Hardware Encoding (If Available)",
+                        &mut st.export_config.use_hw_encoder,
+                        false,
                     )
                     .rect;
 
-                    path_picker(
+                    bottom_rect = path_picker(
                         ui,
                         st.export_path.as_ref(),
                         path_rect.left_bottom(),
@@ -368,12 +375,12 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         "Export Location:",
                         &mut st.bool.open_export_path_picker,
                         true,
-                    );
+                    ).rect;
                 });
 
                 modal_button(
                     ui,
-                    resp.rect.left_bottom() - vec2(0.0, BUTTON_H),
+                    resp.rect.left_top() - vec2(0.0, BUTTON_H),
                     vec2(resp.rect.width() / 2.0, 30.0),
                     "CANCEL",
                     plt::font_size::BODY,
@@ -383,7 +390,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 );
                 modal_button(
                     ui,
-                    resp.rect.right_bottom() - vec2(resp.rect.width() / 2.0, BUTTON_H),
+                    resp.rect.right_top() - vec2(resp.rect.width() / 2.0, BUTTON_H),
                     vec2(resp.rect.width() / 2.0, 30.0),
                     "EXPORT",
                     plt::font_size::BODY,
@@ -395,6 +402,10 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_export_modal = false;
                 }
+                if ui.ctx().input(|i| i.key_pressed(Key::Enter)) {
+                    st.bool.start_render = true;
+                }
+
             } else {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(resp.rect), |ui| {
                     let uirect = ui.available_rect_before_wrap();
@@ -574,6 +585,9 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_preset_save_modal = false;
                 }
+                if ui.ctx().input(|i| i.key_pressed(Key::Enter)) {
+                    st.bool.save_preset = true;
+                }
             } else {
                 ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
                     let path_rect = ui
@@ -692,6 +706,9 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                 );
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_preset_load_modal = false;
+                }
+                if ui.ctx().input(|i| i.key_pressed(Key::Enter)) {
+                    st.bool.load_preset = true;
                 }
             }
         });

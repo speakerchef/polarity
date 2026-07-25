@@ -16,7 +16,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
         .exact_size(104.0)
         .resizable(false)
         .frame(egui::Frame::NONE.fill(plt::BG(ui.style().visuals.dark_mode)))
-        .show_inside(ui, |ui| {
+        .show(ui, |ui| {
             const H: f32 = 28.0;
             let bg = ui.painter().add(egui::Shape::Noop);
             let inner_rect = ui

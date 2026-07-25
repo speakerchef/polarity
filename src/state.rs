@@ -2,7 +2,7 @@
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
-        ChromaType, EnvelopeBank, FilterBank, chladni::Chladni, fluidwave::ModSrc,
+        ChromaType, EnvelopeBank, FilterBank, GenKind, chladni::Chladni, fluidwave::ModSrc,
         oscilloscope::Oscilloscope, polar_patterns::PolarPatterns, rendering::EffectsCallback,
         stereometer::FilterMode,
     },
@@ -23,7 +23,7 @@ use eframe::{
 };
 
 use crate::{
-    GenKind, Preset,
+    Preset,
     generators::{
         fluidwave::Fluidwave,
         rendering::{
@@ -131,6 +131,7 @@ pub struct ExportConfig {
     pub resolution: Resolution,
     pub frame_rate: Fps,
     pub quality: ExportQuality,
+    pub use_hw_encoder: bool,
     pub total_frames: usize,
 }
 #[derive(Default)]
@@ -340,11 +341,11 @@ impl AppState {
         let mut polar_pat = std::mem::take(&mut self.polar_pat);
         let mut chladni = std::mem::take(&mut self.chladni);
         let ret = match self.gen_kind {
-            GenKind::Stereometer => stereo.into_gen_callback_params(self, live, fps),
-            GenKind::Fluidwave => fwave.into_gen_callback_params(self, live, fps),
-            GenKind::Oscilloscope => osci.into_gen_callback_params(self, live, fps),
-            GenKind::PolarPatterns => polar_pat.into_gen_callback_params(self, live, fps),
-            GenKind::Chladni => chladni.into_gen_callback_params(self, live, fps),
+            GenKind::Stereometer => stereo.get_gen_callback_params(self, live, fps),
+            GenKind::Fluidwave => fwave.get_gen_callback_params(self, live, fps),
+            GenKind::Oscilloscope => osci.get_gen_callback_params(self, live, fps),
+            GenKind::PolarPatterns => polar_pat.get_gen_callback_params(self, live, fps),
+            GenKind::Chladni => chladni.get_gen_callback_params(self, live, fps),
         };
         self.stereo = stereo;
         self.fwave = fwave;

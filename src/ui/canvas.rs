@@ -6,7 +6,6 @@ use eframe::egui::{self, Pos2, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
-use crate::GenKind;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::traits::Generator;
@@ -26,7 +25,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
                 .inner_margin(0.0)
                 .outer_margin(0.0),
         )
-        .show_inside(ui, |ui| {
+        .show(ui, |ui| {
             if ui.ctx().input(
                 |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
             ) || !st.bool.fullscreen

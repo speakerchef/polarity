@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    Preset,
+    HardwareEncoder, Preset,
     audio::audio_player::*,
     generators::{
         Envelope,
@@ -36,8 +36,6 @@ pub struct PolarityApp {
 
 const BATCH_SIZE: usize = 30;
 
-const DEBUG: bool = true;
-
 impl eframe::App for PolarityApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if !self.st.bool.fullscreen {
@@ -45,7 +43,7 @@ impl eframe::App for PolarityApp {
         }
         main_window(ui, &mut self.st, self.player.as_ref(), frame);
     }
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.bool.dark_mode);
 
         self.handle_audio_import();
@@ -90,13 +88,10 @@ impl PolarityApp {
     fn spawn_audio_player(&mut self, path: PathBuf, paused: bool, clear_envelopes: bool) {
         // Clear old stuff
         let st = &mut self.st;
+
         self.player.take();
         st.stereo.clear_live_buffers();
         st.stereo.clear_trace_buffers();
-        st.filterbank.live_fs_filters.take();
-        st.filterbank.trace_fs_filters.take();
-        st.filterbank.live_mb_filters.take();
-        st.filterbank.trace_mb_filters.take();
 
         let env = &mut st.env_bank;
         if clear_envelopes {
@@ -132,7 +127,6 @@ impl PolarityApp {
             player.toggle_playback();
         }
 
-        // Check if playback has ended
         if let Some(player) = &self.player
             && player.ended()
         {
@@ -142,7 +136,7 @@ impl PolarityApp {
     }
 
     fn handle_audio_import(&mut self) {
-        if DEBUG
+        if std::env::var("DEV").is_ok()
             && !self.st.bool.debug_file_loaded
             && let Ok(path) = std::env::var("DEBUG_AUDIO_FILE_PATH")
         {
@@ -346,6 +340,30 @@ fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32
     let (w, h) = (dim.0, dim.1);
     let quality = st.export_config.quality.value();
     let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
+
+    let mut hardware_encoder = None;
+    if let Ok(encoders) = std::process::Command::new("ffmpeg")
+        .args(["-hide_banner", "-encoders"])
+        .output()
+    {
+        for e in HardwareEncoder::ALL {
+            if let Ok(s) = str::from_utf8(&encoders.stdout)
+                && s.contains(e.label())
+            {
+                hardware_encoder = Some(e);
+            }
+        }
+    }
+
+    let encoder = if let Some(e) = hardware_encoder
+        && st.export_config.use_hw_encoder
+    {
+        e.label()
+    } else {
+        "libx264"
+    };
+
+    println!("{encoder}");
 
     let mut output = FfmpegCommand::new()
         .format("rawvideo")

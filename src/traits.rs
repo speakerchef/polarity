@@ -19,7 +19,7 @@ pub trait Generator {
         pl: &AudioPlayer,
         export_sample_idx: Option<usize>,
     );
-    fn into_gen_callback_params(&mut self, st: &AppState, live: bool, fps: usize) -> GenCbParams;
+    fn get_gen_callback_params(&mut self, st: &AppState, live: bool, fps: usize) -> GenCbParams;
     fn draw_render_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
     fn draw_filtering_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}

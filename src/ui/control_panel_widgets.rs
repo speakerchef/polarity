@@ -267,6 +267,7 @@ pub fn mod_button(
                     mod_src_menu_open,
                     false,
                 )
+                .1
                 .rect;
                 slider_row(ui, "RANGE", range, -100.0, 100.0, 0, false);
             })
@@ -475,7 +476,10 @@ pub fn dropdown_row<T: Labeled>(
     options: &[T],
     open: &mut bool,
     bottom_border: bool,
-) -> Response {
+) -> (
+    Response, /* dropdown row */
+    Response, /* dropdown options */
+) {
     const SEL_W: f32 = 150.0;
     const PAD: f32 = 12.0;
 
@@ -520,7 +524,7 @@ pub fn dropdown_row<T: Labeled>(
             *open = false;
         }
     });
-    return_resp.unwrap_or(inner_resp)
+    (inner_resp.clone(), return_resp.unwrap_or(inner_resp))
 }
 pub fn path_picker(
     ui: &mut egui::Ui,
@@ -530,18 +534,17 @@ pub fn path_picker(
     label: &str,
     open: &mut bool,
     bottom_border: bool,
-) {
+) -> Response {
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
     let mut inner_rect = egui::Rect::NOTHING;
 
-    let outer_rect = ui
-        .allocate_rect(
-            egui::Rect::from_min_size(top_left, vec2(w, plt::height::INNER)),
-            egui::Sense::focusable_noninteractive(),
-        )
-        .rect;
+    let outer_resp = ui.allocate_rect(
+        egui::Rect::from_min_size(top_left, vec2(w, plt::height::INNER)),
+        egui::Sense::focusable_noninteractive(),
+    );
+    let outer_rect = outer_resp.rect;
     ui.scope_builder(egui::UiBuilder::new().max_rect(outer_rect), |ui| {
         inner_rect = ui
             .allocate_ui_with_layout(
@@ -647,14 +650,20 @@ pub fn path_picker(
             *open = false;
         }
     });
+    outer_resp
 }
 
 /// Menu item with `On/Off` toggle button
-pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool, bottom_border: bool) {
+pub fn toggle_button_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut bool,
+    bottom_border: bool,
+) -> Response {
     const PAD: f32 = 12.0;
 
     let bg = ui.painter().add(egui::Shape::Noop);
-    let inner_rect = ui
+    let inner_resp = ui
         .allocate_ui_with_layout(
             vec2(ui.available_width(), plt::height::DROPDOWN_ITEM),
             egui::Layout::left_to_right(Align::Center),
@@ -665,8 +674,8 @@ pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool, botto
                 toggle_button(ui, value);
             },
         )
-        .response
-        .rect;
+        .response;
+    let inner_rect = inner_resp.rect;
     let bg_rect = egui::Shape::rect_filled(
         egui::Rect::from_min_size(
             inner_rect.left_top(),
@@ -677,6 +686,7 @@ pub fn toggle_button_row(ui: &mut egui::Ui, label: &str, value: &mut bool, botto
     );
     ui.painter().set(bg, bg_rect.clone());
     apply_side_border(ui, bg_rect.visual_bounding_rect(), bottom_border);
+    inner_resp
 }
 
 pub fn subheader_toggle_button(ui: &mut egui::Ui, root_rect: &egui::Rect, on: &mut bool) {

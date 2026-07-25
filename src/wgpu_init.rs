@@ -510,17 +510,6 @@ fn build_fluid_render_resources(
                 },
                 count: None,
             },
-            // Debug
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
-                },
-                count: None,
-            },
             // Densities
             wgpu::BindGroupLayoutEntry {
                 binding: 4,
@@ -653,18 +642,6 @@ fn build_fluid_render_resources(
             | wgpu::BufferUsages::UNIFORM,
         mapped_at_creation: false,
     });
-    let debug_storage = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("debug storage"),
-        size: 64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-    let debug_staging = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("debug staging"),
-        size: 64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
     let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("fluid render bg"),
         layout: &render_bgl,
@@ -700,10 +677,6 @@ fn build_fluid_render_resources(
                 resource: params_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
-                binding: 3,
-                resource: debug_storage.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
                 binding: 4,
                 resource: density_buffer.as_entire_binding(),
             },
@@ -723,8 +696,6 @@ fn build_fluid_render_resources(
         render_bind_group,
         compute_bind_group,
         params_buffer,
-        debug_storage,
-        debug_staging,
     }
 }
 

@@ -171,7 +171,7 @@ impl Generator for Stereometer {
         self.draw(f, pl, export_sample_idx);
     }
 
-    fn into_gen_callback_params(&mut self, st: &AppState, _live: bool, _fps: usize) -> GenCbParams {
+    fn get_gen_callback_params(&mut self, st: &AppState, _live: bool, _fps: usize) -> GenCbParams {
         const MAX_POINT_SIZE: f32 = 0.01;
         let s = self;
         let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
@@ -245,6 +245,7 @@ impl Generator for Stereometer {
                     fp.last_freq = f;
                 }
                 slider_row(ui, "FREQ", &mut fp.filter_freq, 1.0, 20000.0, 0, false);
+                fp.filter_freq = fp.filter_freq.round();
             }
         }
     }
@@ -366,7 +367,7 @@ impl Default for Stereometer {
             trace_density: TraceDensity::High,
             filter_params: Some(FilterParams {
                 filter_freq: 1.0,
-                last_freq: 1.0,
+                last_freq: 0.0,
                 filter_mode: FilterMode::Off,
             }),
             live_buffer: Default::default(),

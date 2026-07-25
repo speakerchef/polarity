@@ -1,5 +1,5 @@
 #![warn(clippy::all, rust_2018_idioms)]
-
+#![allow(dead_code)]
 mod app;
 mod audio;
 mod generators;
@@ -8,9 +8,8 @@ mod traits;
 mod ui;
 mod wgpu_init;
 
-use crate::{
-    generators::{chladni::Chladni, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns},
-    traits::Labeled,
+use crate::generators::{
+    chladni::Chladni, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
 };
 pub use app::PolarityApp;
 
@@ -32,6 +31,14 @@ macro_rules! labeled_enum {
         }
     };
 }
+
+labeled_enum!(HardwareEncoder {
+   VideoToolbox =>  "h264_videotoolbox",
+   Nvenc =>  "h264_nvenc",
+   Amf =>  "h264_amf",
+   Qsv =>  "h264_qsv",
+   Vaapi =>  "h264_vaapi",
+}, VideoToolbox);
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Preset {
@@ -82,20 +89,6 @@ impl LinearRgba {
 
         let (r, g, b, a) = (self.r * max, self.g * max, self.b * max, self.a * max);
         (r as u8, g as u8, b as u8, a as u8)
-    }
-}
-
-labeled_enum!(GenKind{
-    Stereometer=> "Stereometer",
-    Fluidwave => "Fluidwave",
-    Oscilloscope => "Oscilloscope",
-    PolarPatterns => "Polar Patterns",
-    Chladni => "Chladni",
-}, Chladni);
-
-impl Labeled for GenKind {
-    fn text(self) -> &'static str {
-        self.label()
     }
 }
 

@@ -17,6 +17,8 @@ use crate::{
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Chladni {
+    pub filter_params: Option<FilterParams>,
+
     fs_color: Rgba,
     efx: PostFx,
 
@@ -29,14 +31,14 @@ pub struct Chladni {
     boundary_range: f32,
     boundary_mod_open: bool,
 
+    max_mode: f32,
+
     point_size: f32,
     point_size_mod_src: ModSrc,
     point_size_rng: f32,
     point_size_mod_open: bool,
 
     fft_window: FftWindow,
-
-    filter_params: Option<FilterParams>,
 
     #[serde(skip)]
     live_buffer: Vec<Pos2>,
@@ -67,6 +69,8 @@ impl Default for Chladni {
             boundary_range: 100.0,
             boundary_mod_open: false,
 
+            max_mode: 8.0,
+
             line_thickness: 0.05,
             line_thick_mod_src: ModSrc::EnvA,
             line_thick_range: 15.0,
@@ -82,7 +86,7 @@ impl Default for Chladni {
 
             filter_params: Some(FilterParams {
                 filter_mode: FilterMode::Hpf,
-                last_freq: 100.0,
+                last_freq: 0.0,
                 filter_freq: 100.0,
             }),
         }
@@ -163,55 +167,40 @@ impl Chladni {
     }
 
     fn frequency_to_chladni_mode(&self, f: f32) -> (f32, f32) {
-        let index = self.frequency_to_mode_index(f);
-        const MODES: [(f32, f32); 28] = [
-            (1.0, 2.0),
-            (1.0, 3.0),
-            (2.0, 3.0),
-            (1.0, 4.0),
-            (2.0, 4.0),
-            (3.0, 4.0),
-            (1.0, 5.0),
-            (2.0, 5.0),
-            (3.0, 5.0),
-            (4.0, 5.0),
-            (1.0, 6.0),
-            (2.0, 6.0),
-            (3.0, 6.0),
-            (4.0, 6.0),
-            (5.0, 6.0),
-            (1.0, 7.0),
-            (2.0, 7.0),
-            (3.0, 7.0),
-            (4.0, 7.0),
-            (5.0, 7.0),
-            (6.0, 7.0),
-            (1.0, 8.0),
-            (2.0, 8.0),
-            (3.0, 8.0),
-            (4.0, 8.0),
-            (5.0, 8.0),
-            (6.0, 8.0),
-            (7.0, 8.0),
-        ];
+        let modes = self.generate_chladni_modes();
+        let index = self.frequency_to_mode_index(f, modes.len() as f32 - 1.0);
 
-        MODES[index]
+        modes[index]
+    }
+    fn generate_chladni_modes(&self) -> Vec<(f32, f32)> {
+        let max = self.max_mode;
+        let mut n = 1.0;
+        let mut m = 2.0;
+        let mut out = Vec::new();
+        while m <= max {
+            while n < m {
+                out.push((n, m));
+                n += 1.0;
+            }
+            n = 1.0;
+            m += 1.0;
+        }
+        out
     }
 
     fn chladni(&self, x: f32, y: f32, m: f32, n: f32) -> f32 {
         (m * PI * x).cos() * (n * PI * y).cos() - (n * PI * x).cos() * (m * PI * y).cos()
     }
 
-    fn frequency_to_mode_index(&self, f: f32) -> usize {
+    fn frequency_to_mode_index(&self, f: f32, max_idx: f32) -> usize {
         if f <= 0.0 {
             return 0;
         }
         const MIN_F: f32 = 50.0;
         const MAX_F: f32 = 20_000.0;
-        const MAX_IDX: f32 = 27.0;
 
         let norm = (f / MIN_F).ln() / (MAX_F / MIN_F).ln();
-        (norm * MAX_IDX).floor() as usize
+        (norm * max_idx).floor() as usize
     }
 }
 
@@ -227,7 +216,7 @@ impl Generator for Chladni {
         self.draw(f, env, pl, export_sample_idx);
     }
 
-    fn into_gen_callback_params(
+    fn get_gen_callback_params(
         &mut self,
         st: &crate::state::AppState,
         _live: bool,
@@ -253,6 +242,7 @@ impl Generator for Chladni {
         let fp = self.filter_params.as_mut().expect("safe");
         if open.filtering_open {
             slider_row(ui, "FREQ", &mut fp.filter_freq, 1.0, 1000.0, 0, false);
+            fp.filter_freq = fp.filter_freq.round();
         }
     }
 
@@ -268,6 +258,8 @@ impl Generator for Chladni {
     fn draw_visual_menu(&mut self, ui: &mut eframe::egui::Ui, open: &mut crate::state::BoolStates) {
         section_header_submenu(ui, "VISUAL", &mut open.visual_open);
         if open.visual_open {
+            slider_row(ui, "MAX MODE", &mut self.max_mode, 2.0, 10.0, 0, false);
+            self.max_mode = self.max_mode.round();
             mod_slider_row(
                 ui,
                 "LINE WIDTH",

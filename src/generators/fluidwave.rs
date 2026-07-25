@@ -155,7 +155,7 @@ impl Generator for Fluidwave {
         _export_sample_idx: Option<usize>,
     ) {
     }
-    fn into_gen_callback_params(
+    fn get_gen_callback_params(
         &mut self,
         st: &AppState,
         live: bool,
