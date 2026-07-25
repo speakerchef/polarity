@@ -85,10 +85,10 @@ impl Default for PolarPatterns {
             use_rotation: true,
             angle: 0.0,
             camera_z: 10.0,
-            pitch: 0.2,
+            pitch: 0.3,
             rot_speed: 0.2,
             scale: 0.8,
-            upsample_factor: 8.0,
+            upsample_factor: 4.0,
 
             fft_window: FftWindow::W8192,
 
@@ -131,7 +131,7 @@ impl PolarPatterns {
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
 
-        let n = window.len();
+        let n = window.len() / num_ch;
         let polar_speed = self.get_polar_speed(window, num_ch, sr);
         let gap = sr / 32;
         let buf = (0..n)
@@ -271,7 +271,7 @@ impl Generator for PolarPatterns {
                 "UPSAMPLE",
                 &mut self.upsample_factor,
                 1.0,
-                32.0,
+                10.0,
                 0,
                 false,
             );

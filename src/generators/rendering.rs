@@ -308,8 +308,10 @@ fn prepare_output_resources(
     device: &wgpu::Device,
     tex_size: (u32, u32),
 ) -> wgpu::TextureView {
+    let out_res = res.get_mut::<OutputResources>().unwrap();
     let output_view = get_texture_view(
-        res.get_mut::<OutputResources>().unwrap(),
+        &mut out_res.tex,
+        out_res.target_format,
         device,
         tex_size,
         true,
@@ -480,25 +482,22 @@ pub fn run_source_render_pipeline(
     dim: (u32, u32),
 ) {
     params.prepare_resources(res, queue, command_encoder);
-    let src_view = get_texture_view(
-        res.get_mut::<SrcRenderResources>().unwrap(),
-        device,
-        dim,
-        true,
-    );
+    let src_res = res.get_mut::<SrcRenderResources>().unwrap();
+    let src_view = get_texture_view(&mut src_res.tex, src_res.target_format, device, dim, true);
     params.paint(res, command_encoder, src_view);
 }
 
-fn get_texture_view<T: Textured>(
-    res: &mut T,
+fn get_texture_view(
+    tex: &mut Option<wgpu::Texture>,
+    target_format: wgpu::TextureFormat,
     device: &wgpu::Device,
     dim: (u32, u32),
     update_or_create: bool,
 ) -> wgpu::TextureView {
     if update_or_create {
         let (w, h) = (dim.0, dim.1);
-        let resized = res
-            .texture()
+        let resized = tex
+            .as_ref()
             .map(|t| t.width() != w || t.height() != h)
             .unwrap_or(true);
         if resized {
@@ -513,17 +512,17 @@ fn get_texture_view<T: Textured>(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: res.target_format(),
+                format: target_format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::COPY_DST
                     | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
-            res.set_texture(main_tex);
+            *tex = Some(main_tex);
         }
     }
-    res.texture()
+    tex.as_ref()
         .unwrap()
         .create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2),
@@ -571,10 +570,13 @@ pub struct EffectsRenderResources {
     pub main_pipeline: wgpu::RenderPipeline,
     pub chroma_pipeline: wgpu::RenderPipeline,
     pub chroma_tex: Option<wgpu::Texture>,
+    pub bloom_horizontal_pipeline: wgpu::RenderPipeline,
+    pub bloom_horizontal_tex: Option<wgpu::Texture>,
     pub target_format: wgpu::TextureFormat,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
-    pub chroma_bind_group: Option<wgpu::BindGroup>,
+    pub chroma_bg: Option<wgpu::BindGroup>,
+    pub bloom_horizontal_bg: Option<wgpu::BindGroup>,
     pub main_bind_group: Option<wgpu::BindGroup>,
     pub params_buffer: wgpu::Buffer,
 }
@@ -657,14 +659,21 @@ pub fn run_effects_render_pipeline(
     let tex_size = (src_tex.width(), src_tex.height());
 
     // apply chromatic aberration first so all other postfx is applied to it
-    let chroma_view =
-        render_chromatic_aberration(res, device, queue, command_encoder, data, tex_size);
+    let target_view = {
+        let chroma_view =
+            render_chromatic_aberration(res, device, queue, command_encoder, data, tex_size);
+        if data.use_bloom {
+            render_horizontal_bloom(res, device, queue, command_encoder, data, tex_size)
+        } else {
+            chroma_view
+        }
+    };
 
     let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
     let main_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("main efx bind group"),
         layout: &efx_res.bind_group_layout,
-        entries: &create_bg_entries(&chroma_view, &efx_res.sampler, &efx_res.params_buffer),
+        entries: &create_bg_entries(&target_view, &efx_res.sampler, &efx_res.params_buffer),
     });
     efx_res.main_bind_group = Some(main_bind_group);
     let output_view = prepare_output_resources(res, device, tex_size);
@@ -695,8 +704,10 @@ fn render_chromatic_aberration(
     data: &EffectsCallback,
     tex_size: (u32, u32),
 ) -> wgpu::TextureView {
+    let src_res = res.get_mut::<SrcRenderResources>().unwrap();
     let src_view = get_texture_view(
-        res.get_mut::<SrcRenderResources>().unwrap(),
+        &mut src_res.tex,
+        src_res.target_format,
         device,
         tex_size,
         false,
@@ -708,10 +719,16 @@ fn render_chromatic_aberration(
         layout: &efx_res.bind_group_layout,
         entries: &create_bg_entries(&src_view, &efx_res.sampler, &efx_res.params_buffer),
     });
-    efx_res.chroma_bind_group = Some(chroma_bind_group);
+    efx_res.chroma_bg = Some(chroma_bind_group);
     efx_res.prepare(device, queue, data);
 
-    let chroma_view = get_texture_view(efx_res, device, tex_size, true);
+    let chroma_view = get_texture_view(
+        &mut efx_res.chroma_tex,
+        efx_res.target_format,
+        device,
+        tex_size,
+        true,
+    );
     let mut chroma_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("chroma pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -726,10 +743,61 @@ fn render_chromatic_aberration(
         ..Default::default()
     });
     chroma_pass.set_pipeline(&efx_res.chroma_pipeline);
-    chroma_pass.set_bind_group(0, &efx_res.chroma_bind_group, &[]);
+    chroma_pass.set_bind_group(0, &efx_res.chroma_bg, &[]);
     chroma_pass.draw(0..6, 0..1);
     drop(chroma_pass);
     chroma_view
+}
+fn render_horizontal_bloom(
+    res: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    command_encoder: &mut wgpu::CommandEncoder,
+    data: &EffectsCallback,
+    tex_size: (u32, u32),
+) -> wgpu::TextureView {
+    let efx_res = res.get_mut::<EffectsRenderResources>().unwrap();
+    let src_view = get_texture_view(
+        &mut efx_res.chroma_tex,
+        efx_res.target_format,
+        device,
+        tex_size,
+        false,
+    );
+
+    let bloom_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("bloom horizontal bind group"),
+        layout: &efx_res.bind_group_layout,
+        entries: &create_bg_entries(&src_view, &efx_res.sampler, &efx_res.params_buffer),
+    });
+    efx_res.bloom_horizontal_bg = Some(bloom_bg);
+    efx_res.prepare(device, queue, data);
+
+    let bloom_view = get_texture_view(
+        &mut efx_res.bloom_horizontal_tex,
+        efx_res.target_format,
+        device,
+        tex_size,
+        true,
+    );
+    let mut bloom_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("bloom horizontal pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &bloom_view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(CANVAS_BG),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        ..Default::default()
+    });
+    bloom_pass.set_pipeline(&efx_res.bloom_horizontal_pipeline);
+    bloom_pass.set_bind_group(0, &efx_res.bloom_horizontal_bg, &[]);
+    bloom_pass.draw(0..6, 0..1);
+    drop(bloom_pass);
+    bloom_view
 }
 
 fn create_bg_entries<'a>(
@@ -877,8 +945,10 @@ async fn read_output_buffer(
 
 pub fn get_gpu_frame(device: &wgpu::Device, res: &OutputResources) -> Vec<u8> {
     let tex = res.tex.as_ref().unwrap();
+    let mapped_size = ((tex.width() * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+        * tex.height()) as u64;
     let fut = read_output_buffer(
-        res.output_buffer.slice(..),
+        res.output_buffer.slice(..mapped_size),
         device,
         vec2(tex.width() as f32, tex.height() as f32),
     );

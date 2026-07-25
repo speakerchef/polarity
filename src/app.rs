@@ -199,11 +199,12 @@ impl PolarityApp {
 
     fn save_preset(&mut self) {
         let Ok(data) = serde_json::to_vec(&Preset {
+            gen_kind: self.st.gen_kind,
             stereometer: self.st.stereo.clone(),
             fluidwave: self.st.fwave.clone(),
             oscilloscope: self.st.osci.clone(),
             polar_patterns: self.st.polar_pat.clone(),
-            chladni: self.st.chladni.clone(),
+            cymatics: self.st.cymatics.clone(),
         }) else {
             return;
         };
@@ -222,11 +223,12 @@ impl PolarityApp {
         let p: Preset = serde_json::from_str(&fstr)
             .inspect_err(|e| println!("error parsing preset: {e}"))
             .unwrap_or_default();
+        self.st.gen_kind = p.gen_kind;
         self.st.stereo = p.stereometer;
         self.st.fwave = p.fluidwave;
         self.st.osci = p.oscilloscope;
         self.st.polar_pat = p.polar_patterns;
-        self.st.chladni = p.chladni;
+        self.st.cymatics = p.cymatics;
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
@@ -446,22 +448,7 @@ fn export_batched_frames(
     }
 }
 
-#[allow(dead_code)]
+#[allow(unused)]
 fn debug_window(ui: &mut egui::Ui, st: &mut AppState) {
-    egui::Window::new("Debug").show(ui.ctx(), |ui| {
-        ui.add(egui::Slider::new(&mut st.fwave.gravity, -100.0..=100.0).text("gravity"));
-        ui.add(egui::Slider::new(&mut st.fwave.pressure_multiplier, 0.0..=400.0).text("pressure"));
-        ui.add(
-            egui::Slider::new(&mut st.fwave.target_density, 0.0..=6000.0).text("target density"),
-        );
-        ui.add(egui::Slider::new(&mut st.fwave.smoothing_radius, 0.01..=1.0).text("radius"));
-        ui.add(
-            egui::Slider::new(&mut st.fwave.near_pressure_multiplier, 0.00..=10.0)
-                .text("near pressure multiplier"),
-        );
-        ui.add(
-            egui::Slider::new(&mut st.fwave.viscosity_amount, 0.00..=0.05)
-                .text("viscosity_strength"),
-        );
-    });
+    egui::Window::new("Debug").show(ui.ctx(), |ui| {});
 }

@@ -9,7 +9,7 @@ mod ui;
 mod wgpu_init;
 
 use crate::generators::{
-    chladni::Chladni, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
+    GenKind, cymatic_field::CymaticField, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
 };
 pub use app::PolarityApp;
 
@@ -42,11 +42,12 @@ labeled_enum!(HardwareEncoder {
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Preset {
+    pub gen_kind: GenKind,
     pub stereometer: Stereometer,
     pub fluidwave: Fluidwave,
     pub oscilloscope: Oscilloscope,
     pub polar_patterns: PolarPatterns,
-    pub chladni: Chladni,
+    pub cymatics: CymaticField,
 }
 
 #[derive(Default, Clone, Copy)]

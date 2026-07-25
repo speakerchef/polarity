@@ -11,7 +11,7 @@ use crate::{
     traits::Labeled,
 };
 
-pub mod chladni;
+pub mod cymatic_field;
 pub mod fluidwave;
 pub mod oscilloscope;
 pub mod polar_patterns;
@@ -26,10 +26,10 @@ pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
 labeled_enum!(GenKind{
     Stereometer=> "Stereometer",
     Fluidwave => "Fluidwave",
-    Oscilloscope => "Oscilloscope",
+    Oscilloscope => "Oscillations",
     PolarPatterns => "Polar Patterns",
-    Chladni => "Chladni",
-}, Chladni);
+    CymaticField => "Cymatic Field",
+}, CymaticField);
 
 impl Labeled for GenKind {
     fn text(self) -> &'static str {

@@ -69,7 +69,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
 
                     menu_bar_option(
                         ui,
-                        "presets",
+                        "scenes",
                         None,
                         FontId {
                             family: egui::FontFamily::Name("inter_medium".into()),

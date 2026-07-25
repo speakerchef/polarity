@@ -25,29 +25,57 @@ var<private> positions: array<vec2f, 6> = array(
     vec2f(-1, -1),
 );
 
+const RADIUS: i32 = 3;
+const BLOOM_WEIGHTS: array<f32, 7> = array<f32, 7>(
+    0.1096489736,
+    0.1407920690,
+    0.1635770468,
+    0.1719638213,
+    0.1635770468,
+    0.1407920690,
+    0.1096489736,
+);
+
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
     return vec4f(positions[idx], 0.0, 1.0);
 }
 
-fn bloom_sample(uv: vec2f, pixel_size: vec2f, radius: i32) -> vec3f {
+/* Separable bloom stages for performance boost */
+@fragment
+fn bloom_horizontal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let size = vec2f(textureDimensions(tex));
+    let uv = pos.xy / size;
+    let original = textureSample(tex, tex_sampler, uv);
+    let pixel_size = 1 / size;
+    var acc = vec4f(0.0);
+    var total = 0.0;
+
+    for (var x = -RADIUS; x <= RADIUS; x++) {
+        let dist = length(vec2f(f32(x), 0.0));
+        let w = BLOOM_WEIGHTS[x + RADIUS];
+        let offset = vec2f(f32(x), 0.0) * pixel_size;
+        acc += (textureSample(tex, tex_sampler, uv + offset) * w).rgba;
+        total += w;
+    }
+    return original + acc / total * (params.bloom_amt / 4);
+}
+
+fn bloom_vertical(uv: vec2f, pixel_size: vec2f) -> vec3f {
     var acc = vec3f(0.0);
     var total = 0.0;
 
     //  r * r = gaussian kernel
-    for (var x = -radius; x <= radius; x++) {
-        for (var y = -radius; y <= radius; y++) {
-            let dist = length(vec2f(f32(x), f32(y)));
-            let w = exp(-dist * dist * 0.05);
-            let offset = vec2f(f32(x), f32(y)) * pixel_size;
-            acc += (textureSample(tex, tex_sampler, uv + offset) * w).rgb;
-            total += w;
-        }
+    for (var y = -RADIUS; y <= RADIUS; y++) {
+        let dist = length(vec2f(0.0, f32(y)));
+        let w = BLOOM_WEIGHTS[y + RADIUS];
+        let offset = vec2f(0.0, f32(y)) * pixel_size;
+        acc += (textureSample(tex, tex_sampler, uv + offset) * w).rgb;
+        total += w;
     }
     return acc / total;
 }
 
-const RADIUS: i32 = 5;
 fn apply_vignette(uv: vec2f) -> f32 {
     const EDGE: f32 = 0.97;
     var diff_x = 0.0;
@@ -70,7 +98,6 @@ fn apply_vignette(uv: vec2f) -> f32 {
     return max(diff_x, diff_y);
 }
 
-const SAMPLES: f32 = 8.0;
 @fragment
 fn chromatic_aberration(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let size = vec2f(textureDimensions(tex));
@@ -116,8 +143,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4<f32> {
     let pixel_size = 1.0 / size;
 
     var color = textureSample(tex, tex_sampler, uv).rgb;
-    if params.use_bloom != 0 {
-        color += bloom_sample(uv, pixel_size, RADIUS) * params.bloom_amt;
+    if params.use_bloom != 0 && params.bloom_amt != 0.0 {
+        color += bloom_vertical(uv, pixel_size) * (params.bloom_amt / 4.0);
     }
 
     var vignette_diff = 0.0;

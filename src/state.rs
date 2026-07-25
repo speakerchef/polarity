@@ -2,9 +2,9 @@
 use crate::{
     audio::{StereoFilter, audio_player::AudioPlayer},
     generators::{
-        ChromaType, EnvelopeBank, FilterBank, GenKind, chladni::Chladni, fluidwave::ModSrc,
-        oscilloscope::Oscilloscope, polar_patterns::PolarPatterns, rendering::EffectsCallback,
-        stereometer::FilterMode,
+        ChromaType, EnvelopeBank, FilterBank, GenKind, cymatic_field::CymaticField,
+        fluidwave::ModSrc, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
+        rendering::EffectsCallback, stereometer::FilterMode,
     },
     traits::{ActiveGenerator, Generator, Labeled},
     ui::control_panel_widgets::{
@@ -210,7 +210,7 @@ pub struct AppState {
     pub fwave: Fluidwave,
     pub osci: Oscilloscope,
     pub polar_pat: PolarPatterns,
-    pub chladni: Chladni,
+    pub cymatics: CymaticField,
 
     pub stereometer_render_resources: Option<P2DRenderResources>,
     pub fluid_render_resources: Option<FluidRenderResources>,
@@ -246,7 +246,7 @@ impl AppState {
             GenKind::Fluidwave => &mut self.fwave,
             GenKind::Oscilloscope => &mut self.osci,
             GenKind::PolarPatterns => &mut self.polar_pat,
-            GenKind::Chladni => &mut self.chladni,
+            GenKind::CymaticField => &mut self.cymatics,
         }
     }
 
@@ -339,19 +339,19 @@ impl AppState {
         let mut fwave = std::mem::take(&mut self.fwave);
         let mut osci = std::mem::take(&mut self.osci);
         let mut polar_pat = std::mem::take(&mut self.polar_pat);
-        let mut chladni = std::mem::take(&mut self.chladni);
+        let mut cymatics = std::mem::take(&mut self.cymatics);
         let ret = match self.gen_kind {
             GenKind::Stereometer => stereo.get_gen_callback_params(self, live, fps),
             GenKind::Fluidwave => fwave.get_gen_callback_params(self, live, fps),
             GenKind::Oscilloscope => osci.get_gen_callback_params(self, live, fps),
             GenKind::PolarPatterns => polar_pat.get_gen_callback_params(self, live, fps),
-            GenKind::Chladni => chladni.get_gen_callback_params(self, live, fps),
+            GenKind::CymaticField => cymatics.get_gen_callback_params(self, live, fps),
         };
         self.stereo = stereo;
         self.fwave = fwave;
         self.osci = osci;
         self.polar_pat = polar_pat;
-        self.chladni = chladni;
+        self.cymatics = cymatics;
 
         ret
     }
@@ -463,12 +463,13 @@ impl Default for AppState {
     fn default() -> Self {
         let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
         let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
-        let (stereo, fwave, osci, polar_pat, chladni) = (
+        let (_gen_kind, stereo, fwave, osci, polar_pat, cymatics) = (
+            preset.gen_kind,
             preset.stereometer,
             preset.fluidwave,
             preset.oscilloscope,
             preset.polar_patterns,
-            preset.chladni,
+            preset.cymatics,
         );
         Self {
             gen_kind: GenKind::default(),
@@ -494,7 +495,7 @@ impl Default for AppState {
             fwave,
             osci,
             polar_pat,
-            chladni,
+            cymatics,
 
             window_drag_tooltip_modal_deadline: None,
             preset_save_path: None,

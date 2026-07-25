@@ -25,7 +25,7 @@ use crate::{
 labeled_enum!(OscilloscopeKind {
     Waveform => "Waveform",
     CircularWaveform => "Circular Waveform" ,
-    DelayPlot => "Delay Plot",
+    DelayPlot => "Galactic Orbit",
 }, Waveform);
 impl Labeled for OscilloscopeKind {
     fn text(self) -> &'static str {
@@ -77,10 +77,10 @@ pub struct Oscilloscope {
     waveform_window_sz: f32,
     delay_plot_density: f32,
     sample_rate: Option<usize>,
+    last_freq: f32,
+
     #[serde(skip)]
     lpf: Option<StereoFilter>,
-    #[serde(skip)]
-    last_freq: f32,
 
     fs_color: Rgba,
     efx: PostFx,
@@ -136,7 +136,7 @@ impl Default for Oscilloscope {
 
             use_rotation: true,
             angle: 100.0,
-            upsample_factor: 4.0,
+            upsample_factor: 2.0,
             camera_z: 10.0,
             total_scale: 0.6,
             rot_freq: 0.1,
@@ -148,13 +148,6 @@ impl Default for Oscilloscope {
                 b: 255.,
                 a: 255.0,
             },
-            //fire orange
-            // fs_color: Rgba {
-            //     r: 255.0,
-            //     g: 75.0,
-            //     b: 0.,
-            //     a: 255.0,
-            // },
             filter_params: {
                 Some(FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,
@@ -162,8 +155,8 @@ impl Default for Oscilloscope {
                     filter_freq: 1000.0,
                 })
             },
-            low_end_focus: true,
-            filter_bypass_threshold: 0.8,
+            low_end_focus: false,
+            filter_bypass_threshold: 0.5,
 
             efx: PostFx {
                 use_bloom: true,
@@ -519,30 +512,6 @@ impl Generator for Oscilloscope {
                 }
                 slider_row(ui, "DISTANCE", &mut self.camera_z, 1.0, 10.0, 1, false);
                 slider_row(ui, "SCALE", &mut self.total_scale, 0.1, 1.0, 2, false);
-
-                if let Some(sr) = self.sample_rate {
-                    toggle_button_row(ui, "DELAY DIVISIONS", &mut self.use_delay_division, false);
-                    if self.use_delay_division {
-                        dropdown_row(
-                            ui,
-                            "DELAY",
-                            &mut self.delay_division,
-                            DelayDivision::ALL,
-                            &mut self.delay_div_open,
-                            false,
-                        );
-                    } else {
-                        slider_row(
-                            ui,
-                            "DELAY",
-                            &mut self.delay_samples,
-                            1.,
-                            sr as f32 / 8.0,
-                            0,
-                            false,
-                        );
-                    }
-                }
             } else {
                 self.low_end_focus = false;
                 toggle_button_row(ui, "PHASE ALIGNED", &mut self.phase_aligned, false);
@@ -571,6 +540,17 @@ impl Generator for Oscilloscope {
                 );
             }
 
+            slider_row(
+                ui,
+                "UPSAMPLE",
+                &mut self.upsample_factor,
+                1.0,
+                10.0,
+                0,
+                false,
+            );
+            self.upsample_factor = self.upsample_factor.floor();
+
             mod_slider_row(
                 ui,
                 "POINT SIZE",
@@ -593,20 +573,34 @@ impl Generator for Oscilloscope {
                     }
                     slider_row(ui, "PITCH", &mut self.pitch, -1.0, 1.0, 2, false);
                 }
-                slider_row(
-                    ui,
-                    "UPSAMPLE",
-                    &mut self.upsample_factor,
-                    1.0,
-                    32.0,
-                    0,
-                    false,
-                );
-                self.upsample_factor = self.upsample_factor.floor();
+
+                if let Some(sr) = self.sample_rate {
+                    toggle_button_row(ui, "DELAY DIVISIONS", &mut self.use_delay_division, false);
+                    if self.use_delay_division {
+                        dropdown_row(
+                            ui,
+                            "DELAY",
+                            &mut self.delay_division,
+                            DelayDivision::ALL,
+                            &mut self.delay_div_open,
+                            false,
+                        );
+                    } else {
+                        slider_row(
+                            ui,
+                            "DELAY",
+                            &mut self.delay_samples,
+                            1.,
+                            sr as f32 / 8.0,
+                            0,
+                            false,
+                        );
+                    }
+                }
 
                 slider_row(
                     ui,
-                    "LPF THRESH",
+                    "LPF BYPASS AMT",
                     &mut self.filter_bypass_threshold,
                     0.0,
                     1.0,

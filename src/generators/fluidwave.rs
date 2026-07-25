@@ -95,38 +95,39 @@ impl Labeled for ModSrc {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Fluidwave {
-    pub color_mode: ColorMode,
-    pub color_invert: bool,
-    pub sim_speed: f32,
+    color_mode: ColorMode,
+    color_invert: bool,
+    sim_speed: f32,
 
-    pub luminance_mode: bool,
-    pub luminance_floor: f32,
-    pub luminance_mode_mod_open: bool,
-    pub luminance_floor_mod_src: ModSrc,
-    pub luminance_floor_rng: f32,
+    luminance_mode: bool,
+    luminance_floor: f32,
+    luminance_mode_mod_open: bool,
+    luminance_floor_mod_src: ModSrc,
+    luminance_floor_rng: f32,
 
-    pub color_arrangement: ColorArrangement,
-    pub energy_transfer_mode: EnergyTransferMode,
-    pub force_direction: ForceDirection,
-    pub gravity: f32,
-    pub envelope_pressure_link: bool,
-    pub pressure_multiplier: f32,
-    pub target_density: f32,
-    pub smoothing_radius: f32,
-    pub edge_damping_factor: f32,
-    pub near_pressure_multiplier: f32,
-    pub viscosity_amount: f32,
-    pub point_size: f32,
-    pub uniform_color: crate::Rgba,
-    pub env_range: f32,
-    pub efx: PostFx,
+    color_arrangement: ColorArrangement,
+    energy_transfer_mode: EnergyTransferMode,
+    force_direction: ForceDirection,
+    gravity: f32,
+    envelope_pressure_link: bool,
+    pressure_multiplier: f32,
+    target_density: f32,
+    smoothing_radius: f32,
+    edge_damping_factor: f32,
+    near_pressure_multiplier: f32,
+    viscosity_amount: f32,
+    point_size: f32,
+    uniform_color: crate::Rgba,
 
+    env_src: ModSrc,
+    env_range: f32,
+
+    efx: PostFx,
+
+    frame_time_accumulator: f32,
+    last_idx: usize,
     #[serde(skip, default = "instant_default")]
-    pub last_frame: Instant,
-    #[serde(skip)]
-    pub frame_time_accumulator: f32,
-    #[serde(skip)]
-    pub last_idx: usize,
+    last_frame: Instant,
 }
 
 impl ActiveGenerator for Fluidwave {}
@@ -194,7 +195,7 @@ impl Generator for Fluidwave {
             color_mode: f.color_mode,
             uniform_color: f.uniform_color,
             //fwave will use env A as its driver
-            particle_pos: env(ModSrc::EnvA, f.env_range),
+            particle_pos: env(f.env_src, f.env_range),
             frame_time_accumulator: f.frame_time_accumulator,
             gravity: f.gravity,
             pressure_multiplier,
@@ -293,6 +294,14 @@ impl Generator for Fluidwave {
     fn draw_visual_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {
         section_header_submenu(ui, "VISUAL", &mut open.visual_open);
         if open.visual_open {
+            dropdown_row(
+                ui,
+                "ENVELOPE SOURCE",
+                &mut self.env_src,
+                ModSrc::ALL,
+                &mut open.mod_src_open,
+                false,
+            );
             slider_row(ui, "SIM SPEED", &mut self.sim_speed, 1.0, 200.0, 1, false);
             slider_row(
                 ui,
@@ -374,10 +383,10 @@ impl Default for Fluidwave {
 
             luminance_floor: 5.0,
             luminance_mode_mod_open: false,
-            luminance_floor_mod_src: ModSrc::None,
-            luminance_floor_rng: 0.0,
+            luminance_floor_mod_src: ModSrc::EnvA,
+            luminance_floor_rng: 50.0,
 
-            color_arrangement: ColorArrangement::Grb,
+            color_arrangement: ColorArrangement::Rgb,
             uniform_color: crate::Rgba::new(255, 255, 255, 255),
             last_idx: 0,
             energy_transfer_mode: EnergyTransferMode::ForceField,
@@ -387,13 +396,16 @@ impl Default for Fluidwave {
             envelope_pressure_link: true,
             target_density: (NUM_PARTICLES as f32 * 78.57).round(),
             // smoothing_radius: 0.10,
-            smoothing_radius: 0.20,
-            edge_damping_factor: 0.75,
+            smoothing_radius: 0.15,
+            edge_damping_factor: 0.6,
             near_pressure_multiplier: 7.0,
-            viscosity_amount: 0.007,
+            viscosity_amount: 0.002,
             // point_size: 0.0045,
             point_size: 0.0020,
+
+            env_src: ModSrc::EnvA,
             env_range: 77.0,
+
             efx: PostFx {
                 bloom_mod_src: ModSrc::EnvC,
                 vignette_mod_src: ModSrc::EnvC,

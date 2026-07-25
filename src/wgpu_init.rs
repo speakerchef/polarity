@@ -245,6 +245,32 @@ fn build_efx_render_resources(
         multiview_mask: None,
         cache: None,
     });
+    let bloom_horizontal_pipeline =
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("horizontal_bloom_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: None,
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("bloom_horizontal"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu_render_state.target_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
     let main_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("main efx"),
         layout: Some(&pipeline_layout),
@@ -287,11 +313,14 @@ fn build_efx_render_resources(
     EffectsRenderResources {
         main_pipeline,
         chroma_pipeline,
+        bloom_horizontal_pipeline,
         chroma_tex: None,
+        bloom_horizontal_tex: None,
         target_format: wgpu_render_state.target_format,
         bind_group_layout,
         sampler,
-        chroma_bind_group: None,
+        chroma_bg: None,
+        bloom_horizontal_bg: None,
         main_bind_group: None,
         params_buffer,
     }

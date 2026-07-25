@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct Chladni {
+pub struct CymaticField {
     pub filter_params: Option<FilterParams>,
 
     fs_color: Rgba,
@@ -46,7 +46,7 @@ pub struct Chladni {
     fft_pass: FftPass,
 }
 
-impl Default for Chladni {
+impl Default for CymaticField {
     fn default() -> Self {
         Self {
             fs_color: Rgba::new(255, 100, 110, 255),
@@ -77,7 +77,7 @@ impl Default for Chladni {
             line_thick_mod_open: false,
 
             point_size: 0.0025,
-            fft_window: FftWindow::W8192,
+            fft_window: FftWindow::default(),
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,
@@ -93,7 +93,7 @@ impl Default for Chladni {
     }
 }
 
-impl Chladni {
+impl CymaticField {
     pub fn draw(
         &mut self,
         f: &mut FilterBank,
@@ -204,8 +204,8 @@ impl Chladni {
     }
 }
 
-impl ActiveGenerator for Chladni {}
-impl Generator for Chladni {
+impl ActiveGenerator for CymaticField {}
+impl Generator for CymaticField {
     fn prepare(
         &mut self,
         f: &mut super::FilterBank,
@@ -304,7 +304,7 @@ impl Generator for Chladni {
         }
     }
 }
-impl ParamAccess for Chladni {
+impl ParamAccess for CymaticField {
     fn post_fx(&self) -> PostFx {
         self.efx
     }
