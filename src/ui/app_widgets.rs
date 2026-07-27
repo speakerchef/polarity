@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    state::{AppState, ExportQuality, Fps, InputMode, Resolution},
+    state::{AppState, ExportQuality, Fps, InputMode, PixelFmt, Resolution},
     ui::{
         SHARP, canvas, control_panel,
         control_panel_widgets::{dropdown_row, menu_bar_option, path_picker, toggle_button_row},
@@ -370,6 +370,15 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                         &mut st.bool.show_export_quality,
                         false,
                     );
+                    dropdown_row(
+                        ui,
+                        &format!("Format {}", if st.export_config.pix_fmt == PixelFmt::Yuv444p {" (may not open everwhere)"} else {""}),
+                        &mut st.export_config.pix_fmt,
+                        PixelFmt::ALL,
+                        &mut st.bool.show_export_fmt,
+                        false,
+                    );
+                    toggle_button_row(ui, "Open File After Export", &mut st.export_config.open_after, false);
                     let path_rect = toggle_button_row(
                         ui,
                         "Hardware Encoding (If Available)",

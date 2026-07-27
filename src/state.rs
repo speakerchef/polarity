@@ -134,11 +134,33 @@ impl Labeled for ExportQuality {
     }
 }
 
+labeled_enum!(PixelFmt {
+    Yuv420p => "Most Compatible",
+    Yuv444p => "Best Fidelity"
+}, Yuv420p);
+
+impl PixelFmt {
+    pub fn as_ffmpeg_arg(&self) -> &str {
+        match self {
+            Self::Yuv420p => "yuv420p",
+            Self::Yuv444p => "yuv444p",
+        }
+    }
+}
+
+impl Labeled for PixelFmt {
+    fn text(&self) -> &str {
+        self.label()
+    }
+}
+
 #[derive(Default)]
 pub struct ExportConfig {
     pub resolution: Resolution,
     pub frame_rate: Fps,
     pub quality: ExportQuality,
+    pub pix_fmt: PixelFmt,
+    pub open_after: bool,
     pub use_hw_encoder: bool,
     pub total_frames: usize,
 }
@@ -209,6 +231,7 @@ pub struct BoolStates {
     pub show_export_resolution: bool,
     pub show_export_fps: bool,
     pub show_export_quality: bool,
+    pub show_export_fmt: bool,
     pub open_export_path_picker: bool,
     pub export_sample_idx: usize,
     pub show_export_modal: bool,

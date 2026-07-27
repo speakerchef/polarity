@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 mod app;
 mod audio;
+mod export_pipeline;
 mod generators;
 mod state;
 mod traits;
