@@ -169,12 +169,11 @@ pub fn open_macos_privacy_settings() {
     use objc2_foundation::{NSString, NSURL};
     use std::{ffi::CString, ptr::NonNull};
 
-    let str_url = CString::new(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_Appmanagement",
-    )
-    .unwrap();
-    let nsstr = NonNull::new(str_url.into_raw()).unwrap();
-    let audio_prefs_url =
-        unsafe { NSURL::URLWithString(&NSString::stringWithUTF8String(nsstr).unwrap()) }.unwrap();
-    NSWorkspace::sharedWorkspace().openURL(&audio_prefs_url);
+    let app_query =
+        CString::new("x-apple.systempreferences:com.apple.preference.security").unwrap();
+    let app_query = NonNull::new(app_query.into_raw()).unwrap();
+    let privacy_settings_url =
+        unsafe { NSURL::URLWithString(&NSString::stringWithUTF8String(app_query).unwrap()) }
+            .unwrap();
+    NSWorkspace::sharedWorkspace().openURL(&privacy_settings_url);
 }

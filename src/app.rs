@@ -56,9 +56,7 @@ impl eframe::App for PolarityApp {
         self.st.update_filters();
         self.st.update_envelopes();
         self.handle_preset_state();
-        if self.st.bool.export_enabled {
-            self.handle_file_export(ctx, frame);
-        }
+        self.handle_file_export(ctx, frame);
     }
 }
 
@@ -83,47 +81,7 @@ impl PolarityApp {
     }
 
     fn handle_live_audio_stream(&mut self) {
-        if self.st.new_live_input_device != self.st.live_input_device {
-            let Ok(mut avail_devices) = cpal::default_host().output_devices() else {
-                self.st.new_live_input_device = self.st.live_input_device.clone();
-                return;
-            };
-            let real_default_device = self.st.default_live_input_device.clone();
-            let new_device = self.st.new_live_input_device.clone();
-            let is_default = new_device == InputDevice(DEFAULT_DEVICE.to_string());
-
-            let new_device = {
-                let matched_dev = avail_devices.find(|dev| {
-                    dev.description().unwrap().to_string().as_str()
-                        == if is_default {
-                            &real_default_device.0
-                        } else {
-                            &new_device.0
-                        }
-                });
-                if let Some(dev) = matched_dev {
-                    if is_default {
-                        self.st.new_live_input_device = real_default_device.clone();
-                        if self.st.live_input_device == real_default_device {
-                            return;
-                        } else {
-                            None
-                        }
-                    } else {
-                        Some(dev)
-                    }
-                } else {
-                    self.st.new_live_input_device = self.st.live_input_device.clone();
-                    return;
-                }
-            };
-            self.st.live_input_device = self
-                .st
-                .live_input
-                .start_stream(1024, new_device)
-                .unwrap()
-                .into();
-        }
+        self.st.update_live_input_device();
         self.st.live_input.update_buffer();
     }
 
@@ -280,6 +238,9 @@ impl PolarityApp {
     }
 
     fn handle_file_export(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        if !self.st.bool.export_enabled {
+            return;
+        }
         if self.st.bool.open_export_path_picker {
             self.st.bool.open_export_path_picker = false;
             self.st.bool.show_export_modal = false;
@@ -307,9 +268,10 @@ impl PolarityApp {
 
             self.st.bool.start_render = false;
             self.st.bool.rendering = true;
-            let wgpu_render_state = frame
-                .wgpu_render_state()
-                .expect("error: wgpu unavailable on device");
+            let Some(wgpu_render_state) = frame.wgpu_render_state() else {
+                println!("error: wgpu not available on this device");
+                return;
+            };
 
             if let (Some(t), Some(start_point)) = (
                 self.st.export_elapsed_time.as_mut(),

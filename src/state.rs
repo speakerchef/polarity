@@ -16,7 +16,10 @@ use crate::{
     },
 };
 use biquad::*;
-use rodio::{DeviceTrait, cpal};
+use rodio::{
+    DeviceTrait,
+    cpal::{self, traits::HostTrait},
+};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -310,6 +313,49 @@ impl AppState {
         e.env_b.take();
         e.env_c.take();
         e.env_d.take();
+    }
+
+    pub fn update_live_input_device(&mut self) {
+        if self.new_live_input_device != self.live_input_device {
+            let Ok(mut avail_devices) = cpal::default_host().output_devices() else {
+                self.new_live_input_device = self.live_input_device.clone();
+                return;
+            };
+            let real_default_device = self.default_live_input_device.clone();
+            let new_device = self.new_live_input_device.clone();
+            let is_default = new_device == InputDevice(DEFAULT_DEVICE.to_string());
+
+            let new_device = {
+                let matched_dev = avail_devices.find(|dev| {
+                    dev.description().unwrap().to_string().as_str()
+                        == if is_default {
+                            &real_default_device.0
+                        } else {
+                            &new_device.0
+                        }
+                });
+                if let Some(dev) = matched_dev {
+                    if is_default {
+                        self.new_live_input_device = real_default_device.clone();
+                        if self.live_input_device == real_default_device {
+                            return;
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some(dev)
+                    }
+                } else {
+                    self.new_live_input_device = self.live_input_device.clone();
+                    return;
+                }
+            };
+            self.live_input_device = self
+                .live_input
+                .start_stream(1024, new_device)
+                .unwrap()
+                .into();
+        }
     }
 
     pub fn update_envelopes(&mut self) {

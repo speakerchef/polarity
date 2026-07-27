@@ -8,13 +8,13 @@ use eframe::egui::{self, Pos2, Rect, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
+use crate::AudioCapturePermission;
 use crate::audio::audio_inputs::LiveInput;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
 use crate::state::InputMode;
 use crate::traits::{AudioProperties, Generator};
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
-use crate::{AudioCapturePermission, open_macos_privacy_settings};
 use crate::{audio::audio_inputs::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
@@ -74,13 +74,16 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                             Align::Center,
                         );
 
-                    #[cfg(target_os = "macos")]
-                    modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
-                       &mut st.bool.open_macos_privacy_settings, false);
+                    #[cfg(target_os = "macos")]{
+                        use crate::open_macos_privacy_settings;
 
-                    if st.bool.open_macos_privacy_settings {
-                        open_macos_privacy_settings();
-                        st.bool.open_macos_privacy_settings = false;
+                        modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
+                            &mut st.bool.open_macos_privacy_settings, false);
+
+                        if st.bool.open_macos_privacy_settings {
+                            open_macos_privacy_settings();
+                            st.bool.open_macos_privacy_settings = false;
+                        }
                     }
                 });
 
