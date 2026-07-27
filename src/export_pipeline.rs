@@ -183,7 +183,7 @@ pub fn export_batched_frames(
             if st.export_config.open_after {
                 let (open_cmd, args) = cfg_select! {
                     target_os = "macos" => ("open", [""]),
-                    target_os = "windows" => ( "cmd" , ["start", ""]),
+                    target_os = "windows" => ( "cmd" , ["/C", "start", ""]),
                     target_os = "linux" => ( "xdg-open" , [""]),
                 };
 
