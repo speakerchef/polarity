@@ -5,10 +5,10 @@ use eframe::egui::{Pos2, pos2};
 use rustfft::{Fft, FftPlanner, num_complex::Complex};
 
 use crate::{
-    audio::{StereoFilter, audio_player::AudioPlayer},
+    audio::StereoFilter,
     generators::{fluidwave::ModSrc, stereometer::FilterMode},
     labeled_enum,
-    traits::Labeled,
+    traits::{AudioProperties, Labeled},
 };
 
 pub mod cymatic_field;
@@ -22,17 +22,19 @@ pub const TARGET_FPS: f32 = 30.0;
 pub const SUBSTEP_DIV: f32 = 6.0;
 pub const MIN_SUBSTEP_DIV: f32 = 3.0;
 pub const TARGET_DT: f32 = 1. / TARGET_FPS / SUBSTEP_DIV;
+const MAX_POINT_SIZE: f32 = 0.01;
+const MIN_POINT_SIZE: f32 = 0.0005;
 
 labeled_enum!(GenKind{
     Stereometer=> "Stereometer",
     Fluidwave => "Fluidwave",
     Oscilloscope => "Oscillations",
-    PolarPatterns => "Polar Patterns",
+    PolarPatterns => "Polar Motion",
     CymaticField => "Cymatic Field",
-}, CymaticField);
+}, Oscilloscope);
 
 impl Labeled for GenKind {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -50,7 +52,7 @@ impl ChromaType {
     }
 }
 impl Labeled for ChromaType {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -64,7 +66,7 @@ labeled_enum!(FftWindow {
 }, W4096);
 
 impl Labeled for FftWindow {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -125,7 +127,7 @@ pub struct EnvelopeBank {
 }
 
 impl EnvelopeBank {
-    pub fn run_follower(&mut self, p: &AudioPlayer, export_sample_idx: Option<usize>) {
+    pub fn run_follower(&mut self, i: &dyn AudioProperties, export_sample_idx: Option<usize>) {
         let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) = (
             &mut self.env_a,
             &mut self.env_b,
@@ -134,10 +136,10 @@ impl EnvelopeBank {
         ) else {
             return;
         };
-        env_a.run_differential_follower(p, export_sample_idx);
-        env_b.run_differential_follower(p, export_sample_idx);
-        env_c.run_differential_follower(p, export_sample_idx);
-        env_d.run_differential_follower(p, export_sample_idx);
+        env_a.run_differential_follower(i, export_sample_idx);
+        env_b.run_differential_follower(i, export_sample_idx);
+        env_c.run_differential_follower(i, export_sample_idx);
+        env_d.run_differential_follower(i, export_sample_idx);
     }
     pub fn envelope_value_from_mod_src(&self, src: ModSrc, range: f32) -> f32 {
         let (Some(a), Some(b), Some(c), Some(d)) =
@@ -250,24 +252,33 @@ impl Envelope {
     }
     pub fn run_differential_follower(
         &mut self,
-        pl: &AudioPlayer,
+        i: &dyn AudioProperties,
         export_sample_idx: Option<usize>,
     ) {
-        let num_ch = pl.contents.num_channels as usize;
-        let sample_rate = pl.contents.sample_rate as f32;
+        let num_ch = i.num_channels() as usize;
+        let sample_rate = i.sample_rate() as f32;
+        let s = i.audio_buffer();
 
+        const ENVELOPE_WINDOW: usize = 1024;
         let mut last_idx = self.last_idx;
-        let sample_idx = export_sample_idx.unwrap_or_else(|| {
-            (pl.position().as_secs_f64() * pl.contents.sample_rate as f64) as usize
+        let start_idx = export_sample_idx.unwrap_or_else(|| {
+            if i.is_live() {
+                (s.len() / num_ch).saturating_sub(ENVELOPE_WINDOW)
+            } else {
+                (i.position().as_secs_f32() * sample_rate) as usize
+            }
         });
-        if last_idx > sample_idx {
-            last_idx = sample_idx;
+        let end_idx = if i.is_live() {
+            s.len() / num_ch
+        } else {
+            start_idx
+        };
+        if last_idx > start_idx {
+            last_idx = start_idx;
         }
 
-        let window = &pl
-            .contents
-            .samples
-            .get(last_idx * num_ch..sample_idx * num_ch)
+        let window = s
+            .get(if i.is_live() { start_idx } else { last_idx } * num_ch..end_idx * num_ch)
             .unwrap_or_default();
 
         // DET params
@@ -290,13 +301,13 @@ impl Envelope {
         let fast = &mut self.fast_envelope;
         let slow = &mut self.slow_envelope;
         let mut frame_max = self.cur_envelope;
-        for frame in window.chunks_exact(2) {
-            let (l, r) = (frame.first().unwrap_or(&0.0), frame.last().unwrap_or(&0.0));
+        for frame in window.chunks_exact(i.num_channels() as usize) {
+            let (l, r) = (frame[0], *frame.last().unwrap_or(&0.0));
             let (l, r) = self
                 .hpf
                 .as_mut()
                 .expect("unreachable without filter")
-                .run(*l, *r);
+                .run(l, r);
             let abs = (l.abs() + r.abs()) / 2.0;
             *fast = *fast * fast_coeff + abs * (1.0 - fast_coeff);
             *slow = *slow * slow_coeff + abs * (1.0 - slow_coeff);
@@ -310,7 +321,7 @@ impl Envelope {
             };
         }
         self.cur_envelope = frame_max;
-        self.last_idx = sample_idx;
+        self.last_idx = start_idx;
     }
 }
 

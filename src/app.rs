@@ -3,6 +3,10 @@ use eframe::{
     egui_wgpu::{self, wgpu},
 };
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
+use rodio::{
+    DeviceTrait,
+    cpal::{self, traits::HostTrait},
+};
 use std::{
     io::Write,
     path::PathBuf,
@@ -11,7 +15,7 @@ use std::{
 
 use crate::{
     HardwareEncoder, Preset,
-    audio::audio_player::*,
+    audio::audio_inputs::*,
     generators::{
         Envelope,
         rendering::{
@@ -19,7 +23,8 @@ use crate::{
             run_output_render_pipeline, run_source_render_pipeline,
         },
     },
-    state::PlaybackMode,
+    get_audio_capture_permission,
+    state::{DEFAULT_DEVICE, InputDevice, InputMode, PlaybackMode},
     ui::app_widgets::{main_window, menu_bar},
     wgpu_init::setup_wgpu,
 };
@@ -31,7 +36,6 @@ use crate::{state::AppState, ui::theme};
 #[derive(Default)]
 pub struct PolarityApp {
     st: AppState,
-    player: Option<AudioPlayer>,
 }
 
 const BATCH_SIZE: usize = 30;
@@ -41,14 +45,16 @@ impl eframe::App for PolarityApp {
         if !self.st.bool.fullscreen {
             menu_bar(&mut self.st, ui);
         }
-        main_window(ui, &mut self.st, self.player.as_ref(), frame);
+        main_window(ui, &mut self.st, frame);
     }
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, self.st.bool.dark_mode);
 
+        self.handle_live_audio_stream();
         self.handle_audio_import();
         self.handle_playback(ctx);
-        self.st.update_filters(self.player.as_ref());
+        self.st.update_filters();
+        self.st.update_envelopes();
         self.handle_preset_state();
         if self.st.bool.export_enabled {
             self.handle_file_export(ctx, frame);
@@ -68,15 +74,62 @@ impl PolarityApp {
         ffmpeg_sidecar::download::auto_download()
             .unwrap_or_else(|_| st.bool.export_enabled = false);
 
-        Self {
-            st,
-            ..Default::default()
+        st.audio_capture_permission = get_audio_capture_permission();
+        st.live_input_device = st.live_input.start_stream(1024, None).unwrap().into();
+        st.new_live_input_device = st.live_input_device.clone();
+        st.default_live_input_device = st.live_input_device.clone();
+
+        Self { st }
+    }
+
+    fn handle_live_audio_stream(&mut self) {
+        if self.st.new_live_input_device != self.st.live_input_device {
+            let Ok(mut avail_devices) = cpal::default_host().output_devices() else {
+                self.st.new_live_input_device = self.st.live_input_device.clone();
+                return;
+            };
+            let real_default_device = self.st.default_live_input_device.clone();
+            let new_device = self.st.new_live_input_device.clone();
+            let is_default = new_device == InputDevice(DEFAULT_DEVICE.to_string());
+
+            let new_device = {
+                let matched_dev = avail_devices.find(|dev| {
+                    dev.description().unwrap().to_string().as_str()
+                        == if is_default {
+                            &real_default_device.0
+                        } else {
+                            &new_device.0
+                        }
+                });
+                if let Some(dev) = matched_dev {
+                    if is_default {
+                        self.st.new_live_input_device = real_default_device.clone();
+                        if self.st.live_input_device == real_default_device {
+                            return;
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some(dev)
+                    }
+                } else {
+                    self.st.new_live_input_device = self.st.live_input_device.clone();
+                    return;
+                }
+            };
+            self.st.live_input_device = self
+                .st
+                .live_input
+                .start_stream(1024, new_device)
+                .unwrap()
+                .into();
         }
+        self.st.live_input.update_buffer();
     }
 
     fn load_file(&mut self, path: PathBuf) {
         let (paused, clear_env) = (true, false);
-        if let Some(old_player) = &self.player {
+        if let Some(old_player) = &self.st.player {
             if *old_player.contents.path != path {
                 self.spawn_audio_player(path, paused, clear_env);
             }
@@ -89,21 +142,19 @@ impl PolarityApp {
         // Clear old stuff
         let st = &mut self.st;
 
-        self.player.take();
+        st.player.take();
         st.stereo.clear_live_buffers();
         st.stereo.clear_trace_buffers();
 
-        let env = &mut st.env_bank;
         if clear_envelopes {
-            env.env_a.take();
-            env.env_b.take();
-            env.env_c.take();
-            env.env_d.take();
+            st.clear_envelopes();
         }
-        self.player = AudioPlayer::new(path, paused)
+        st.player = AudioPlayer::new(path, paused)
             .inspect_err(|err| println!("error creating audio player: {}", err))
             .ok();
-        if let Some(p) = &self.player
+
+        let env = &mut st.env_bank;
+        if let Some(p) = &st.player
             && env.env_a.is_none()
         {
             env.env_a = Some(Envelope::new(1., 100., 0.0, p.contents.sample_rate));
@@ -114,29 +165,26 @@ impl PolarityApp {
     }
 
     fn handle_playback(&mut self, ctx: &egui::Context) {
-        // disable lazy refresh when audio loaded
-        if let Some(p) = &self.player
-            && !p.is_paused()
-        {
-            ctx.request_repaint_after_secs(Duration::from_millis(16).as_secs_f32());
+        let Some(player) = self.st.player.as_ref() else {
+            return;
+        };
+        if self.st.input_mode == InputMode::Live {
+            player.pause();
         }
 
-        if ctx.input(|i| i.key_pressed(Key::Space))
-            && let Some(player) = &mut self.player
-        {
+        if ctx.input(|i| i.key_pressed(Key::Space)) {
             player.toggle_playback();
         }
 
-        if let Some(player) = &self.player
-            && player.ended()
-        {
+        if player.ended() {
             let paused = matches!(self.st.playback_mode, PlaybackMode::Once);
             self.spawn_audio_player(player.contents.path.to_path_buf(), paused, false);
         }
     }
 
     fn handle_audio_import(&mut self) {
-        if std::env::var("DEV").is_ok()
+        if let Ok(dev) = std::env::var("DEV")
+            && dev == "true"
             && !self.st.bool.debug_file_loaded
             && let Ok(path) = std::env::var("DEBUG_AUDIO_FILE_PATH")
         {
@@ -150,7 +198,7 @@ impl PolarityApp {
             self.st.bool.import_open = false;
             self.st.bool.start_render = false;
             if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Audio", &["wav", "mp3", "ogg", "m4a"])
+                .add_filter("Audio", &["wav", "mp3", "ogg", "m4a", "flac"])
                 .pick_file()
             {
                 self.load_file(path);
@@ -247,7 +295,7 @@ impl PolarityApp {
             }
         }
 
-        if let Some(p) = &self.player
+        if self.st.player.is_some()
             && self.st.export_path.is_some()
             && (self.st.bool.start_render || self.st.bool.rendering)
         {
@@ -273,7 +321,7 @@ impl PolarityApp {
                 self.st.export_elapsed_time = Some(Duration::default());
             }
 
-            export_batched_frames(&mut self.st, p, wgpu_render_state);
+            export_batched_frames(&mut self.st, wgpu_render_state);
             ctx.request_repaint();
         }
     }
@@ -281,7 +329,6 @@ impl PolarityApp {
 
 fn render_wgpu_frame(
     st: &mut AppState,
-    p: &AudioPlayer,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     fps: usize,
@@ -291,19 +338,26 @@ fn render_wgpu_frame(
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("export command encoder"),
     });
-    let frac = st.cur_frame_idx as f32 / fps as f32;
-    let export_sample_idx = (frac * p.contents.sample_rate as f32) as usize;
 
-    st.env_bank.run_follower(p, Some(export_sample_idx));
+    // Cannot have live input for export
+    let Some(player) = st.player.take() else {
+        return vec![0];
+    };
+
+    let frac = st.cur_frame_idx as f32 / fps as f32;
+    let export_sample_idx = (frac * player.contents.sample_rate as f32) as usize;
+
+    st.env_bank.run_follower(&player, Some(export_sample_idx));
 
     let mut fbank = std::mem::take(&mut st.filterbank);
     let env_bank = std::mem::take(&mut st.env_bank);
 
     st.active_gen()
-        .prepare(&mut fbank, &env_bank, p, Some(export_sample_idx));
+        .prepare(&mut fbank, &env_bank, &player, Some(export_sample_idx));
 
     st.filterbank = fbank;
     st.env_bank = env_bank;
+    st.player = Some(player);
 
     let render_data = RendererCallback {
         canvas_size: vec2(w as f32, h as f32),
@@ -335,10 +389,11 @@ fn render_wgpu_frame(
     get_gpu_frame(device, out_res)
 }
 
-fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32, u32)) {
+fn spawn_ffmpeg_writer(st: &mut AppState, fps: usize, dim: (u32, u32)) {
     let Some(output_path) = st.export_path.as_ref() else {
         return;
     };
+    let p = st.player.as_ref().expect("check at handle_file_export");
     let (w, h) = (dim.0, dim.1);
     let quality = st.export_config.quality.value();
     let total_frames = p.contents.duration.as_secs_f32() * fps as f32;
@@ -410,18 +465,14 @@ fn spawn_ffmpeg_writer(st: &mut AppState, p: &AudioPlayer, fps: usize, dim: (u32
     st.export_config.total_frames = total_frames as usize;
 }
 
-fn export_batched_frames(
-    st: &mut AppState,
-    p: &AudioPlayer,
-    wgpu_render_state: &egui_wgpu::RenderState,
-) {
+fn export_batched_frames(st: &mut AppState, wgpu_render_state: &egui_wgpu::RenderState) {
     let fps = st.export_config.frame_rate.value();
     let canvas_size = st.export_config.resolution.value();
     let (w, h) = (canvas_size.0, canvas_size.1);
 
     // Spawn writer thread for entire job
     if st.writer_handle.is_none() {
-        spawn_ffmpeg_writer(st, p, fps, (w, h));
+        spawn_ffmpeg_writer(st, fps, (w, h));
     }
 
     let device = &wgpu_render_state.device;
@@ -442,7 +493,7 @@ fn export_batched_frames(
             println!("Finished");
             break;
         }
-        let frame = render_wgpu_frame(st, p, device, queue, fps, (w, h));
+        let frame = render_wgpu_frame(st, device, queue, fps, (w, h));
         st.export_tx.as_ref().unwrap().send(frame).unwrap();
         st.cur_frame_idx += 1;
     }

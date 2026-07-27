@@ -3,6 +3,8 @@ use crate::state::*;
 use crate::traits::Labeled;
 use crate::ui::{control_panel_widgets::*, palette as plt};
 use eframe::egui::{self, vec2};
+use rodio::cpal;
+use rodio::cpal::traits::HostTrait;
 
 fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
     let b = &mut st.env_bank;
@@ -46,6 +48,47 @@ fn draw_reactivity_options(st: &mut AppState, ui: &mut egui::Ui) {
     }
 }
 
+fn input_mode_options(ui: &mut egui::Ui, st: &mut AppState) {
+    dropdown_row(
+        ui,
+        "INPUT MODE",
+        &mut st.input_mode,
+        InputMode::ALL,
+        &mut st.bool.input_mode_options_open,
+        false,
+    );
+    if st.input_mode == InputMode::Live {
+        let available_inputs = if st.bool.input_device_options_open {
+            if let Some(avail_inputs) = &st.available_input_devices {
+                avail_inputs.clone()
+            } else {
+                let dev = cpal::default_host().output_devices();
+                let mut input_devices = vec![InputDevice(DEFAULT_DEVICE.to_string())];
+                input_devices.extend(if let Ok(dev_list) = dev {
+                    dev_list
+                        .map(InputDevice::from)
+                        .collect::<Vec<InputDevice>>()
+                } else {
+                    Vec::default()
+                });
+                st.available_input_devices = Some(input_devices.clone());
+                input_devices
+            }
+        } else {
+            st.available_input_devices.take();
+            Vec::default()
+        };
+        dropdown_row(
+            ui,
+            "INPUT DEVICE",
+            &mut st.new_live_input_device,
+            &available_inputs,
+            &mut st.bool.input_device_options_open,
+            false,
+        );
+    }
+}
+
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     let mut open = std::mem::take(&mut st.bool);
     st.active_gen().draw_render_menu(ui, &mut open);
@@ -58,7 +101,7 @@ fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {
     draw_reactivity_options(st, ui);
 }
 
-fn inner_header_dropdown<T: Labeled>(
+fn inner_header_dropdown<T: Labeled + Default>(
     ui: &mut egui::Ui,
     target_rect: &egui::Rect,
     value: &mut T,
@@ -105,8 +148,13 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                     .show(ui, |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             ui.vertical_centered(|ui| {
+                                section_header(ui, 1, "INPUT", &mut st.bool.input_open);
+                                if st.bool.input_open {
+                                    input_mode_options(ui, st);
+                                }
+
                                 let gen_rect =
-                                    section_header(ui, 1, "GENERATOR", &mut st.bool.gen_open).rect;
+                                    section_header(ui, 2, "GENERATOR", &mut st.bool.gen_open).rect;
                                 inner_header_dropdown(
                                     ui,
                                     &gen_rect,
@@ -118,7 +166,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                                     generator_options(ui, st);
                                 }
 
-                                section_header(ui, 2, "POST FX", &mut st.bool.postfx_open);
+                                section_header(ui, 3, "POST FX", &mut st.bool.postfx_open);
                                 if st.bool.postfx_open {
                                     st.draw_post_fx(ui);
                                 }

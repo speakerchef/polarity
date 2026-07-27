@@ -2,7 +2,7 @@
 use biquad::*;
 use std::{fs, io::Read, path::PathBuf};
 
-pub mod audio_player;
+pub mod audio_inputs;
 
 fn file_as_raw_bytes(path: PathBuf) -> Vec<u8> {
     let mut bytes = Vec::new();

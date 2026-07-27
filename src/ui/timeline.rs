@@ -3,7 +3,6 @@ use std::time::Duration;
 use eframe::egui;
 use eframe::egui::{Align, vec2};
 
-use crate::audio::audio_player::AudioPlayer;
 use crate::state::*;
 use crate::ui::{SHARP, palette as plt, timeline_widgets::*};
 const SKIP_START: &str = "\u{e045}";
@@ -11,7 +10,7 @@ const PLAY: &str = "\u{e037}";
 const PAUSE: &str = "\u{e034}";
 const SKIP_END: &str = "\u{e044}";
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     egui::Panel::bottom("timeline")
         .exact_size(104.0)
         .resizable(false)
@@ -29,7 +28,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
                         let skip_start_resp = transport_button(ui, SKIP_START, plt::DIM, false);
                         ui.add_space(12.0);
 
-                        let (icn, col) = if let Some(p) = pl
+                        let (icn, col) = if let Some(p) = &st.player
                             && !p.is_paused()
                         {
                             (PAUSE, plt::YELLO)
@@ -42,7 +41,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
                         let skip_end_resp = transport_button(ui, SKIP_END, plt::DIM, false);
                         ui.add_space(16.0);
 
-                        let (elap, dur, fname, sr) = if let Some(p) = pl {
+                        let (elap, dur, fname, sr) = if let Some(p) = &st.player {
                             if skip_start_resp.clicked() {
                                 p.try_seek(Duration::from_secs(0)).unwrap_or_default();
                             }
@@ -82,7 +81,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
                             &format!(
                                 "{} {}",
                                 fname,
-                                &if let Some(sr) = sr {
+                                if let Some(sr) = sr {
                                     let sr = sr as f64 / 1000.0;
                                     format!("• {:.1}kHz", sr)
                                 } else {
@@ -119,7 +118,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
                 border(ui.style().visuals.dark_mode),
             );
 
-            if let Some(p) = pl {
+            if let Some(p) = &st.player {
                 waveform = waveform.on_hover_and_drag_cursor(egui::CursorIcon::Text);
                 render_waveform(ui, p, &waveform.rect);
                 playback_head(ui, avail_size, transport_rect, waveform, p);

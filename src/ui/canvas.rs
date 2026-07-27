@@ -2,21 +2,26 @@
 use std::ops::Div;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Pos2, Vec2};
+use crate::ui::app_widgets::{modal, modal_button};
+use crate::ui::{get_text_size, palette as plt};
+use eframe::egui::{self, Pos2, Rect, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
+use crate::audio::audio_inputs::LiveInput;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
-use crate::traits::Generator;
+use crate::state::InputMode;
+use crate::traits::{AudioProperties, Generator};
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
-use crate::{audio::audio_player::AudioPlayer, state::AppState};
+use crate::{AudioCapturePermission, open_macos_privacy_settings};
+use crate::{audio::audio_inputs::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
 const MAX_VIGNETTE: f32 = 0.5;
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     ui.ctx().request_repaint();
     egui::CentralPanel::default()
         .frame(
@@ -32,7 +37,56 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
             {
                 fullscreen_button(ui, st);
             }
-            custom_painting(ui, st, pl);
+            if st.input_mode == InputMode::Live && st.audio_capture_permission == AudioCapturePermission::Denied {
+                let msg = cfg_select! {
+                    target_os = "macos" => "You haven't granted Polarity audio-capture permissions to work in live mode.\n\n Please grant them through system settings under:\n\n Privacy & Security > Screen & System Audio Recording > System Audio Recording only.",
+                    _ => "You haven't granted Polarity audio-capture permissions to work in live mode.\n Please grant them in your settings to use live mode."
+                };
+                let font = FontId { size: plt::font_size::MED, family: egui::FontFamily::Name("inter_medium".into()) };
+                let (tw, th) = get_text_size(ui, msg, font.clone()).into();
+
+                let size = vec2(600.0, 175.0);
+                    modal(ui, size, "Denied permissions modal", |ui| {
+                        ui.set_min_size(size);
+                        let rect = ui
+                            .allocate_rect(
+                                Rect::from_min_size(
+                                    ui.viewport_rect().center() - vec2(size.x / 2.0, size.y / 2.0),
+                                    size,
+                                ),
+                                egui::Sense::focusable_noninteractive(),
+                            )
+                        .rect;
+
+                        let dark = ui.visuals().dark_mode;
+                        ui.painter().rect_filled(rect, SHARP, plt::BG(dark));
+                        ui.painter()
+                            .rect_stroke(rect, SHARP, border(dark), StrokeKind::Inside);
+
+                    let button_size = vec2(100.0, 25.0);
+                        custom_text(
+                            ui,
+                            msg,
+                            font,
+                            ui.viewport_rect().center() - vec2(0.0, th / 2.0 + button_size.y / 2.0),
+                            plt::letter_spacing::MINIMAL,
+                            plt::TEXT,
+                            Align::Center,
+                        );
+
+                    #[cfg(target_os = "macos")]
+                    modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
+                       &mut st.bool.open_macos_privacy_settings, false);
+
+                    if st.bool.open_macos_privacy_settings {
+                        open_macos_privacy_settings();
+                        st.bool.open_macos_privacy_settings = false;
+                    }
+                });
+
+            } else {
+                custom_painting(ui, st);
+            }
         });
 }
 
@@ -56,9 +110,8 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
     pos
 }
 
-fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer>) {
+fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
     let (h, w) = (ui.available_height(), ui.available_width());
-    // let l = h.min(w) * 0.99;
     let l = h.min(w);
     let canvas_size = vec2(l, l);
 
@@ -74,18 +127,34 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState, pl: Option<&AudioPlayer
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
 
-    let Some(pl) = pl else {
-        return;
+    let live_input = std::mem::take(&mut st.live_input);
+    let player = st.player.take();
+    let active_input: &dyn AudioProperties = {
+        match st.input_mode {
+            InputMode::Live => &live_input,
+            InputMode::File => {
+                if let Some(pl) = player.as_ref() {
+                    pl
+                } else {
+                    st.live_input = live_input;
+                    st.player = player;
+                    return;
+                }
+            }
+        }
     };
-    st.env_bank.run_follower(pl, None);
+
+    st.env_bank.run_follower(active_input, None);
 
     let mut fbank = std::mem::take(&mut st.filterbank);
     let env_bank = std::mem::take(&mut st.env_bank);
 
-    st.active_gen().prepare(&mut fbank, &env_bank, pl, None);
+    st.active_gen()
+        .prepare(&mut fbank, &env_bank, active_input, None);
 
     st.filterbank = fbank;
     st.env_bank = env_bank;
+    st.replace_inputs(player, live_input);
 
     let renderer_params = st.build_renderer_callback_params(true, 0);
     let efx_params = st.build_effects_callback_params();

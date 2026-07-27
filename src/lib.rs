@@ -32,6 +32,31 @@ macro_rules! labeled_enum {
     };
 }
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn polarity_audio_capture_permission() -> i32;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum AudioCapturePermission {
+    Granted,
+    Denied,
+    Unknown,
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_audio_capture_permission() -> AudioCapturePermission {
+    match unsafe { polarity_audio_capture_permission() } {
+        0 => AudioCapturePermission::Granted,
+        1 => AudioCapturePermission::Denied,
+        _ => AudioCapturePermission::Unknown,
+    }
+}
+#[cfg(not(target_os = "macos"))]
+pub fn get_audio_capture_permission() -> AudioCapturePermission {
+    AudioCapturePermission::Unknown
+}
+
 labeled_enum!(HardwareEncoder {
    VideoToolbox =>  "h264_videotoolbox",
    Nvenc =>  "h264_nvenc",
@@ -136,4 +161,20 @@ impl Rgba {
         let max = u8::MAX as f32;
         (self.r / max, self.g / max, self.b / max, self.a / max)
     }
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_macos_privacy_settings() {
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::{NSString, NSURL};
+    use std::{ffi::CString, ptr::NonNull};
+
+    let str_url = CString::new(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Appmanagement",
+    )
+    .unwrap();
+    let nsstr = NonNull::new(str_url.into_raw()).unwrap();
+    let audio_prefs_url =
+        unsafe { NSURL::URLWithString(&NSString::stringWithUTF8String(nsstr).unwrap()) }.unwrap();
+    NSWorkspace::sharedWorkspace().openURL(&audio_prefs_url);
 }

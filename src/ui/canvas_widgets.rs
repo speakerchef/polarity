@@ -13,8 +13,10 @@ pub fn fullscreen_button(ui: &mut egui::Ui, st: &mut AppState) {
             let resp = ui.allocate_rect(
                 egui::Rect::from_min_size(
                     pos2(
-                        ui.viewport_rect().left_top().x + if st.bool.fullscreen { 16.0 } else { 22.0 },
-                        ui.viewport_rect().left_top().y + if st.bool.fullscreen { 17.0 } else { 44.0 },
+                        ui.viewport_rect().left_top().x
+                            + if st.bool.fullscreen { 16.0 } else { 22.0 },
+                        ui.viewport_rect().left_top().y
+                            + if st.bool.fullscreen { 17.0 } else { 44.0 },
                     ),
                     vec2(20., 20.),
                 ),

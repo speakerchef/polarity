@@ -1,13 +1,14 @@
+use std::time::Duration;
+
 use eframe::egui;
 
 use crate::{
-    audio::audio_player::AudioPlayer,
     generators::{EnvelopeBank, FilterBank, FilterParams, PostFx, rendering::GenCbParams},
     state::{AppState, BoolStates},
 };
 
-pub trait Labeled: PartialEq + Copy {
-    fn text(self) -> &'static str;
+pub trait Labeled: PartialEq + Clone {
+    fn text(&self) -> &str;
 }
 
 #[allow(unused)]
@@ -16,7 +17,7 @@ pub trait Generator {
         &mut self,
         filterbank: &mut FilterBank,
         env_bank: &EnvelopeBank,
-        pl: &AudioPlayer,
+        input: &dyn AudioProperties,
         export_sample_idx: Option<usize>,
     );
     fn get_gen_callback_params(&mut self, st: &AppState, live: bool, fps: usize) -> GenCbParams;
@@ -24,6 +25,16 @@ pub trait Generator {
     fn draw_filtering_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
     fn draw_visual_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
+}
+pub trait AudioProperties {
+    fn is_live(&self) -> bool;
+    fn sample_rate(&self) -> u32;
+    fn num_channels(&self) -> u16;
+    fn audio_buffer(&self) -> &[f32];
+    fn position(&self) -> Duration;
+
+    /// Number of samples removed from the circular buffer per frame
+    fn popped_sample_count(&self) -> usize;
 }
 pub trait Textured {
     fn texture(&self) -> Option<&wgpu::Texture>;

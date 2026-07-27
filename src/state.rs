@@ -1,17 +1,22 @@
 #![allow(dead_code)]
 use crate::{
-    audio::{StereoFilter, audio_player::AudioPlayer},
+    AudioCapturePermission,
+    audio::{
+        StereoFilter,
+        audio_inputs::{AudioPlayer, LiveInput},
+    },
     generators::{
-        ChromaType, EnvelopeBank, FilterBank, GenKind, cymatic_field::CymaticField,
+        ChromaType, Envelope, EnvelopeBank, FilterBank, GenKind, cymatic_field::CymaticField,
         fluidwave::ModSrc, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
         rendering::EffectsCallback, stereometer::FilterMode,
     },
-    traits::{ActiveGenerator, Generator, Labeled},
+    traits::{ActiveGenerator, AudioProperties, Generator, Labeled},
     ui::control_panel_widgets::{
         dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
     },
 };
 use biquad::*;
+use rodio::{DeviceTrait, cpal};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -75,7 +80,7 @@ impl Resolution {
 }
 
 impl Labeled for Resolution {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -99,7 +104,7 @@ impl Fps {
 }
 
 impl Labeled for Fps {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -121,7 +126,7 @@ impl ExportQuality {
 }
 
 impl Labeled for ExportQuality {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -136,6 +141,12 @@ pub struct ExportConfig {
 }
 #[derive(Default)]
 pub struct BoolStates {
+    pub input_open: bool,
+    pub input_mode_options_open: bool,
+    pub input_device_options_open: bool,
+
+    pub open_macos_privacy_settings: bool,
+
     pub debug_file_loaded: bool,
 
     pub gen_kind_options_open: bool,
@@ -203,8 +214,46 @@ pub struct BoolStates {
     pub export_canceled: bool,
 }
 
+labeled_enum!(InputMode{
+    Live => "Live",
+    File => "File",
+}, Live);
+
+impl Labeled for InputMode {
+    fn text(&self) -> &'static str {
+        self.label()
+    }
+}
+
+pub const DEFAULT_DEVICE: &str = "DEFAULT";
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct InputDevice(pub String);
+
+impl Labeled for InputDevice {
+    fn text(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<cpal::Device> for InputDevice {
+    fn from(value: cpal::Device) -> Self {
+        InputDevice(value.description().unwrap().to_string())
+    }
+}
+
 pub struct AppState {
+    pub player: Option<AudioPlayer>,
+
+    pub audio_capture_permission: AudioCapturePermission,
+    pub live_input: LiveInput,
+    pub default_live_input_device: InputDevice,
+    pub live_input_device: InputDevice,
+    pub available_input_devices: Option<Vec<InputDevice>>,
+    pub new_live_input_device: InputDevice,
+
+    pub input_mode: InputMode,
     pub playback_mode: PlaybackMode,
+
     pub gen_kind: GenKind,
     pub stereo: Stereometer,
     pub fwave: Fluidwave,
@@ -240,6 +289,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub fn replace_inputs(&mut self, pl: Option<AudioPlayer>, live_input: LiveInput) {
+        self.live_input = live_input;
+        self.player = pl;
+    }
+
     pub fn active_gen(&mut self) -> &mut dyn ActiveGenerator {
         match self.gen_kind {
             GenKind::Stereometer => &mut self.stereo,
@@ -250,10 +304,46 @@ impl AppState {
         }
     }
 
-    pub fn update_filters(&mut self, pl: Option<&AudioPlayer>) {
-        let Some(p) = pl else {
-            return;
+    pub fn clear_envelopes(&mut self) {
+        let e = &mut self.env_bank;
+        e.env_a.take();
+        e.env_b.take();
+        e.env_c.take();
+        e.env_d.take();
+    }
+
+    pub fn update_envelopes(&mut self) {
+        if self.env_bank.env_a.is_none()
+            && self.player.is_none()
+            && matches!(self.input_mode, InputMode::Live)
+        {
+            self.env_bank.env_a = Some(Envelope::new(1., 100., 0.0, self.live_input.sample_rate()));
+            self.env_bank.env_b = Some(Envelope::new(
+                1.,
+                100.,
+                -0.40,
+                self.live_input.sample_rate(),
+            ));
+            self.env_bank.env_c =
+                Some(Envelope::new(75., 800., 0.0, self.live_input.sample_rate()));
+            self.env_bank.env_d = Some(Envelope::new(1., 100., 0.0, self.live_input.sample_rate()));
+        }
+    }
+
+    pub fn update_filters(&mut self) {
+        let sr = {
+            match self.input_mode {
+                InputMode::Live => self.live_input.sample_rate(),
+                InputMode::File => {
+                    if let Some(player) = self.player.as_ref() {
+                        player.sample_rate()
+                    } else {
+                        return;
+                    }
+                }
+            }
         };
+
         let fb = &self.filterbank;
         let has_filters = fb.live_fs_filters.is_some()
             && fb.trace_fs_filters.is_some()
@@ -266,17 +356,9 @@ impl AppState {
         if !has_filters {
             self.bool.set_default_freqs = true;
             let filters = Some((
-                StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., p.contents.sample_rate),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::BandPass,
-                    1000.,
-                    p.contents.sample_rate,
-                ),
-                StereoFilter::from_coeffs_butterworth(
-                    Type::HighPass,
-                    3000.,
-                    p.contents.sample_rate,
-                ),
+                StereoFilter::from_coeffs_butterworth(Type::LowPass, 300., sr),
+                StereoFilter::from_coeffs_butterworth(Type::BandPass, 1000., sr),
+                StereoFilter::from_coeffs_butterworth(Type::HighPass, 3000., sr),
             ));
             self.filterbank.live_fs_filters = filters.clone();
             self.filterbank.trace_fs_filters = filters.clone();
@@ -293,40 +375,22 @@ impl AppState {
             match fmode {
                 FilterMode::Off => (),
                 FilterMode::Lpf => {
-                    livefs.0 = StereoFilter::from_coeffs_butterworth(
-                        Type::LowPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.0 = StereoFilter::from_coeffs_butterworth(
-                        Type::LowPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
+                    livefs.0 =
+                        StereoFilter::from_coeffs_butterworth(Type::LowPass, filter_freq, sr);
+                    tracefs.0 =
+                        StereoFilter::from_coeffs_butterworth(Type::LowPass, filter_freq, sr);
                 }
                 FilterMode::Bpf => {
-                    livefs.1 = StereoFilter::from_coeffs_butterworth(
-                        Type::BandPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.1 = StereoFilter::from_coeffs_butterworth(
-                        Type::BandPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
+                    livefs.1 =
+                        StereoFilter::from_coeffs_butterworth(Type::BandPass, filter_freq, sr);
+                    tracefs.1 =
+                        StereoFilter::from_coeffs_butterworth(Type::BandPass, filter_freq, sr);
                 }
                 FilterMode::Hpf => {
-                    livefs.2 = StereoFilter::from_coeffs_butterworth(
-                        Type::HighPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
-                    tracefs.2 = StereoFilter::from_coeffs_butterworth(
-                        Type::HighPass,
-                        filter_freq,
-                        p.contents.sample_rate,
-                    );
+                    livefs.2 =
+                        StereoFilter::from_coeffs_butterworth(Type::HighPass, filter_freq, sr);
+                    tracefs.2 =
+                        StereoFilter::from_coeffs_butterworth(Type::HighPass, filter_freq, sr);
                 }
             }
             self.filterbank.live_fs_filters = Some(livefs);
@@ -472,12 +536,21 @@ impl Default for AppState {
             preset.cymatics,
         );
         Self {
+            input_mode: InputMode::default(),
+            player: None,
+            available_input_devices: None,
+            audio_capture_permission: AudioCapturePermission::Unknown,
+            live_input: LiveInput::default(),
+            live_input_device: InputDevice::default(),
+            default_live_input_device: InputDevice::default(),
+            new_live_input_device: InputDevice::default(),
+
             gen_kind: GenKind::default(),
             stereometer_render_resources: None,
             fluid_render_resources: None,
             bloom_render_resources: None,
             output_render_resources: None,
-            resources: egui_wgpu::CallbackResources::new(),
+            resources: egui_wgpu::CallbackResources::default(),
 
             filterbank: FilterBank::default(),
             env_bank: EnvelopeBank::default(),

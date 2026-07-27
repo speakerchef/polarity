@@ -8,7 +8,7 @@ use eframe::egui::{
 
 use crate::ui::{SHARP, apply_side_border, get_text_size};
 use crate::{
-    audio::audio_player::AudioPlayer,
+    audio::audio_inputs::AudioPlayer,
     state::{AppState, PlaybackMode},
     ui::{custom_text, palette as plt},
 };

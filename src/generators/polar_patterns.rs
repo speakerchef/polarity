@@ -4,16 +4,16 @@ use eframe::egui::{Pos2, lerp, pos2};
 
 use crate::{
     Rgba,
-    audio::audio_player::AudioPlayer,
     generators::{
-        EnvelopeBank, FftPass, FftWindow, FilterBank, FilterParams, PostFx, fft_max_frequency_bin,
+        EnvelopeBank, FftPass, FftWindow, FilterBank, FilterParams, MAX_POINT_SIZE, MIN_POINT_SIZE,
+        PostFx, fft_max_frequency_bin,
         fluidwave::ModSrc,
         positional_interp_upsampling,
         rendering::{GenCbParams, Particle2DCbParams},
         stereometer::{FilterMode, ParticleRenderMode},
     },
     labeled_enum,
-    traits::{ActiveGenerator, Generator, Labeled, ParamAccess},
+    traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess},
     ui::control_panel_widgets::{
         dropdown_row, section_header_submenu, slider_row, static_label, toggle_button_row,
     },
@@ -25,14 +25,14 @@ labeled_enum!(PatternKind {
 }, Unipolar);
 
 impl Labeled for PatternKind {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PolarPatterns {
-    pub filter_params: Option<FilterParams>,
+    pub filter_params: FilterParams,
 
     kind: PatternKind,
     fs_color: Rgba,
@@ -81,12 +81,12 @@ impl Default for PolarPatterns {
             live_buffer: Default::default(),
             trace_buffer: Default::default(),
             fft_pass: FftPass::default(),
-            use_3d: true,
+            use_3d: false,
             use_rotation: true,
             angle: 0.0,
-            camera_z: 10.0,
+            camera_z: 3.0,
             pitch: 0.3,
-            rot_speed: 0.2,
+            rot_speed: 0.1,
             scale: 0.8,
             upsample_factor: 4.0,
 
@@ -96,7 +96,7 @@ impl Default for PolarPatterns {
                 use_bloom: true,
                 bloom: 1.,
                 bloom_mod_src: ModSrc::EnvB,
-                bloom_range: 20.0,
+                bloom_range: 80.0,
                 use_vignette: true,
                 use_chroma: true,
                 chroma_shift_mod_src: ModSrc::EnvB,
@@ -105,12 +105,12 @@ impl Default for PolarPatterns {
                 chroma_type: super::ChromaType::Radial,
                 ..Default::default()
             },
-            filter_params: Some(FilterParams {
+            filter_params: FilterParams {
                 filter_mode: FilterMode::Lpf,
                 last_freq: 0.0,
                 filter_freq: 450.,
-            }),
-            point_size: 0.0015,
+            },
+            point_size: 0.0023,
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,
@@ -119,14 +119,30 @@ impl Default for PolarPatterns {
 }
 
 impl PolarPatterns {
-    fn draw(&mut self, pl: &AudioPlayer, export_sample_idx: Option<usize>) {
-        let num_ch = pl.contents.num_channels as usize;
-        let sr = pl.contents.sample_rate as usize;
-        let s = &pl.contents.samples;
-        let start_idx =
-            export_sample_idx.unwrap_or_else(|| (pl.position().as_secs_f64() * sr as f64) as usize);
-        let gap = self.fft_window.value() - 1;
-        let end_idx = start_idx + gap + 1;
+    fn draw(&mut self, input: &dyn AudioProperties, export_sample_idx: Option<usize>) {
+        let num_ch = input.num_channels() as usize;
+        let sr = input.sample_rate() as usize;
+        let s = input.audio_buffer();
+        let gap = if input.is_live() {
+            self.fft_window.value()
+        } else {
+            self.fft_window.value() - 1
+        };
+
+        let start_idx = export_sample_idx.unwrap_or_else(|| {
+            if input.is_live() {
+                (s.len() / num_ch).saturating_sub(gap)
+            } else {
+                (input.position().as_secs_f32() * sr as f32) as usize
+            }
+        });
+
+        let end_idx = if input.is_live() {
+            s.len() / num_ch
+        } else {
+            start_idx + gap + 1
+        };
+
         let window = s
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
@@ -147,7 +163,7 @@ impl PolarPatterns {
                 } else {
                     r
                 };
-                let limit = (1.1 - y_sample.abs()).max(0.0).powf(2.0);
+                let limit = (1.0 - y_sample.abs()).max(0.0).powf(2.0);
                 let (x, y, z) = (
                     l * theta.sin(),
                     y_sample * theta.cos(),
@@ -156,10 +172,10 @@ impl PolarPatterns {
                 );
 
                 if self.use_3d {
-                    let pos =
-                        start_idx as f32 / s.len() as f32 * pl.contents.duration.as_secs_f32();
+                    // let pos = start_idx as f32 / s.len() as f32 * input.duration.as_secs_f32();
+                    let pos = input.position().as_secs_f32();
                     let angle = if self.use_rotation {
-                        pos * self.rot_speed * TAU
+                        (pos * self.rot_speed * TAU) % TAU
                     } else {
                         self.angle / 360.0 * TAU
                     };
@@ -207,10 +223,10 @@ impl Generator for PolarPatterns {
         &mut self,
         _f: &mut FilterBank,
         _env: &EnvelopeBank,
-        pl: &crate::audio::audio_player::AudioPlayer,
+        input: &dyn AudioProperties,
         export_sample_idx: Option<usize>,
     ) {
-        self.draw(pl, export_sample_idx);
+        self.draw(input, export_sample_idx);
     }
 
     fn get_gen_callback_params(
@@ -222,7 +238,9 @@ impl Generator for PolarPatterns {
         let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
         GenCbParams::Particle2D(Particle2DCbParams {
             render_mode: ParticleRenderMode::FullSpectrum,
-            point_size: self.point_size + env(self.point_size_mod_src, self.point_size_rng),
+            point_size: (self.point_size
+                + env(self.point_size_mod_src, self.point_size_rng) * MAX_POINT_SIZE)
+                .clamp(MIN_POINT_SIZE, MAX_POINT_SIZE),
             live_pos: std::mem::take(&mut self.live_buffer),
             trace_pos: self.trace_buffer.clone(),
             fs_color: self.fs_color.into(),
@@ -304,6 +322,6 @@ impl ParamAccess for PolarPatterns {
         &mut self.efx
     }
     fn filter_params(&mut self) -> Option<&mut super::FilterParams> {
-        self.filter_params.as_mut()
+        Some(&mut self.filter_params)
     }
 }

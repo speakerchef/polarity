@@ -1,0 +1,2 @@
+ <key>NSAudioCaptureUsageDescription</key>
+  <string>Polarity needs to capture system audio to work in "Live" mode.</string>

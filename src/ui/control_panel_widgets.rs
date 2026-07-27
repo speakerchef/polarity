@@ -161,7 +161,7 @@ pub fn static_label(ui: &mut egui::Ui, name: &str) {
     );
 }
 impl Labeled for &'static str {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self
     }
 }
@@ -389,6 +389,7 @@ pub fn popup_item(
     font_size: f32,
     w: f32,
     h: Option<f32>,
+    bottom_border: bool,
 ) -> Response {
     let (rect, mut resp) =
         ui.allocate_exact_size(vec2(w, h.unwrap_or(plt::height::INNER)), Sense::click());
@@ -400,12 +401,17 @@ pub fn popup_item(
     };
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
-    p.rect_stroke(
-        rect,
-        SHARP,
+    // p.rect_stroke(
+    //     rect,
+    //     SHARP,
+    //     border(ui.visuals().dark_mode),
+    //     StrokeKind::Inside,
+    // );
+    p.line_segment(
+        [rect.left_top(), rect.right_top()],
         border(ui.visuals().dark_mode),
-        StrokeKind::Inside,
     );
+    apply_side_border(ui, rect, bottom_border);
     let fonts = FontId {
         size: font_size,
         family: FontFamily::Name("inter_medium".into()),
@@ -469,7 +475,7 @@ pub fn menu_bar_popup(ui: &mut egui::Ui, label: &str, mut width: f32, padding: f
 }
 
 /// Menu item with `label        [ item ]` structure
-pub fn dropdown_row<T: Labeled>(
+pub fn dropdown_row<T: Labeled + Default>(
     ui: &mut egui::Ui,
     label: &str,
     value: &mut T,
@@ -477,7 +483,7 @@ pub fn dropdown_row<T: Labeled>(
     open: &mut bool,
     bottom_border: bool,
 ) -> (
-    Response, /* dropdown row */
+    Rect,     /* dropdown row rect*/
     Response, /* dropdown options */
 ) {
     const SEL_W: f32 = 150.0;
@@ -524,7 +530,7 @@ pub fn dropdown_row<T: Labeled>(
             *open = false;
         }
     });
-    (inner_resp.clone(), return_resp.unwrap_or(inner_resp))
+    (br, return_resp.unwrap_or(inner_resp))
 }
 pub fn path_picker(
     ui: &mut egui::Ui,
@@ -746,7 +752,7 @@ pub fn toggle_button(ui: &mut egui::Ui, on: &mut bool) {
     );
 }
 
-pub fn dropdown_menu<T: Labeled>(
+pub fn dropdown_menu<T: Labeled + Default>(
     ui: &mut egui::Ui,
     dim: (f32, f32),
     value: &mut T,
@@ -770,7 +776,7 @@ pub fn dropdown_menu<T: Labeled>(
     ui.painter()
         .rect_filled(inner, SHARP, plt::VOID(ui.visuals().dark_mode));
     ui.painter()
-        .rect_stroke(inner, SHARP, border, egui::StrokeKind::Inside);
+        .rect_stroke(inner, SHARP, border, egui::StrokeKind::Middle);
 
     let font = FontId {
         size: plt::font_size::TINY,
@@ -806,18 +812,33 @@ pub fn dropdown_menu<T: Labeled>(
         Align::RIGHT,
     );
 
+    let popup_item_w = options
+        .iter()
+        .fold(0.0, |acc, opt| {
+            let (tw, _) = get_text_size(ui, opt.text(), font.clone()).into();
+            if tw * 1.5 > acc { tw * 1.5 } else { acc }
+        })
+        .max(dim.0);
     if *open {
         resp = egui::Area::new(egui::Id::new(value.text()).with("popup"))
-            .fixed_pos(inner.left_bottom())
+            .fixed_pos(inner.left_bottom() - vec2(popup_item_w - dim.0, -1.0))
             .order(egui::Order::Foreground)
             .show(ui.ctx(), |ui| {
                 egui::Frame::new().show(ui, |ui| {
-                    for &opt in options {
+                    for opt in options {
                         ui.spacing_mut().item_spacing = Vec2::ZERO;
-                        if popup_item(ui, opt.text(), plt::font_size::TINY, dim.0, Some(dim.1))
-                            .clicked()
+                        if popup_item(
+                            ui,
+                            opt.text(),
+                            plt::font_size::TINY,
+                            popup_item_w,
+                            Some(dim.1),
+                            opt == options.first().unwrap_or(&T::default())
+                                || opt == options.last().unwrap_or(&T::default()),
+                        )
+                        .clicked()
                         {
-                            *value = opt;
+                            *value = opt.clone();
                             *open = false;
                         }
                     }

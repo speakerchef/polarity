@@ -4,8 +4,7 @@ use std::{
 };
 
 use crate::{
-    audio::audio_player::AudioPlayer,
-    state::{AppState, ExportQuality, Fps, Resolution},
+    state::{AppState, ExportQuality, Fps, InputMode, Resolution},
     ui::{
         SHARP, canvas, control_panel,
         control_panel_widgets::{dropdown_row, menu_bar_option, path_picker, toggle_button_row},
@@ -13,7 +12,7 @@ use crate::{
         timeline_widgets::border,
     },
 };
-use eframe::egui::{self, pos2};
+use eframe::egui::{self, Response, pos2};
 use eframe::egui::{Align, FontId, Key, Pos2, StrokeKind, Vec2, vec2};
 use egui_winit::winit::dpi::LogicalSize;
 
@@ -122,12 +121,7 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
     });
 }
 
-pub fn main_window(
-    ui: &mut egui::Ui,
-    st: &mut AppState,
-    player: Option<&AudioPlayer>,
-    frame: &eframe::Frame,
-) {
+pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
     let mut resp = egui::CentralPanel::default()
         .frame(
             egui::Frame::NONE
@@ -145,7 +139,9 @@ pub fn main_window(
         )
         .show(ui, |ui| {
             if !st.bool.fullscreen {
-                timeline::draw(ui, st, player);
+                if st.input_mode == InputMode::File {
+                    timeline::draw(ui, st);
+                }
                 control_panel::draw(ui, st);
                 editor_window_behavior(frame);
             } else {
@@ -162,9 +158,9 @@ pub fn main_window(
             }
 
             if st.bool.rendering {
-                player.as_ref().unwrap().pause();
+                st.player.as_ref().unwrap().pause();
             } else {
-                canvas::draw(ui, st, player);
+                canvas::draw(ui, st);
             }
         })
         .response;
@@ -329,6 +325,21 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                                 family: egui::FontFamily::Name("inter_regular".into()),
                             },
                             resp.rect.center() - vec2(0.0, BUTTON_H),
+                            plt::letter_spacing::MINIMAL,
+                            plt::YELLO,
+                            Align::Center,
+                        );
+                        return;
+                    }
+                    if st.input_mode == InputMode::Live {
+                        custom_text(
+                            ui,
+                            "Export not enabled in live-input mode",
+                            FontId {
+                                size: plt::font_size::MED,
+                                family: egui::FontFamily::Name("inter_regular".into()),
+                            },
+                            resp.rect.center() - vec2(0.0, BUTTON_H / 2.0),
                             plt::letter_spacing::MINIMAL,
                             plt::YELLO,
                             Align::Center,
@@ -741,4 +752,19 @@ pub fn window_drag_tooltip(ui: &mut egui::Ui) {
                 Align::LEFT,
             );
         });
+}
+
+pub fn modal(
+    ui: &mut egui::Ui,
+    size: Vec2,
+    id: &'static str,
+    contents: impl FnOnce(&mut egui::Ui),
+) -> Response {
+    egui::Area::new(id.into())
+        .fixed_pos(ui.viewport_rect().center() - vec2(size.x / 2.0, size.y / 2.0))
+        .movable(false)
+        .order(egui::Order::Foreground)
+        .default_size(size)
+        .show(ui.ctx(), contents)
+        .response
 }

@@ -10,7 +10,7 @@ use crate::{
     },
     labeled_enum,
     state::{AppState, BoolStates, DAMP_FACTOR},
-    traits::{ActiveGenerator, Generator, Labeled, ParamAccess},
+    traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess},
     ui::{
         canvas::NUM_PARTICLES,
         control_panel_widgets::{
@@ -26,7 +26,7 @@ labeled_enum!(ColorMode {
 }, VelocityGradient);
 
 impl Labeled for ColorMode {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -37,7 +37,7 @@ labeled_enum!(EnergyTransferMode {
 }, ForceField);
 
 impl Labeled for EnergyTransferMode {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -47,7 +47,7 @@ labeled_enum!(ForceDirection {
 }, Out);
 
 impl Labeled for ForceDirection {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -62,7 +62,7 @@ labeled_enum!(ColorArrangement {
 }, Rgb);
 
 impl Labeled for ColorArrangement {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -88,7 +88,7 @@ labeled_enum!(ModSrc {
 }, None);
 
 impl Labeled for ModSrc {
-    fn text(self) -> &'static str {
+    fn text(&self) -> &'static str {
         self.label()
     }
 }
@@ -126,8 +126,13 @@ pub struct Fluidwave {
 
     frame_time_accumulator: f32,
     last_idx: usize,
+
     #[serde(skip, default = "instant_default")]
     last_frame: Instant,
+}
+
+fn instant_default() -> Instant {
+    Instant::now()
 }
 
 impl ActiveGenerator for Fluidwave {}
@@ -143,16 +148,12 @@ impl ParamAccess for Fluidwave {
     }
 }
 
-fn instant_default() -> Instant {
-    Instant::now()
-}
-
 impl Generator for Fluidwave {
     fn prepare(
         &mut self,
         _f: &mut FilterBank,
         _env: &EnvelopeBank,
-        _pl: &crate::audio::audio_player::AudioPlayer,
+        _input: &dyn AudioProperties,
         _export_sample_idx: Option<usize>,
     ) {
     }

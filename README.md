@@ -57,7 +57,7 @@
     - [x] Chladni plates
   - [ ] full spectrum band-split generators:
     - [ ] spectrogram
-- [ ] Live/RT mode
+- [x] Live/RT mode
 - [x] Universal audio reactivity envelope structure.
 - [ ] Automation Envelopes / LFOs
   - [ ] 4 wave types: sine/saw/square/triangle
