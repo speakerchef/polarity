@@ -48,16 +48,21 @@ opt-level = 3
 strip = true
 panic = "abort"
 
-[package.metadata.bundle]
-name = "Polarity"
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+product-name = "Polarity"
 identifier = "com.odsp.polarity"
-icon = []
-osx_info_plist_exts = ["bundler_configs/Info.plist"]
+icons = []
 version = "0.0.1"
 copyright = "Copyright (c) Sohan Nair 2026. All rights reserved."
 category = "Entertainment"
-short_description = "An Audio Visualizer Application."
-long_description = """
+description = "An Audio Visualizer Application."
+long-description = """
 Polarity programmatically generates visuals from audio using a generator based architecture
 """
-osx_url_schemes = ["com.odsp.polarity"]
+
+[[package.metadata.packager.deep-link-protocols]]
+schemes = ["com.odsp.polarity"]
+
+[package.metadata.packager.macos]
+info-plist-path = "bundler_configs/Info.plist"
