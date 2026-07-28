@@ -217,7 +217,7 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
     win.set_decorations(false);
     win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
 
-    let pointer_on_border = false;
+    let mut pointer_on_border = false;
 
     #[cfg(not(target_os = "macos"))]
     {
