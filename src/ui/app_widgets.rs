@@ -217,16 +217,21 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
     win.set_decorations(false);
     win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
 
-    let border_responses = resize_border(ui, frame);
+    let pointer_on_border = false;
 
-    let pointer_on_border = border_responses.iter().any(|r| r.contains_pointer());
+    #[cfg(not(target_os = "macos"))]
+    {
+        let border_responses = resize_border(ui, frame);
+        pointer_on_border = border_responses.iter().any(|r| r.contains_pointer());
+    }
+
     if ui.input(|i| i.pointer.primary_down()) && !pointer_on_border {
         let _ = win.drag_window();
     }
 }
 
 /// For platforms like windows to allow resizing without decorations
-fn resize_border<'a>(ui: &mut egui::Ui, frame: &eframe::Frame) -> Vec<Response> {
+fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) -> Vec<Response> {
     let Some(win) = frame.winit_window() else {
         return Vec::default();
     };
