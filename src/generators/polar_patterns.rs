@@ -14,8 +14,11 @@ use crate::{
     },
     labeled_enum,
     traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
-    ui::control_panel_widgets::{
-        dropdown_row, section_header_submenu, slider_row, static_label, toggle_button_row,
+    ui::{
+        control_panel_widgets::{
+            dropdown_row, section_header_submenu, slider_row, static_label, toggle_button_row,
+        },
+        palette,
     },
 };
 
@@ -67,17 +70,12 @@ impl Default for PolarPatterns {
         Self {
             kind: PatternKind::default(),
             // fs_color: Rgba {
-            //     r: 64.0,
-            //     g: 93.0,
-            //     b: 65.0,
+            //     r: 76.0,
+            //     g: 113.0,
+            //     b: 88.0,
             //     a: 255.0,
             // },
-            fs_color: Rgba {
-                r: 76.0,
-                g: 113.0,
-                b: 88.0,
-                a: 255.0,
-            },
+            fs_color: palette::POLARITY_PURPLE.into(),
             live_buffer: Default::default(),
             trace_buffer: Default::default(),
             fft_pass: FftPass::default(),
@@ -146,6 +144,11 @@ impl PolarPatterns {
         let window = s
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
+
+        // fft needs at least 8192 else panics
+        if window.len() / num_ch < FftWindow::default().value() {
+            return;
+        }
 
         let n = window.len() / num_ch;
         let polar_speed = self.get_polar_speed(window, num_ch, sr);

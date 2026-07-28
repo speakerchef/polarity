@@ -227,6 +227,7 @@ pub struct BoolStates {
     pub dark_mode: bool,
     pub advanced_mode: bool,
     pub fullscreen: bool,
+    pub lock_aspect_ratio: bool,
 
     pub save_preset: bool,
     pub load_preset: bool,
@@ -317,10 +318,12 @@ pub struct AppState {
     pub preset_save_path: Option<PathBuf>,
     pub preset_load_path: Option<PathBuf>,
 
-    pub window_drag_tooltip_modal_deadline: Option<Instant>,
+    pub window_drag_tooltip_deadline: Option<Instant>,
+    pub last_window_width: u32,
 
     #[default(
         BoolStates {
+            lock_aspect_ratio: true,
             show_fullscreen_button: true,
             dark_mode: true,
             export_enabled: true,

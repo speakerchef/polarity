@@ -8,6 +8,7 @@ use crate::ui::{get_text_size, palette as plt};
 use eframe::egui::{self, Pos2, Rect, Stroke, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
+use egui_winit::winit::dpi::PhysicalSize;
 
 use crate::AudioCapturePermission;
 use crate::audio::audio_inputs::LiveInput;
@@ -15,7 +16,7 @@ use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
 use crate::generators::rendering::{EffectsCallback, MeterData, OutputCallback, RendererCallback};
 use crate::state::InputMode;
 use crate::traits::{AudioSrc, Generator};
-use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
+use crate::ui::{SHARP, canvas_widgets::presentation_buttons, timeline_widgets::border};
 use crate::{audio::audio_inputs::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
@@ -23,7 +24,7 @@ use crate::ui::{custom_text, palette};
 const MAX_VIGNETTE: f32 = 0.5;
 const METER_WIDTH: f32 = 10.0;
 
-pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
+pub fn draw(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
     ui.ctx().request_repaint();
     egui::CentralPanel::default()
         .frame(
@@ -37,63 +38,24 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                 |i| i.pointer.hover_pos().is_some(), /* is cursor on window */
             ) || !st.bool.fullscreen
             {
-                fullscreen_button(ui, st);
+                presentation_buttons(ui, st, frame);
             }
-            if st.input_mode == InputMode::Live && st.audio_capture_permission == AudioCapturePermission::Denied {
-                let msg = cfg_select! {
-                    target_os = "macos" => "You haven't granted Polarity audio-capture permissions to work in live mode.\n\n Please grant them through system settings under:\n\n Privacy & Security > Screen & System Audio Recording > System Audio Recording only.",
-                    _ => "You haven't granted Polarity audio-capture permissions to work in live mode.\n Please grant them in your settings to use live mode."
-                };
-                let font = FontId { size: plt::font_size::MED, family: egui::FontFamily::Name("inter_medium".into()) };
-                let (tw, th) = get_text_size(ui, msg, font.clone()).into();
 
-                let size = vec2(600.0, 175.0);
-                    modal(ui, size, "Denied permissions modal", |ui| {
-                        ui.set_min_size(size);
-                        let rect = ui
-                            .allocate_rect(
-                                Rect::from_min_size(
-                                    ui.viewport_rect().center() - vec2(size.x / 2.0, size.y / 2.0),
-                                    size,
-                                ),
-                                egui::Sense::focusable_noninteractive(),
-                            )
-                        .rect;
+            lock_aspect_ratio(ui, st, frame);
 
-                        let dark = ui.visuals().dark_mode;
-                        ui.painter().rect_filled(rect, SHARP, plt::BG(dark));
-                        ui.painter()
-                            .rect_stroke(rect, SHARP, border(dark), StrokeKind::Inside);
-
-                    let button_size = vec2(100.0, 25.0);
-                        custom_text(
-                            ui,
-                            msg,
-                            font,
-                            ui.viewport_rect().center() - vec2(0.0, th / 2.0 + button_size.y / 2.0),
-                            plt::letter_spacing::MINIMAL,
-                            plt::TEXT,
-                            Align::Center,
-                        );
-
-                    #[cfg(target_os = "macos")]{
-                        use crate::open_macos_privacy_settings;
-
-                        modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),
-                            button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
-                            &mut st.bool.open_macos_privacy_settings, false);
-
-                        if st.bool.open_macos_privacy_settings {
-                            open_macos_privacy_settings();
-                            st.bool.open_macos_privacy_settings = false;
-                        }
-                    }
-                });
-
+            if let Some(win) = frame.winit_window() {
+                if st.bool.fullscreen {
+                    win.set_window_level(egui_winit::winit::window::WindowLevel::AlwaysOnTop);
+                } else {
+                    win.set_window_level(egui_winit::winit::window::WindowLevel::Normal);
+                }
+            }
+            if st.input_mode == InputMode::Live
+                && st.audio_capture_permission == AudioCapturePermission::Denied
+            {
+                audio_capture_permission_prompt(ui, st);
             } else {
-                // let avail_h = ui.available_height() - 2.0;
                 custom_painting(ui, st);
-                // level_meter(ui, st, ui.max_rect().right_top() - vec2(METER_WIDTH + 1.0, -1.0), avail_h, 1);
             }
         });
 }
@@ -187,4 +149,87 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
             ..efx_params
         },
     ));
+}
+
+fn lock_aspect_ratio(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
+    if st.bool.fullscreen
+        && st.bool.lock_aspect_ratio
+        && let Some(win) = frame.winit_window()
+        && win.inner_size().height != win.inner_size().width
+    {
+        let (w, h) = (win.inner_size().width, win.inner_size().height);
+        let l = if w != st.last_window_width {
+            st.last_window_width = w;
+            w
+        } else {
+            h
+        };
+        let _ = win.request_inner_size(PhysicalSize::new(l, l));
+    }
+}
+
+fn audio_capture_permission_prompt(ui: &mut egui::Ui, st: &mut AppState) {
+    let msg = cfg_select! {
+        target_os = "macos" => "You haven't granted Polarity audio-capture \
+            permissions to work in live mode.\n\n Please grant them through \
+            system settings under:\n\n Privacy & Security > Screen & System \
+            Audio Recording > System Audio Recording only.",
+        _ => "You haven't granted Polarity audio-capture permissions to work in live mode.\n Please grant them in your settings to use live mode."
+    };
+    let font = FontId {
+        size: plt::font_size::MED,
+        family: egui::FontFamily::Name("inter_medium".into()),
+    };
+    let (tw, th) = get_text_size(ui, msg, font.clone()).into();
+
+    let size = vec2(600.0, 175.0);
+    modal(ui, size, "Denied permissions modal", |ui| {
+        ui.set_min_size(size);
+        let rect = ui
+            .allocate_rect(
+                Rect::from_min_size(
+                    ui.viewport_rect().center() - vec2(size.x / 2.0, size.y / 2.0),
+                    size,
+                ),
+                egui::Sense::focusable_noninteractive(),
+            )
+            .rect;
+
+        let dark = ui.visuals().dark_mode;
+        ui.painter().rect_filled(rect, SHARP, plt::BG(dark));
+        ui.painter()
+            .rect_stroke(rect, SHARP, border(dark), StrokeKind::Inside);
+
+        let button_size = vec2(100.0, 25.0);
+        custom_text(
+            ui,
+            msg,
+            font,
+            ui.viewport_rect().center() - vec2(0.0, th / 2.0 + button_size.y / 2.0),
+            plt::letter_spacing::MINIMAL,
+            plt::TEXT,
+            Align::Center,
+        );
+
+        #[cfg(target_os = "macos")]
+        {
+            use crate::open_macos_privacy_settings;
+
+            modal_button(
+                ui,
+                rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),
+                button_size,
+                "Open Settings",
+                plt::font_size::MED,
+                plt::YELLO,
+                &mut st.bool.open_macos_privacy_settings,
+                false,
+            );
+
+            if st.bool.open_macos_privacy_settings {
+                open_macos_privacy_settings();
+                st.bool.open_macos_privacy_settings = false;
+            }
+        }
+    });
 }

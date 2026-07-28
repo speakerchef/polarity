@@ -26,12 +26,12 @@ const MAX_POINT_SIZE: f32 = 0.01;
 const MIN_POINT_SIZE: f32 = 0.0005;
 
 labeled_enum!(GenKind{
+    PolarPatterns => "Polar Motion",
+    Oscilloscope => "Oscillations",
     Stereometer=> "Stereometer",
     Fluidwave => "Fluidwave",
-    Oscilloscope => "Oscillations",
-    PolarPatterns => "Polar Motion",
     CymaticField => "Cymatic Field",
-}, Oscilloscope);
+}, PolarPatterns);
 
 impl Labeled for GenKind {
     fn text(&self) -> &'static str {
@@ -58,12 +58,9 @@ impl Labeled for ChromaType {
 }
 
 labeled_enum!(FftWindow {
-    W1024 => "1024",
-    W2048 => "2048",
-    W4096 => "4096",
     W8192 => "8192",
     W16384 => "16384",
-}, W4096);
+}, W8192);
 
 impl Labeled for FftWindow {
     fn text(&self) -> &'static str {
@@ -74,9 +71,6 @@ impl Labeled for FftWindow {
 impl FftWindow {
     pub fn value(&self) -> usize {
         match self {
-            Self::W1024 => 1024,
-            Self::W2048 => 2048,
-            Self::W4096 => 4096,
             Self::W8192 => 8192,
             Self::W16384 => 16384,
         }

@@ -2,6 +2,7 @@
 use eframe::egui::Color32;
 
 pub const BLACK: Color32 = Color32::from_rgb(0x00, 0x00, 0x00);
+pub const POLARITY_PURPLE: Color32 = Color32::from_rgb(80, 60, 255);
 
 pub fn BG(dark: bool) -> Color32 {
     if dark {

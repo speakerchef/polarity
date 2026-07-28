@@ -1,5 +1,5 @@
 use std::{
-    ops::{Add, Sub},
+    ops::Sub,
     time::{Duration, Instant},
 };
 
@@ -162,7 +162,7 @@ pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) 
             if st.bool.rendering {
                 st.player.as_ref().unwrap().pause();
             } else {
-                canvas::draw(ui, st);
+                canvas::draw(ui, st, frame);
             }
         })
         .response;
@@ -180,8 +180,8 @@ pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) 
 }
 
 fn show_window_drag_tooltip_modal(st: &mut AppState, ui: &mut egui::Ui) {
-    if st.window_drag_tooltip_modal_deadline.is_none() {
-        st.window_drag_tooltip_modal_deadline = Some(Instant::now());
+    if st.window_drag_tooltip_deadline.is_none() {
+        st.window_drag_tooltip_deadline = Some(Instant::now());
         st.bool.window_drag_tooltip_modal_open = true;
     }
 
@@ -189,7 +189,7 @@ fn show_window_drag_tooltip_modal(st: &mut AppState, ui: &mut egui::Ui) {
         window_drag_tooltip(ui);
     }
 
-    if let Some(start_time) = st.window_drag_tooltip_modal_deadline
+    if let Some(start_time) = st.window_drag_tooltip_deadline
         && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
     {
         st.bool.window_drag_tooltip_modal_open = false;
@@ -206,11 +206,11 @@ fn editor_window_behavior(frame: &eframe::Frame) {
 
 fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
     // remove titlebar and corners
-    frame.winit_window().unwrap().set_decorations(false);
-    frame
-        .winit_window()
-        .unwrap()
-        .set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
+    let Some(win) = frame.winit_window() else {
+        return;
+    };
+    win.set_decorations(false);
+    win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
 
     // allow drag anywhere if any key is down
     if ui.ctx().input(|i| {
@@ -742,29 +742,29 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
 
 pub fn window_drag_tooltip(ui: &mut egui::Ui) {
     egui::Area::new("window drag tooltip".into())
+        .fixed_pos(ui.max_rect().center_top() - vec2(180.0, -30.0))
         .order(egui::Order::Background)
         .show(ui.ctx(), |ui| {
-            let mut resp = ui.allocate_rect(
-                egui::Rect::from_min_size(
-                    ui.content_rect().left_top().add(vec2(48., 14.)),
-                    vec2(360., 30.),
-                ),
-                egui::Sense::click(),
-            );
+            let (rect, mut resp) = ui.allocate_exact_size(vec2(360., 30.), egui::Sense::click());
             resp.interact_rect.set_height(0.0);
             resp.interact_rect.set_width(0.0);
+            ui.painter().rect_filled(rect, SHARP, plt::TEXT);
 
+            let font = FontId {
+                size: plt::font_size::MED,
+                family: egui::FontFamily::Name("inter_regular".into()),
+            };
+
+            let msg = "PRESS AND HOLD ANY KEY TO MOVE THE WINDOW";
+            let (_, th) = get_text_size(ui, msg, font.clone()).into();
             custom_text(
                 ui,
-                "PRESS AND HOLD ANY KEY TO MOVE THE WINDOW",
-                FontId {
-                    size: plt::font_size::META,
-                    family: egui::FontFamily::Name("inter_regular".into()),
-                },
-                pos2(resp.rect.left(), resp.rect.left_center().y - 9.0),
+                msg,
+                font,
+                rect.center() - vec2(0.0, th / 2.0),
                 plt::letter_spacing::BASE,
-                plt::YELLO,
-                Align::LEFT,
+                plt::INK,
+                Align::Center,
             );
         });
 }

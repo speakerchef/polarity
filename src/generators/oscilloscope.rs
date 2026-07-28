@@ -16,16 +16,19 @@ use crate::{
     },
     labeled_enum,
     traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
-    ui::control_panel_widgets::{
-        dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
-        toggle_button_row,
+    ui::{
+        control_panel_widgets::{
+            dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
+            toggle_button_row,
+        },
+        palette as plt,
     },
 };
 
 labeled_enum!(OscilloscopeKind {
+    DelayPlot => "Galactic Orbit",
     Waveform => "Waveform",
     CircularWaveform => "Circular Waveform" ,
-    DelayPlot => "Galactic Orbit",
 }, Waveform);
 impl Labeled for OscilloscopeKind {
     fn text(&self) -> &'static str {
@@ -107,13 +110,7 @@ impl Default for Oscilloscope {
             total_scale: 0.6,
             rot_freq: 0.1,
             pitch: 0.3,
-            //purple aura
-            fs_color: Rgba {
-                r: 80.,
-                g: 60.,
-                b: 255.,
-                a: 255.0,
-            },
+            fs_color: plt::POLARITY_PURPLE.into(),
             filter_params: {
                 FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,

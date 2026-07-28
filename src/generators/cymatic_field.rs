@@ -12,8 +12,11 @@ use crate::{
         stereometer::{FilterMode, ParticleRenderMode},
     },
     traits::{ActiveGenerator, AudioSrc, Generator, ParamAccess},
-    ui::control_panel_widgets::{
-        mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
+    ui::{
+        control_panel_widgets::{
+            mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
+        },
+        palette,
     },
 };
 
@@ -54,7 +57,8 @@ impl Default for CymaticField {
     fn default() -> Self {
         Self {
             // fs_color: Rgba::new(255, 65, 110, 255),
-            fs_color: Rgba::new(190, 155, 215, 255),
+            // fs_color: Rgba::new(190, 155, 215, 255),
+            fs_color: palette::POLARITY_PURPLE.into(),
             efx: PostFx {
                 use_bloom: true,
                 bloom: 0.,
@@ -135,6 +139,11 @@ impl CymaticField {
         let window = s
             .get(start_idx * num_ch..end_idx * num_ch)
             .unwrap_or_default();
+
+        // fft needs at least 8192 else panics
+        if window.len() / num_ch < FftWindow::default().value() {
+            return;
+        }
 
         let buf = window
             .chunks_exact(num_ch)
