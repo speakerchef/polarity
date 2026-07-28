@@ -1,5 +1,6 @@
 use std::{
     ops::Sub,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -12,9 +13,12 @@ use crate::{
         timeline_widgets::border,
     },
 };
-use eframe::egui::{self, Response, pos2};
+use eframe::egui::{self, Order, Response, pos2};
 use eframe::egui::{Align, FontId, Key, Pos2, StrokeKind, Vec2, vec2};
-use egui_winit::winit::dpi::LogicalSize;
+use egui_winit::winit::{
+    dpi::LogicalSize,
+    window::{ResizeDirection, Window},
+};
 
 const MB_H: f32 = 24.0;
 const MB_GAP: f32 = 12.0;
@@ -212,22 +216,79 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
 
     #[cfg(not(target_os = "windows"))]
     win.set_decorations(false);
-
     win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
+
+    resize_border(ui, frame);
 
     // allow drag anywhere if any key is down
     if ui.ctx().input(|i| {
-        (!i.keys_down.is_empty() && !i.key_down(Key::Space))
-            || (i.modifiers.matches_logically(egui::Modifiers::COMMAND)
-                || i.modifiers.matches_logically(egui::Modifiers::SHIFT)
-                || i.modifiers.matches_logically(egui::Modifiers::ALT))
+        (!i.keys_down.is_empty() && !i.key_pressed(Key::Space))
+            || (i.modifiers.any()) && i.pointer.primary_pressed()
     }) {
-        frame
-            .winit_window()
-            .unwrap()
-            .drag_window()
-            .unwrap_or_default();
+        let _ = win.drag_window();
     }
+}
+
+fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) {
+    let Some(win) = frame.winit_window() else {
+        return;
+    };
+
+    let request_resize_in_direction = |dir: ResizeDirection, win: &Arc<Window>| {
+        let _ = win.drag_resize_window(dir);
+    };
+
+    let bound = ui.viewport_rect();
+    let border = 10.0;
+    let length = bound.height().max(bound.width()) - border * 2.0;
+
+    let east = egui::Rect::from_min_size(
+        bound.right_top() - vec2(border, -border),
+        vec2(border, length),
+    );
+    let south = egui::Rect::from_min_size(
+        bound.left_bottom() + vec2(border, -border),
+        vec2(length, border),
+    );
+    let west =
+        egui::Rect::from_min_size(bound.left_top() + vec2(0.0, border), vec2(border, length));
+    let north =
+        egui::Rect::from_min_size(bound.left_top() + vec2(border, 0.0), vec2(length, border));
+
+    modal(ui, Vec2::ZERO, "border", Some(Order::Background), |ui| {
+        let mut e_resp = ui.allocate_rect(east, egui::Sense::drag());
+        let mut s_resp = ui.allocate_rect(south, egui::Sense::drag());
+        let mut w_resp = ui.allocate_rect(west, egui::Sense::drag());
+        let mut n_resp = ui.allocate_rect(north, egui::Sense::drag());
+        ui.painter().rect_filled(e_resp.rect, SHARP, plt::GREEN);
+        ui.painter().rect_filled(s_resp.rect, SHARP, plt::GREEN);
+        ui.painter().rect_filled(w_resp.rect, SHARP, plt::GREEN);
+        ui.painter().rect_filled(n_resp.rect, SHARP, plt::GREEN);
+
+        if e_resp.hovered() || s_resp.hovered() || w_resp.hovered() || n_resp.hovered() {
+            e_resp = e_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
+            s_resp = s_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
+            w_resp = w_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
+            n_resp = n_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
+        }
+
+        ui.input(|i| {
+            if i.pointer.is_decidedly_dragging() {
+                if e_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::East, win);
+                }
+                if s_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::South, win);
+                }
+                if w_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::West, win);
+                }
+                if n_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::North, win);
+                }
+            }
+        });
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -776,12 +837,14 @@ pub fn modal(
     ui: &mut egui::Ui,
     size: Vec2,
     id: &'static str,
+    order: Option<Order>,
     contents: impl FnOnce(&mut egui::Ui),
 ) -> Response {
     egui::Area::new(id.into())
         .fixed_pos(ui.viewport_rect().center() - vec2(size.x / 2.0, size.y / 2.0))
         .movable(false)
-        .order(egui::Order::Foreground)
+        .order(order.unwrap_or(egui::Order::Foreground))
+        .interactable(false)
         .default_size(size)
         .show(ui.ctx(), contents)
         .response

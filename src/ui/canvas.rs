@@ -185,7 +185,7 @@ fn audio_capture_permission_prompt(ui: &mut egui::Ui, st: &mut AppState) {
     let (tw, th) = get_text_size(ui, msg, font.clone()).into();
 
     let size = vec2(600.0, 175.0);
-    modal(ui, size, "Denied permissions modal", |ui| {
+    modal(ui, size, "Denied permissions modal", None, |ui| {
         ui.set_min_size(size);
         let rect = ui
             .allocate_rect(
