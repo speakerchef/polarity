@@ -44,9 +44,9 @@ opt-level = 2
 [profile.release]
 lto = "thin"
 opt-level = 3
-# strip = true
+strip = true
 panic = "abort"
-debug = true
+# debug = true
 
 [package.metadata.packager]
 before-packaging-command = "cargo build --release"

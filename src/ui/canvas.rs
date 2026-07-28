@@ -43,6 +43,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
 
             lock_aspect_ratio(ui, st, frame);
 
+            #[cfg(target_os = "macos")]
             if let Some(win) = frame.winit_window() {
                 if st.bool.fullscreen {
                     win.set_window_level(egui_winit::winit::window::WindowLevel::AlwaysOnTop);
@@ -50,6 +51,7 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
                     win.set_window_level(egui_winit::winit::window::WindowLevel::Normal);
                 }
             }
+
             if st.input_mode == InputMode::Live
                 && st.audio_capture_permission == AudioCapturePermission::Denied
             {
