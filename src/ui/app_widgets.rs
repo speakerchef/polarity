@@ -214,24 +214,21 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
         return;
     };
 
-    #[cfg(not(target_os = "windows"))]
     win.set_decorations(false);
     win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
 
-    resize_border(ui, frame);
+    let border_responses = resize_border(ui, frame);
 
-    // allow drag anywhere if any key is down
-    if ui.ctx().input(|i| {
-        (!i.keys_down.is_empty() && !i.key_pressed(Key::Space))
-            || (i.modifiers.any()) && i.pointer.primary_pressed()
-    }) {
+    let pointer_on_border = border_responses.iter().any(|r| r.contains_pointer());
+    if ui.input(|i| i.pointer.primary_down()) && !pointer_on_border {
         let _ = win.drag_window();
     }
 }
 
-fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) {
+/// For platforms like windows to allow resizing without decorations
+fn resize_border<'a>(ui: &mut egui::Ui, frame: &eframe::Frame) -> Vec<Response> {
     let Some(win) = frame.winit_window() else {
-        return;
+        return Vec::default();
     };
 
     let request_resize_in_direction = |dir: ResizeDirection, win: &Arc<Window>| {
@@ -239,7 +236,8 @@ fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) {
     };
 
     let bound = ui.viewport_rect();
-    let border = 10.0;
+    let border = 5.0;
+    let corner = 10.0;
     let length = bound.height().max(bound.width()) - border * 2.0;
 
     let east = egui::Rect::from_min_size(
@@ -252,24 +250,52 @@ fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) {
     );
     let west =
         egui::Rect::from_min_size(bound.left_top() + vec2(0.0, border), vec2(border, length));
+
     let north =
         egui::Rect::from_min_size(bound.left_top() + vec2(border, 0.0), vec2(length, border));
 
+    let n_east =
+        egui::Rect::from_min_size(bound.right_top() - vec2(corner, 0.0), vec2(corner, corner));
+    let s_east = egui::Rect::from_min_size(
+        bound.right_bottom() - vec2(corner, corner),
+        vec2(corner, corner),
+    );
+    let n_west = egui::Rect::from_min_size(bound.left_top(), vec2(corner, corner));
+    let s_west = egui::Rect::from_min_size(
+        bound.left_bottom() - vec2(0.0, corner),
+        vec2(corner, corner),
+    );
+
+    let mut resp_vec = Vec::<Response>::with_capacity(8);
     modal(ui, Vec2::ZERO, "border", Some(Order::Background), |ui| {
         let mut e_resp = ui.allocate_rect(east, egui::Sense::drag());
         let mut s_resp = ui.allocate_rect(south, egui::Sense::drag());
         let mut w_resp = ui.allocate_rect(west, egui::Sense::drag());
         let mut n_resp = ui.allocate_rect(north, egui::Sense::drag());
-        ui.painter().rect_filled(e_resp.rect, SHARP, plt::GREEN);
-        ui.painter().rect_filled(s_resp.rect, SHARP, plt::GREEN);
-        ui.painter().rect_filled(w_resp.rect, SHARP, plt::GREEN);
-        ui.painter().rect_filled(n_resp.rect, SHARP, plt::GREEN);
 
-        if e_resp.hovered() || s_resp.hovered() || w_resp.hovered() || n_resp.hovered() {
-            e_resp = e_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
-            s_resp = s_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
-            w_resp = w_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
-            n_resp = n_resp.on_hover_and_drag_cursor(egui::CursorIcon::Grab);
+        let mut ne_resp = ui.allocate_rect(n_east, egui::Sense::drag());
+        let mut se_resp = ui.allocate_rect(s_east, egui::Sense::drag());
+        let mut nw_resp = ui.allocate_rect(n_west, egui::Sense::drag());
+        let mut sw_resp = ui.allocate_rect(s_west, egui::Sense::drag());
+
+        if e_resp.hovered()
+            || s_resp.hovered()
+            || w_resp.hovered()
+            || n_resp.hovered()
+            || ne_resp.hovered()
+            || se_resp.hovered()
+            || nw_resp.hovered()
+            || sw_resp.hovered()
+        {
+            e_resp = e_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeEast);
+            s_resp = s_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouth);
+            w_resp = w_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeWest);
+            n_resp = n_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorth);
+
+            ne_resp = ne_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorthEast);
+            se_resp = se_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouthEast);
+            nw_resp = nw_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorthWest);
+            sw_resp = sw_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouthWest);
         }
 
         ui.input(|i| {
@@ -286,9 +312,27 @@ fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) {
                 if n_resp.dragged() {
                     request_resize_in_direction(ResizeDirection::North, win);
                 }
+                if ne_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::NorthEast, win);
+                }
+                if se_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::SouthEast, win);
+                }
+                if nw_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::NorthWest, win);
+                }
+                if sw_resp.dragged() {
+                    request_resize_in_direction(ResizeDirection::SouthWest, win);
+                }
             }
         });
+
+        resp_vec.extend([
+            e_resp, s_resp, w_resp, n_resp, ne_resp, se_resp, nw_resp, sw_resp,
+        ]);
     });
+
+    resp_vec
 }
 
 #[allow(clippy::too_many_arguments)]
