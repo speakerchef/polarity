@@ -20,7 +20,7 @@ pub fn BG_DARK(_dark: bool) -> Color32 {
     Color32::from_rgb(0x0a, 0x0a, 0x0a)
 }
 
-pub fn VOID(_dark: bool) -> Color32 {
+pub fn VOID() -> Color32 {
     Color32::from_rgb(0x00, 0x00, 0x00)
 }
 

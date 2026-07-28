@@ -15,7 +15,7 @@ use crate::{
         stereometer::{FilterMode, ParticleRenderMode},
     },
     labeled_enum,
-    traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess},
+    traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
     ui::control_panel_widgets::{
         dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
         toggle_button_row,
@@ -167,7 +167,7 @@ impl Oscilloscope {
         &self,
         start_idx: &mut usize,
         end_idx: &mut usize,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         num_ch: usize,
     ) {
         const MAX_TIMEOUT_SAMPLES: usize = 4096;
@@ -267,7 +267,7 @@ impl Oscilloscope {
     pub fn draw(
         &mut self,
         f: &mut FilterBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         let sr = input.sample_rate() as f32;
@@ -316,88 +316,89 @@ impl Oscilloscope {
 
         let mut angle: f32 = 0.0;
         let angular_increment = TAU / live_window.len() as f32;
-        let pos_buf: Vec<Pos2> = live_window
-            .chunks_exact(num_ch)
-            .enumerate()
-            .flat_map(|(i, frame)| {
-                let l = frame[0];
-                let delay_amt = self.delay_samples as usize;
-                let d_idx = start_idx + i;
+        let delay_amt = self.delay_samples as usize;
+        let time_position = input.position().as_secs_f32();
 
-                let (dl, dr) =
-                    if d_idx + delay_amt >= gap * num_ch || d_idx + delay_amt * 2 >= gap * num_ch {
-                        /* Reflect delay to maintain more clarity */
-                        (
-                            d_idx.saturating_sub(delay_amt * 2),
-                            d_idx.saturating_sub(delay_amt),
-                        )
-                    } else {
-                        (d_idx + delay_amt, d_idx + delay_amt * 2)
-                    };
+        let mut pos_buf: Vec<Pos2> = Vec::with_capacity(live_window.len() / num_ch);
+        for (i, frame) in live_window.chunks_exact(num_ch).enumerate() {
+            let l = frame[0];
+            let d_idx = start_idx + i;
 
-                let delay_l = get_audio_frame(s, dl, num_ch).0;
-                let delay_r = get_audio_frame(s, dr, num_ch).1;
-
-                if self.lpf.is_none() || self.last_freq != self.filter_params.filter_freq {
-                    let fp = self.filter_params;
-                    self.lpf = Some(StereoFilter::from_coeffs_butterworth(
-                        Type::LowPass,
-                        fp.filter_freq,
-                        sr as u32,
-                    ));
-                    self.last_freq = fp.filter_freq;
-                }
-                let fil2 = self.lpf.as_mut().expect("safe");
-
-                let ((l, _), (delay_l, delay_r)) = if self.low_end_focus {
+            let (dl, dr) =
+                if d_idx + delay_amt >= gap * num_ch || d_idx + delay_amt * 2 >= gap * num_ch {
+                    /* Reflect delay to maintain more clarity */
                     (
-                        fil2.run(l, delay_r),
-                        self.filter_samples(f, delay_l, delay_r),
+                        d_idx.saturating_sub(delay_amt * 2),
+                        d_idx.saturating_sub(delay_amt),
                     )
                 } else {
-                    ((l, 0_f32), (delay_l, delay_r))
+                    (d_idx + delay_amt, d_idx + delay_amt * 2)
                 };
 
-                let cur_sample = l * if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
-                    self.max_height
-                } else {
-                    1.0
-                };
+            let delay_l = get_audio_frame(s, dl, num_ch).0;
+            let delay_r = get_audio_frame(s, dr, num_ch).1;
 
-                let mut pos: Vec<Pos2> = Vec::new();
-                let cur_pos = self.get_position_from_kind(
-                    x,
-                    cur_sample,
-                    (delay_l, delay_r),
-                    &mut angle,
-                    angular_increment,
-                    // (start_idx as f32 / pl.contents.samples.len() as f32)
-                    //     * pl.contents.duration.as_secs_f32(),
-                    input.position().as_secs_f32(),
-                );
-                pos.push(cur_pos);
+            self.init_or_update_filters(sr as u32);
+            let local_filter = self.lpf.as_mut().expect("safe");
 
-                let diff = cur_pos - last_pos;
-                let dist = dist(diff);
-                let dir = diff / dist;
-                let mut intervals = (dist / self.point_size).floor() as usize;
+            let ((l, _), (delay_l, delay_r)) = if self.low_end_focus {
+                (
+                    local_filter.run(l, delay_r),
+                    self.filter_samples(f, delay_l, delay_r),
+                )
+            } else {
+                ((l, 0_f32), (delay_l, delay_r))
+            };
 
-                if self.continuous && last_pos != pos2(0.0, 0.0) {
-                    while intervals > 0 {
-                        pos.push(last_pos + dir * self.point_size);
-                        last_pos += dir * self.point_size;
-                        intervals -= 1;
-                    }
+            let cur_sample = l * if !matches!(self.kind, OscilloscopeKind::DelayPlot) {
+                self.max_height
+            } else {
+                1.0
+            };
+
+            let cur_pos = self.get_position_from_kind(
+                x,
+                cur_sample,
+                (delay_l, delay_r),
+                &mut angle,
+                angular_increment,
+                time_position,
+            );
+
+            let diff = cur_pos - last_pos;
+            let dist = dist(diff).max(f32::EPSILON);
+            let dir = diff / dist;
+            let mut intervals = (dist / self.point_size).floor() as usize;
+
+            if self.continuous && last_pos != pos2(0.0, 0.0) {
+                pos_buf.reserve(intervals);
+                while intervals > 0 {
+                    pos_buf.push(last_pos + dir * self.point_size);
+                    last_pos += dir * self.point_size;
+                    intervals -= 1;
                 }
+            }
 
-                x += 2.0 / live_window.len() as f32 * 2.0;
-                last_pos = *pos.last().unwrap_or(&cur_pos);
+            x += 2.0 / live_window.len() as f32 * 2.0;
+            last_pos = *pos_buf.last().unwrap_or(&cur_pos);
 
-                pos
-            })
-            .collect();
+            pos_buf.push(cur_pos);
+        }
 
-        self.live_buffer = positional_interp_upsampling(self.upsample_factor, &pos_buf);
+        let us_factor = self.upsample_factor.max(1.0) as usize;
+        positional_interp_upsampling(&pos_buf, &mut self.live_buffer, us_factor);
+    }
+
+    fn init_or_update_filters(&mut self, sr: u32) {
+        if self.lpf.is_none() || self.last_freq != self.filter_params.filter_freq {
+            let fp = self.filter_params;
+            self.lpf = Some(StereoFilter::from_coeffs_butterworth(
+                Type::LowPass,
+                fp.filter_freq,
+                sr,
+            ));
+            self.last_freq = fp.filter_freq;
+        }
     }
 }
 
@@ -407,7 +408,7 @@ impl Generator for Oscilloscope {
         &mut self,
         f: &mut FilterBank,
         _env: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         self.draw(f, input, export_sample_idx);

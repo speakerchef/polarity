@@ -397,7 +397,7 @@ pub fn popup_item(
     let (bg, fg) = if resp.hovered() {
         (plt::YELLO, plt::INK)
     } else {
-        (plt::VOID(ui.style().visuals.dark_mode), plt::BRIGHT)
+        (plt::VOID(), plt::BRIGHT)
     };
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
@@ -773,8 +773,7 @@ pub fn dropdown_menu<T: Labeled + Default>(
         width: 1.0,
         color: bc,
     };
-    ui.painter()
-        .rect_filled(inner, SHARP, plt::VOID(ui.visuals().dark_mode));
+    ui.painter().rect_filled(inner, SHARP, plt::VOID());
     ui.painter()
         .rect_stroke(inner, SHARP, border, egui::StrokeKind::Middle);
 
@@ -858,17 +857,14 @@ pub fn dropdown_menu<T: Labeled + Default>(
 }
 
 fn slider(ui: &mut egui::Ui, value: &mut f32, min: f32, max: f32, width: f32) {
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 5.0), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 10.0), Sense::click_and_drag());
     if let Some(p) = resp.interact_pointer_pos() {
         let t = ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
         *value = min + t * (max - min);
     }
     let t = ((*value - min) / (max - min)).clamp(0.0, 1.0);
-    ui.painter().rect_filled(
-        rect,
-        CornerRadius::from(2),
-        plt::VOID(ui.style().visuals.dark_mode),
-    );
+    ui.painter()
+        .rect_filled(rect, CornerRadius::from(2), plt::VOID());
     ui.painter().rect_stroke(
         rect,
         CornerRadius::from(2),
@@ -896,8 +892,7 @@ fn value_box(
     width: f32,
 ) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, plt::height::INNER), Sense::hover());
-    ui.painter()
-        .rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    ui.painter().rect_filled(rect, SHARP, plt::VOID());
     ui.painter().rect_stroke(
         rect,
         SHARP,

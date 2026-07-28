@@ -70,8 +70,7 @@ pub fn transport_button(ui: &mut egui::Ui, icon: &str, c: Color32, big: bool) ->
 pub fn timecode(ui: &mut egui::Ui, elapsed: &Duration, dur: &Duration, h: f32) {
     let w = 96.0;
     let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::click());
-    ui.painter()
-        .rect_filled(rect, SHARP, plt::VOID(ui.style().visuals.dark_mode));
+    ui.painter().rect_filled(rect, SHARP, plt::VOID());
     apply_side_border(ui, rect, false);
     let font = FontId {
         size: plt::font_size::BODY,
@@ -154,7 +153,7 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
     let (bg, fg) = if matches!(mode, PlaybackMode::Loop) {
         (plt::YELLO, plt::INK)
     } else {
-        (plt::VOID(ui.style().visuals.dark_mode), plt::BRIGHT)
+        (plt::VOID(), plt::BRIGHT)
     };
     let bg = if resp.hovered() {
         if bg == plt::YELLO {
@@ -202,85 +201,72 @@ pub fn loop_button(ui: &mut egui::Ui, mode: &mut PlaybackMode, h: f32) {
 }
 
 pub fn render_waveform(ui: &mut egui::Ui, p: &AudioPlayer, rect: &egui::Rect) {
-    let (left_channel, right_channel) = p
-        .contents
-        .samples
-        .chunks_exact(2)
-        .map(|frame| {
-            let l = frame.first().unwrap();
-            let r = frame.last().unwrap_or(l);
-            (l, r)
-        })
-        .collect::<(Vec<f32>, Vec<f32>)>();
-
     let avail_w = rect.width() * 6.0;
     let avail_h = rect.height() - 1.0;
-    let step: usize = (left_channel.len() as f32 / avail_w) as usize;
-    let mut prev_left_top = pos2(0.0, 0.0);
+
+    let s = p.contents.samples.as_ref();
+    let num_ch = p.contents.num_channels as usize;
+
+    let step: usize = ((s.len() / num_ch) as f32 / avail_w) as usize;
+    let mut prev_left_top_l = pos2(0.0, 0.0);
+    let mut prev_left_top_r = pos2(0.0, 0.0);
+
     (0..avail_w as usize).for_each(|i| {
-        let slice = &left_channel[i * step..i * step + step];
-        let max = slice
+        let idx = i * num_ch;
+        let left_slice = s.get(idx * step..idx * step + step).unwrap_or_default();
+        let right_slice = s
+            .get((idx + 1) * step..(idx + 1) * step + step)
+            .unwrap_or_default();
+        let left_max = left_slice
             .iter()
-            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
-        let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG(ui.style().visuals.dark_mode);
-        let mut inner = ui.allocate_rect(
-            egui::Rect::from_min_size(
-                pos2(
-                    rect.left_top().x + i as f32 / 6.0,
-                    rect.left_center().y - 0.25,
-                ),
-                vec2(0.3, h.abs()),
-            ),
-            egui::Sense::hover(),
-        );
-        // remove interaction
-        inner.interact_rect.set_width(0.0);
-        inner.interact_rect.set_height(0.0);
-
-        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
-        ui.painter().line_segment(
-            [prev_left_top, inner.rect.left_bottom()],
-            Stroke {
-                width: 0.3,
-                color: fill_col,
-            },
-        );
-        prev_left_top = inner.rect.left_bottom();
-    });
-
-    let step: usize = (right_channel.len() as f32 / avail_w) as usize;
-    let mut prev_left_top = pos2(0.0, 0.0);
-    (0..avail_w as usize).for_each(|i| {
-        let slice = &right_channel[i * step..i * step + step];
-        let max = slice
+            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max })
+            .min(1.0);
+        let right_max = right_slice
             .iter()
-            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max });
-        let h = max * (avail_h / 2.0);
-        let fill_col = plt::WAVEFORM_BG(ui.style().visuals.dark_mode);
-        let mut inner = ui.allocate_rect(
-            egui::Rect::from_min_size(
-                pos2(
-                    rect.left_top().x + i as f32 / 6.0,
-                    rect.left_center().y - h.abs(),
-                ),
-                vec2(0.3, h.abs()),
-            ),
-            egui::Sense::hover(),
-        );
-        // remove interaction
-        inner.interact_rect.set_width(0.0);
-        inner.interact_rect.set_height(0.0);
+            .fold(0.0, |max, &v| if v.abs() >= max { v.abs() } else { max })
+            .min(1.0);
+        let hl = left_max * (avail_h / 2.0);
+        let hr = right_max * (avail_h / 2.0);
 
-        ui.painter().rect_filled(inner.rect, SHARP, fill_col);
-        ui.painter().line_segment(
-            [prev_left_top, inner.rect.left_top()],
-            Stroke {
-                width: 0.3,
-                color: fill_col,
-            },
-        );
-        prev_left_top = inner.rect.left_top();
+        let fill_col = plt::WAVEFORM_BG(ui.style().visuals.dark_mode);
+        let left_rect = ui
+            .allocate_rect(
+                egui::Rect::from_min_size(
+                    pos2(
+                        rect.left_top().x + i as f32 / 6.0,
+                        rect.left_center().y - 0.25,
+                    ),
+                    vec2(0.3, hl.abs()),
+                ),
+                egui::Sense::hover(),
+            )
+            .rect;
+        let right_rect = ui
+            .allocate_rect(
+                egui::Rect::from_min_size(
+                    pos2(
+                        rect.left_top().x + i as f32 / 6.0,
+                        rect.left_center().y - hr.abs(),
+                    ),
+                    vec2(0.3, hr.abs()),
+                ),
+                egui::Sense::hover(),
+            )
+            .rect;
+
+        ui.painter().rect_filled(left_rect, SHARP, fill_col);
+        ui.painter().rect_filled(right_rect, SHARP, fill_col);
+
+        let stroke = Stroke {
+            width: 0.3,
+            color: fill_col,
+        };
+        ui.painter()
+            .line_segment([prev_left_top_l, left_rect.left_bottom()], stroke);
+        ui.painter()
+            .line_segment([prev_left_top_r, right_rect.left_top()], stroke);
+        prev_left_top_l = left_rect.left_bottom();
+        prev_left_top_r = right_rect.left_top();
     });
 }
 

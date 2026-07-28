@@ -87,6 +87,17 @@ fn input_mode_options(ui: &mut egui::Ui, st: &mut AppState) {
             false,
         );
     }
+    slider_row(ui, "GAIN (dB)", &mut st.gain_db, -30.0, 6.0, 1, false);
+    toggle_button_row(ui, "INPUT METER", &mut st.bool.show_level_meter, false);
+    if st.bool.show_level_meter {
+        toggle_button_row(ui, "METER GRADIENT", &mut st.bool.use_meter_gradient, false);
+        if !st.bool.use_meter_gradient {
+            static_label(ui, "METER COLOR");
+            slider_row(ui, "RED", &mut st.meter_color.r, 0.0, 255.0, 0, false);
+            slider_row(ui, "GREEN", &mut st.meter_color.g, 0.0, 255.0, 0, false);
+            slider_row(ui, "BLUE", &mut st.meter_color.b, 0.0, 255.0, 0, false);
+        }
+    }
 }
 
 fn generator_options(ui: &mut egui::Ui, st: &mut AppState) {

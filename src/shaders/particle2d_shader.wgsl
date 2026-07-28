@@ -1,6 +1,7 @@
 struct Vertex {
     @location(0) color: vec4<f32>,
     @location(1) local_pos: vec2<f32>,
+    @location(2) aa: u32,
     @builtin(position) position: vec4<f32>,
 };
 
@@ -44,7 +45,8 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> Vertex {
     let quad_pos = array(vec2f(ps, ps), vec2f(-ps, -ps), vec2f(-ps, ps), vec2f(ps, -ps), vec2f(ps, ps), vec2f(-ps, -ps));
     let particle_id = v_idx / 6;
     let corner = v_idx % 6;
-    let pos = sample_positions[particle_id] + quad_pos[corner];
+    var pos = sample_positions[particle_id] + quad_pos[corner];
+
     vertex.position = vec4f(pos, 0.0, 1.0);
     vertex.local_pos = quad_local_pos(corner);
 
@@ -75,6 +77,7 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> Vertex {
             vertex.color = vec4<f32>(params.fs_color.rgb, alphas[particle_id - params.live_buffer_len]);
         }
     }
+    vertex.aa = 1;
     return vertex;
 }
 
@@ -83,7 +86,7 @@ fn fs_main(v: Vertex) -> @location(0) vec4<f32> {
     let len = length(v.local_pos);
     var col = v.color;
 
-    if len > 1.0 {
+    if v.aa != 0 && len > 1.0 {
         discard;
     }
 

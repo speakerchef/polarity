@@ -2,6 +2,8 @@
 use biquad::*;
 use std::{fs, io::Read, path::PathBuf};
 
+use crate::state::AppState;
+
 pub mod audio_inputs;
 
 fn file_as_raw_bytes(path: PathBuf) -> Vec<u8> {
@@ -42,4 +44,14 @@ impl StereoFilter {
     pub fn run(&mut self, l: f32, r: f32) -> (f32, f32) {
         (self.l.run(l), self.r.run(r))
     }
+}
+
+pub fn level_meter(st: &mut AppState, export_sample_idx: Option<usize>) -> (f32, f32) {
+    let Some(ai) = st.active_input() else {
+        return (-1.0, -1.0);
+    };
+    let level = ai.peak_level(export_sample_idx);
+    let level = (level.0.powf(0.6), level.1.powf(0.6));
+
+    (-1.0 + level.0 * 2.0, -1.0 + level.1 * 2.0)
 }

@@ -2,31 +2,33 @@
 use std::ops::Div;
 use std::time::{Duration, Instant};
 
+use crate::audio::level_meter;
 use crate::ui::app_widgets::{modal, modal_button};
 use crate::ui::{get_text_size, palette as plt};
-use eframe::egui::{self, Pos2, Rect, Vec2};
+use eframe::egui::{self, Pos2, Rect, Stroke, Vec2};
 use eframe::egui::{Align, Color32, FontId, StrokeKind, pos2, vec2};
 use eframe::egui_wgpu;
 
 use crate::AudioCapturePermission;
 use crate::audio::audio_inputs::LiveInput;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
-use crate::generators::rendering::{EffectsCallback, OutputCallback, RendererCallback};
+use crate::generators::rendering::{EffectsCallback, MeterData, OutputCallback, RendererCallback};
 use crate::state::InputMode;
-use crate::traits::{AudioProperties, Generator};
+use crate::traits::{AudioSrc, Generator};
 use crate::ui::{SHARP, canvas_widgets::fullscreen_button, timeline_widgets::border};
 use crate::{audio::audio_inputs::AudioPlayer, state::AppState};
 
 use crate::ui::{custom_text, palette};
 
 const MAX_VIGNETTE: f32 = 0.5;
+const METER_WIDTH: f32 = 10.0;
 
 pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
     ui.ctx().request_repaint();
     egui::CentralPanel::default()
         .frame(
             egui::Frame::new()
-                .fill(palette::VOID(ui.style().visuals.dark_mode))
+                .fill(palette::VOID())
                 .inner_margin(0.0)
                 .outer_margin(0.0),
         )
@@ -77,7 +79,8 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                     #[cfg(target_os = "macos")]{
                         use crate::open_macos_privacy_settings;
 
-                        modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
+                        modal_button(ui, rect.center_bottom() - vec2(button_size.x / 2.0, button_size.y * 1.75),
+                            button_size, "Open Settings", plt::font_size::MED, plt::YELLO,
                             &mut st.bool.open_macos_privacy_settings, false);
 
                         if st.bool.open_macos_privacy_settings {
@@ -88,7 +91,9 @@ pub fn draw(ui: &mut egui::Ui, st: &mut AppState) {
                 });
 
             } else {
+                // let avail_h = ui.available_height() - 2.0;
                 custom_painting(ui, st);
+                // level_meter(ui, st, ui.max_rect().right_top() - vec2(METER_WIDTH + 1.0, -1.0), avail_h, 1);
             }
         });
 }
@@ -115,7 +120,7 @@ pub const fn generate_particle_grid() -> [[f32; 8]; (NUM_PARTICLES * NUM_PARTICL
 
 fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
     let (h, w) = (ui.available_height(), ui.available_width());
-    let l = h.min(w);
+    let l = (h).min(w);
     let canvas_size = vec2(l, l);
 
     let center = ui.max_rect().center();
@@ -127,12 +132,19 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
         )
         .rect;
 
-    ui.painter()
-        .rect_filled(rect, egui::CornerRadius::ZERO, Color32::BLACK);
+    ui.painter().rect_stroke(
+        rect,
+        SHARP,
+        Stroke {
+            width: 0.5,
+            color: plt::GRAY,
+        },
+        StrokeKind::Outside,
+    );
 
     let live_input = std::mem::take(&mut st.live_input);
     let player = st.player.take();
-    let active_input: &dyn AudioProperties = {
+    let active_input: &dyn AudioSrc = {
         match st.input_mode {
             InputMode::Live => &live_input,
             InputMode::File => {
@@ -160,7 +172,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
     st.replace_inputs(player, live_input);
 
     let renderer_params = st.build_renderer_callback_params(true, 0);
-    let efx_params = st.build_effects_callback_params();
+    let efx_params = st.build_effects_callback_params(None);
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         RendererCallback {

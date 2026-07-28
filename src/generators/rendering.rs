@@ -17,7 +17,21 @@ use crate::{
     generators::stereometer::{MAX_TRACE_POINT_DENSITY, ParticleRenderMode, VERTICES_PER_QUAD},
 };
 
-const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
+// const CANVAS_BG: wgpu::Color = wgpu::Color::BLACK;
+const CANVAS_BG: wgpu::Color = wgpu::Color {
+    r: 0.02,
+    g: 0.03,
+    b: 0.01,
+    a: 1.0,
+};
+#[derive(Default, Clone)]
+pub struct MeterData {
+    pub use_meter: bool,
+    pub level: (f32, f32),
+    pub color: LinearRgba,
+    pub use_gradient: bool,
+    pub compensate_height: bool,
+}
 
 #[derive(Default, Clone)]
 pub struct Particle2DCbParams {
@@ -108,7 +122,7 @@ impl GenCbParams {
         command_encoder: &mut wgpu::CommandEncoder,
         target_texture_view: wgpu::TextureView,
     ) {
-        let stereo_res: &P2DRenderResources = res.get().unwrap();
+        let p2d_res: &P2DRenderResources = res.get().unwrap();
         let fluid_res: &FluidRenderResources = res.get().unwrap();
         let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("src pass"),
@@ -117,7 +131,7 @@ impl GenCbParams {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(CANVAS_BG),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -127,21 +141,19 @@ impl GenCbParams {
             multiview_mask: None,
         });
         match self {
-            GenCbParams::Particle2D(stereo) => {
-                let n = match stereo.render_mode {
+            GenCbParams::Particle2D(p2d) => {
+                let n = match p2d.render_mode {
                     ParticleRenderMode::FullSpectrum => {
-                        (stereo.live_pos.len() + stereo.trace_pos.len()) as u32
+                        (p2d.live_pos.len() + p2d.trace_pos.len()) as u32
                     }
                     ParticleRenderMode::MultiBand => {
-                        let live =
-                            stereo.live_low.len() + stereo.live_mid.len() + stereo.live_high.len();
-                        let trace = stereo.trace_low.len()
-                            + stereo.trace_mid.len()
-                            + stereo.trace_high.len();
+                        let live = p2d.live_low.len() + p2d.live_mid.len() + p2d.live_high.len();
+                        let trace =
+                            p2d.trace_low.len() + p2d.trace_mid.len() + p2d.trace_high.len();
                         (live + trace) as u32
                     }
                 };
-                stereo_res.paint(&mut pass, n);
+                p2d_res.paint(&mut pass, n);
             }
             GenCbParams::Fwave(_) => {
                 fluid_res.paint(&mut pass, (NUM_PARTICLES * NUM_PARTICLES) as u32 * 4);
@@ -167,7 +179,7 @@ impl Textured for SrcRenderResources {
 }
 
 pub struct P2DRenderResources {
-    pub pipeline: wgpu::RenderPipeline,
+    pub src_pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub vertex_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
@@ -266,16 +278,18 @@ impl P2DRenderResources {
     }
 
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
-        render_pass.set_pipeline(&self.pipeline);
+        //main
+        render_pass.set_pipeline(&self.src_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[0]);
         render_pass.draw(0..num_points * VERTICES_PER_QUAD as u32, 0..1);
     }
 }
 pub struct OutputResources {
+    pub output_pipeline: wgpu::RenderPipeline,
+    pub meter_pipeline: wgpu::RenderPipeline,
     pub output_buffer: wgpu::Buffer,
     pub params_buffer: wgpu::Buffer,
     pub target_format: wgpu::TextureFormat,
-    pub pipeline: wgpu::RenderPipeline,
     pub bind_group: Option<wgpu::BindGroup>,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub tex: Option<wgpu::Texture>,
@@ -293,13 +307,45 @@ impl Textured for OutputResources {
     }
 }
 impl OutputResources {
-    fn prepare(&self, queue: &wgpu::Queue, top_left: Pos2) {
+    fn prepare(&self, queue: &wgpu::Queue, top_left: Pos2, meter: &MeterData) {
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&[top_left]));
+        queue.write_buffer(
+            &self.params_buffer,
+            16,
+            bytemuck::cast_slice(&[meter.use_meter as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            32,
+            bytemuck::cast_slice(&[meter.level.0, meter.level.1]),
+        );
+        let mc = meter.color;
+        queue.write_buffer(
+            &self.params_buffer,
+            48,
+            bytemuck::cast_slice(&[mc.r, mc.g, mc.b, mc.a]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            64,
+            bytemuck::cast_slice(&[meter.use_gradient as u32]),
+        );
+        queue.write_buffer(
+            &self.params_buffer,
+            80,
+            bytemuck::cast_slice(&[meter.compensate_height as u32]),
+        );
     }
-    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        render_pass.set_pipeline(&self.pipeline);
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, use_meter: bool) {
+        render_pass.set_pipeline(&self.output_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..6, 0..1);
+
+        if use_meter {
+            render_pass.set_pipeline(&self.meter_pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.draw(0..12, 0..1);
+        }
     }
 }
 
@@ -465,7 +511,7 @@ impl FluidRenderResources {
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>, num_points: u32) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.render_bind_group, &[]);
-        render_pass.draw(0..8 * num_points, 0..1);
+        render_pass.draw(0..6 * num_points, 0..1);
     }
 }
 
@@ -473,6 +519,7 @@ pub struct RendererCallback {
     pub canvas_size: Vec2,
     pub params: GenCbParams,
 }
+
 pub fn run_source_render_pipeline(
     params: &GenCbParams,
     device: &wgpu::Device,
@@ -530,6 +577,12 @@ fn get_texture_view(
             mip_level_count: Some(1),
             ..Default::default()
         })
+}
+
+pub struct SourceRenderData<'a> {
+    cbparams: &'a GenCbParams,
+    meter_pos: &'a Vec<Pos2>,
+    meter_color: LinearRgba,
 }
 
 impl egui_wgpu::CallbackTrait for RendererCallback {
@@ -646,6 +699,8 @@ pub struct EffectsCallback {
     pub chroma_shift: f32,
     pub chroma_blur: f32,
     pub chroma_type: ChromaType,
+
+    pub meter: MeterData,
 }
 
 pub fn run_effects_render_pipeline(
@@ -831,7 +886,11 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
     ) -> Vec<wgpu::CommandBuffer> {
         run_effects_render_pipeline(self, device, queue, command_encoder, resources);
         let out_res = resources.get::<OutputResources>().unwrap();
-        out_res.prepare(queue, self.top_left * screen_descriptor.pixels_per_point);
+        out_res.prepare(
+            queue,
+            self.top_left * screen_descriptor.pixels_per_point,
+            &self.meter,
+        );
         Vec::new()
     }
 
@@ -842,7 +901,7 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         resources: &egui_wgpu::CallbackResources,
     ) {
         let resources: &OutputResources = resources.get().unwrap();
-        resources.paint(render_pass);
+        resources.paint(render_pass, self.meter.use_meter);
     }
 }
 

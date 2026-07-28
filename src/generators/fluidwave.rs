@@ -10,7 +10,7 @@ use crate::{
     },
     labeled_enum,
     state::{AppState, BoolStates, DAMP_FACTOR},
-    traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess},
+    traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
     ui::{
         canvas::NUM_PARTICLES,
         control_panel_widgets::{
@@ -153,7 +153,7 @@ impl Generator for Fluidwave {
         &mut self,
         _f: &mut FilterBank,
         _env: &EnvelopeBank,
-        _input: &dyn AudioProperties,
+        _input: &dyn AudioSrc,
         _export_sample_idx: Option<usize>,
     ) {
     }

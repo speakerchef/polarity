@@ -19,7 +19,9 @@ use rodio::{
 };
 use smart_default::SmartDefault;
 
-use crate::{audio::file_as_raw_bytes, traits::AudioProperties};
+use crate::{audio::file_as_raw_bytes, generators::Envelope, traits::AudioSrc};
+
+pub const REL_MS: f32 = 500.0;
 
 pub struct ArcAudioSource {
     samples: Arc<[f32]>,
@@ -96,9 +98,13 @@ pub struct AudioPlayer {
 
     // internal to keep the sink alive
     _stream: Option<rodio::MixerDeviceSink>,
+
+    // Metering
+    abs_env_l: Envelope,
+    abs_env_r: Envelope,
 }
 
-impl AudioProperties for AudioPlayer {
+impl AudioSrc for AudioPlayer {
     fn is_live(&self) -> bool {
         false
     }
@@ -119,6 +125,21 @@ impl AudioProperties for AudioPlayer {
         self.position()
     }
 
+    fn peak_level(&mut self, export_sample_idx: Option<usize>) -> (f32, f32) {
+        let mut env_l = std::mem::take(&mut self.abs_env_l);
+        let mut env_r = std::mem::take(&mut self.abs_env_r);
+        env_l.run_absolute_follower(self, true, export_sample_idx);
+        env_r.run_absolute_follower(self, false, export_sample_idx);
+        self.abs_env_l = env_l;
+        self.abs_env_r = env_r;
+
+        (self.abs_env_l.abs_envelope(), self.abs_env_r.abs_envelope())
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.sink.as_mut().unwrap().set_volume(volume);
+    }
+
     fn popped_sample_count(&self) -> usize {
         0
     }
@@ -128,13 +149,15 @@ impl AudioProperties for AudioPlayer {
 pub struct LiveInput {
     _stream: Option<cpal::Stream>,
 
-    #[default(48000)]
     sample_rate: u32,
-    #[default(2)]
     num_channels: u16,
+    buffer_size: u32,
 
     /// Receives the audio buffer
     instream_rx: Option<flume::Receiver<Vec<f32>>>,
+
+    // Receives gain values from app
+    gain_tx: Option<flume::Sender<f32>>,
 
     #[default(Instant::now())]
     /// Time when stream started
@@ -142,9 +165,13 @@ pub struct LiveInput {
 
     buffer: VecDeque<f32>,
     popped_samples: usize,
+
+    // metering
+    abs_env_l: Envelope,
+    abs_env_r: Envelope,
 }
 
-impl AudioProperties for LiveInput {
+impl AudioSrc for LiveInput {
     fn is_live(&self) -> bool {
         true
     }
@@ -163,6 +190,25 @@ impl AudioProperties for LiveInput {
 
     fn position(&self) -> Duration {
         Instant::now().saturating_duration_since(self.init_timestamp)
+    }
+
+    fn peak_level(&mut self, export_sample_idx: Option<usize>) -> (f32, f32) {
+        let mut env_l = std::mem::take(&mut self.abs_env_l);
+        let mut env_r = std::mem::take(&mut self.abs_env_r);
+        env_l.run_absolute_follower(self, true, export_sample_idx);
+        env_r.run_absolute_follower(self, false, export_sample_idx);
+        self.abs_env_l = env_l;
+        self.abs_env_r = env_r;
+
+        (self.abs_env_l.abs_envelope(), self.abs_env_r.abs_envelope())
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.gain_tx
+            .as_ref()
+            .unwrap()
+            .try_send(volume)
+            .unwrap_or_default()
     }
 
     fn popped_sample_count(&self) -> usize {
@@ -215,10 +261,15 @@ impl AudioPlayer {
             sink.pause();
         }
 
+        let abs_env_l = Envelope::new(0.0, REL_MS, 1.0, contents.sample_rate);
+        let abs_env_r = Envelope::new(0.0, REL_MS, 1.0, contents.sample_rate);
+
         Ok(Self {
             contents,
             sink: Some(sink),
             _stream: Some(stream),
+            abs_env_l,
+            abs_env_r,
         })
     }
     pub fn play(&self) {
@@ -273,7 +324,6 @@ impl LiveInput {
         println!("Selected device: {}", dev.description().unwrap());
 
         let default_config = dev.default_output_config()?;
-        let sample_format = default_config.sample_format();
         let mut config = default_config.config();
         self.sample_rate = config.sample_rate;
         self.num_channels = config.channels;
@@ -285,25 +335,28 @@ impl LiveInput {
                 buffer_size
             }
         };
+        self.buffer_size = buf_size;
 
         let (audio_tx, audio_rx) = flume::bounded((self.sample_rate / buf_size) as usize);
-        let stream = dev.build_input_stream_raw(
+        let (gain_tx, gain_rx) = flume::bounded::<f32>(1);
+        let stream = dev.build_input_stream(
             &config,
-            sample_format,
-            move |data: &cpal::Data, _| {
-                let data = data
-                    .as_slice()
-                    .iter()
-                    .flat_map(|d: &&[f32]| d.iter().copied())
-                    .collect::<Vec<f32>>();
-                audio_tx.try_send(data.to_vec()).unwrap_or_default();
+            move |data: &[f32], _| {
+                let gain = gain_rx.try_recv().unwrap_or_default().max(0.0);
+                audio_tx
+                    .try_send(data.iter().map(|s| *s * gain).collect())
+                    .unwrap_or_default();
             },
             move |e| println!("{e}"),
             None,
         )?;
         stream.play()?;
         self.instream_rx = Some(audio_rx);
+        self.gain_tx = Some(gain_tx);
         self._stream = Some(stream);
+
+        self.abs_env_r = Envelope::new(0.0, REL_MS, 1.0, self.sample_rate);
+        self.abs_env_l = Envelope::new(0.0, REL_MS, 1.0, self.sample_rate);
 
         Ok(dev)
     }

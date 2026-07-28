@@ -17,7 +17,7 @@ pub trait Generator {
         &mut self,
         filterbank: &mut FilterBank,
         env_bank: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     );
     fn get_gen_callback_params(&mut self, st: &AppState, live: bool, fps: usize) -> GenCbParams;
@@ -26,12 +26,15 @@ pub trait Generator {
     fn draw_color_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
     fn draw_visual_menu(&mut self, ui: &mut egui::Ui, open: &mut BoolStates) {}
 }
-pub trait AudioProperties {
+pub trait AudioSrc {
     fn is_live(&self) -> bool;
     fn sample_rate(&self) -> u32;
     fn num_channels(&self) -> u16;
     fn audio_buffer(&self) -> &[f32];
     fn position(&self) -> Duration;
+    fn peak_level(&mut self, export_sample_idx: Option<usize>) -> (f32, f32);
+
+    fn set_volume(&mut self, volume: f32);
 
     /// Number of samples removed from the circular buffer per frame
     fn popped_sample_count(&self) -> usize;

@@ -11,7 +11,7 @@ use crate::{
         rendering::{GenCbParams, Particle2DCbParams},
         stereometer::{FilterMode, ParticleRenderMode},
     },
-    traits::{ActiveGenerator, AudioProperties, Generator, ParamAccess},
+    traits::{ActiveGenerator, AudioSrc, Generator, ParamAccess},
     ui::control_panel_widgets::{
         mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
     },
@@ -106,7 +106,7 @@ impl CymaticField {
         &mut self,
         f: &mut FilterBank,
         env: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         let num_ch = input.num_channels() as usize;
@@ -240,7 +240,7 @@ impl Generator for CymaticField {
         &mut self,
         f: &mut super::FilterBank,
         env: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         self.draw(f, env, input, export_sample_idx);

@@ -42,8 +42,9 @@ fn build_particle2d_render_resources(
 
     let num_params = 11;
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("stereometer"),
+        label: Some("particle 2d"),
         entries: &[
+            // sample positions
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -64,6 +65,7 @@ fn build_particle2d_render_resources(
                 },
                 count: None,
             },
+            // alphas
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -78,17 +80,17 @@ fn build_particle2d_render_resources(
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("stereometer"),
+        label: Some("particle 2d"),
         bind_group_layouts: &[Some(&bind_group_layout)],
         immediate_size: 0,
     });
 
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("stereometer"),
+    let src_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("particle 2d"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: None,
+            entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
@@ -131,7 +133,7 @@ fn build_particle2d_render_resources(
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("stereometer"),
+        label: Some("particle 2d"),
         layout: &bind_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -149,7 +151,7 @@ fn build_particle2d_render_resources(
         ],
     });
     P2DRenderResources {
-        pipeline,
+        src_pipeline,
         bind_group,
         vertex_buffer,
         params_buffer,
@@ -351,6 +353,7 @@ fn build_output_render_resources(
         source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output_shader.wgsl").into()),
     });
 
+    let num_params = 6;
     let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("output"),
         entries: &[
@@ -372,11 +375,11 @@ fn build_output_render_resources(
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(16),
+                    min_binding_size: NonZeroU64::new(16 * num_params),
                 },
                 count: None,
             },
@@ -389,12 +392,37 @@ fn build_output_render_resources(
         immediate_size: 0,
     });
 
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("output"),
+    let out_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("output pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: None,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let meter_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("meter pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("render_meter"),
             buffers: &[],
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
@@ -424,7 +452,7 @@ fn build_output_render_resources(
     });
     let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform buffer"),
-        size: 16, // 16 bytes aligned
+        size: 16 * num_params, // 16 bytes aligned
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         mapped_at_creation: false,
     });
@@ -439,7 +467,8 @@ fn build_output_render_resources(
         mapped_at_creation: false,
     });
     OutputResources {
-        pipeline,
+        output_pipeline: out_pipe,
+        meter_pipeline: meter_pipe,
         tex: None,
         sampler,
         bind_group: None,

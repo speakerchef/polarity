@@ -102,7 +102,7 @@ pub fn apply_theme(ctx: &egui::Context, dark: bool) {
 
     v.panel_fill = p::BG(dark);
     v.window_fill = p::BG_DARK(dark);
-    v.extreme_bg_color = p::VOID(dark);
+    v.extreme_bg_color = p::VOID();
     v.faint_bg_color = p::SURFACE(dark);
     v.override_text_color = Some(p::BRIGHT);
     v.window_stroke = bdr;
@@ -124,7 +124,7 @@ pub fn apply_theme(ctx: &egui::Context, dark: bool) {
     }
     v.widgets.noninteractive.bg_fill = p::BG(dark);
     v.widgets.inactive.bg_fill = p::SURFACE(dark);
-    v.widgets.inactive.weak_bg_fill = p::VOID(dark);
+    v.widgets.inactive.weak_bg_fill = p::VOID();
     v.widgets.hovered.bg_fill = p::SURFACE_HOVER(dark);
     v.widgets.hovered.weak_bg_fill = p::SURFACE_HOVER(dark);
 

@@ -13,6 +13,7 @@ use crate::generators::{
     GenKind, cymatic_field::CymaticField, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
 };
 pub use app::PolarityApp;
+use eframe::egui::Color32;
 
 use crate::generators::{fluidwave::Fluidwave, stereometer::Stereometer};
 
@@ -38,10 +39,11 @@ unsafe extern "C" {
     fn polarity_audio_capture_permission() -> i32;
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum AudioCapturePermission {
     Granted,
     Denied,
+    #[default]
     Unknown,
 }
 
@@ -92,6 +94,13 @@ impl From<Rgba> for LinearRgba {
             b: value.b / u8::MAX as f32,
             a: value.a / u8::MAX as f32,
         }
+    }
+}
+
+impl From<Color32> for LinearRgba {
+    fn from(value: Color32) -> Self {
+        let (r, g, b, a) = value.to_tuple();
+        Self::from_u8rgb(r, g, b, a)
     }
 }
 
@@ -161,6 +170,13 @@ impl Rgba {
     pub fn normalized(&self) -> (f32, f32, f32, f32) {
         let max = u8::MAX as f32;
         (self.r / max, self.g / max, self.b / max, self.a / max)
+    }
+}
+
+impl From<Color32> for Rgba {
+    fn from(value: Color32) -> Self {
+        let (r, g, b, a) = value.to_tuple();
+        Self::new(r, g, b, a)
     }
 }
 

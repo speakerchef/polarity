@@ -38,6 +38,7 @@ impl eframe::App for PolarityApp {
         self.handle_live_audio_stream();
         self.handle_audio_import();
         self.handle_playback(ctx);
+        self.st.set_gain();
         self.st.update_filters();
         self.st.update_envelopes();
         self.handle_preset_state();

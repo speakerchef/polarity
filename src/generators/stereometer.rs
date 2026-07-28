@@ -5,7 +5,7 @@ use crate::generators::{
     radial_scale,
 };
 use crate::state::{AppState, BoolStates};
-use crate::traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess};
+use crate::traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess};
 use crate::ui::control_panel_widgets::{
     dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
 };
@@ -214,7 +214,7 @@ impl Stereometer {
     pub fn draw(
         &mut self,
         f: &mut FilterBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         let num_ch = input.num_channels() as usize;
@@ -428,7 +428,7 @@ impl Generator for Stereometer {
         &mut self,
         f: &mut FilterBank,
         _env: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         self.draw(f, input, export_sample_idx);

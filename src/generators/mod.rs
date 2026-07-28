@@ -8,7 +8,7 @@ use crate::{
     audio::StereoFilter,
     generators::{fluidwave::ModSrc, stereometer::FilterMode},
     labeled_enum,
-    traits::{AudioProperties, Labeled},
+    traits::{AudioSrc, Labeled},
 };
 
 pub mod cymatic_field;
@@ -127,7 +127,7 @@ pub struct EnvelopeBank {
 }
 
 impl EnvelopeBank {
-    pub fn run_follower(&mut self, i: &dyn AudioProperties, export_sample_idx: Option<usize>) {
+    pub fn run_follower(&mut self, i: &dyn AudioSrc, export_sample_idx: Option<usize>) {
         let (Some(env_a), Some(env_b), Some(env_c), Some(env_d)) = (
             &mut self.env_a,
             &mut self.env_b,
@@ -149,10 +149,10 @@ impl EnvelopeBank {
         };
         match src {
             ModSrc::None => 0.0,
-            ModSrc::EnvA => a.envelope(range),
-            ModSrc::EnvB => b.envelope(range),
-            ModSrc::EnvC => c.envelope(range),
-            ModSrc::EnvD => d.envelope(range),
+            ModSrc::EnvA => a.generator_envelope(range),
+            ModSrc::EnvB => b.generator_envelope(range),
+            ModSrc::EnvC => c.generator_envelope(range),
+            ModSrc::EnvD => d.generator_envelope(range),
         }
     }
     pub fn get_envelope(&self, src: ModSrc) -> Option<&Envelope> {
@@ -189,20 +189,26 @@ pub struct PostFx {
     pub chroma_type: ChromaType,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Envelope {
     pub attack: f32,
     pub release: f32,
     pub sensitivity: f32,
 
     #[serde(skip)]
-    pub last_idx: usize,
+    pub det_last_idx: usize,
     #[serde(skip)]
     cur_envelope: f32,
     #[serde(skip)]
     fast_envelope: f32,
     #[serde(skip)]
     slow_envelope: f32,
+
+    #[serde(skip)]
+    abs_last_idx: usize,
+    #[serde(skip)]
+    abs_env: f32,
+
     #[serde(skip)]
     hpf: Option<StereoFilter>,
 }
@@ -214,18 +220,17 @@ impl Envelope {
             attack,
             release,
             sensitivity,
-            last_idx: 0,
-            fast_envelope: 0.0,
-            slow_envelope: 0.0,
-            cur_envelope: 0.0,
             hpf: Some(StereoFilter::from_coeffs_butterworth(
                 Type::HighPass,
                 HP_FREQ,
                 sample_rate,
             )),
+            ..Default::default()
         }
     }
-    pub fn envelope(&self, range: f32) -> f32 {
+
+    /// Used to trigger generator effects
+    pub fn generator_envelope(&self, range: f32) -> f32 {
         let env = self.cur_envelope;
         let s = range / 100.0;
         let compress = |mu: f32| -> f32 { ((1.0 + mu * env).ln() / (1.0 + mu).ln()) * s };
@@ -250,9 +255,15 @@ impl Envelope {
             env * s
         }
     }
+
+    /// Used for metering and such
+    pub fn abs_envelope(&self) -> f32 {
+        self.abs_env
+    }
+
     pub fn run_differential_follower(
         &mut self,
-        i: &dyn AudioProperties,
+        i: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         let num_ch = i.num_channels() as usize;
@@ -260,7 +271,7 @@ impl Envelope {
         let s = i.audio_buffer();
 
         const ENVELOPE_WINDOW: usize = 1024;
-        let mut last_idx = self.last_idx;
+        let mut last_idx = self.det_last_idx;
         let start_idx = export_sample_idx.unwrap_or_else(|| {
             if i.is_live() {
                 (s.len() / num_ch).saturating_sub(ENVELOPE_WINDOW)
@@ -321,31 +332,76 @@ impl Envelope {
             };
         }
         self.cur_envelope = frame_max;
-        self.last_idx = start_idx;
+        self.det_last_idx = start_idx;
+    }
+
+    pub fn run_absolute_follower(
+        &mut self,
+        i: &dyn AudioSrc,
+        left: bool,
+        export_sample_idx: Option<usize>,
+    ) {
+        let num_ch = i.num_channels() as usize;
+        let sample_rate = i.sample_rate() as f32;
+        let s = i.audio_buffer();
+
+        const ENVELOPE_WINDOW: usize = 1024;
+        let mut last_idx = self.abs_last_idx;
+        let start_idx = export_sample_idx.unwrap_or_else(|| {
+            if i.is_live() {
+                (s.len() / num_ch).saturating_sub(ENVELOPE_WINDOW)
+            } else {
+                (i.position().as_secs_f32() * sample_rate) as usize
+            }
+        });
+        let end_idx = if i.is_live() {
+            s.len() / num_ch
+        } else {
+            start_idx
+        };
+        if last_idx > start_idx {
+            last_idx = start_idx;
+        }
+
+        let window = s
+            .get(if i.is_live() { start_idx } else { last_idx } * num_ch..end_idx * num_ch)
+            .unwrap_or_default();
+
+        let rel_s = self.release / 1000.0;
+        let rel_coeff = (-1.0 / (rel_s * sample_rate)).exp();
+
+        let mut level = self.abs_env;
+        window.chunks_exact(num_ch).for_each(|frame| {
+            let (l, r) = (frame[0], *frame.last().unwrap_or(&frame[0]));
+            let src = if left { l.abs() } else { r.abs() };
+            level = src.max(level * rel_coeff + (1.0 - rel_coeff) * src);
+        });
+
+        self.abs_env = level;
+        self.abs_last_idx = start_idx;
     }
 }
 
-fn positional_interp_upsampling(factor: f32, buf: &[Pos2]) -> Vec<Pos2> {
-    let mut prev = buf.first().unwrap_or(&Pos2::ZERO);
-    buf.iter()
-        .flat_map(|pos| {
-            let dx = pos.x - prev.x;
-            let dy = pos.y - prev.y;
-            let ix = dx / factor;
-            let iy = dy / factor;
+fn positional_interp_upsampling(src: &[Pos2], dst: &mut Vec<Pos2>, factor: usize) {
+    let Some(mut prev) = src.first() else {
+        return;
+    };
+    dst.reserve(1 + src.len().saturating_sub(1).saturating_mul(factor));
+    dst.push(*prev);
+    for pos in src {
+        let dx = pos.x - prev.x;
+        let dy = pos.y - prev.y;
+        let ix = dx / factor as f32;
+        let iy = dy / factor as f32;
 
-            let (mut cx, mut cy) = (prev.x, prev.y);
-            let v = (0..factor as usize)
-                .map(|_| {
-                    cx += ix;
-                    cy += iy;
-                    pos2(cx, cy)
-                })
-                .collect::<Vec<Pos2>>();
-            prev = pos;
-            v
-        })
-        .collect()
+        let (mut cx, mut cy) = (prev.x, prev.y);
+        (0..factor).for_each(|_| {
+            cx += ix;
+            cy += iy;
+            dst.push(pos2(cx, cy));
+        });
+        prev = pos;
+    }
 }
 
 #[derive(Copy, Clone)]

@@ -13,7 +13,7 @@ use crate::{
         stereometer::{FilterMode, ParticleRenderMode},
     },
     labeled_enum,
-    traits::{ActiveGenerator, AudioProperties, Generator, Labeled, ParamAccess},
+    traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
     ui::control_panel_widgets::{
         dropdown_row, section_header_submenu, slider_row, static_label, toggle_button_row,
     },
@@ -94,7 +94,7 @@ impl Default for PolarPatterns {
 
             efx: PostFx {
                 use_bloom: true,
-                bloom: 1.,
+                bloom: 1.5,
                 bloom_mod_src: ModSrc::EnvB,
                 bloom_range: 80.0,
                 use_vignette: true,
@@ -119,7 +119,7 @@ impl Default for PolarPatterns {
 }
 
 impl PolarPatterns {
-    fn draw(&mut self, input: &dyn AudioProperties, export_sample_idx: Option<usize>) {
+    fn draw(&mut self, input: &dyn AudioSrc, export_sample_idx: Option<usize>) {
         let num_ch = input.num_channels() as usize;
         let sr = input.sample_rate() as usize;
         let s = input.audio_buffer();
@@ -150,65 +150,69 @@ impl PolarPatterns {
         let n = window.len() / num_ch;
         let polar_speed = self.get_polar_speed(window, num_ch, sr);
         let gap = sr / 32;
-        let buf = (0..n)
-            .map(|i| {
-                let l = window.get(i * num_ch).unwrap_or(&0_f32);
-                let r = window.get(i * num_ch + 1).unwrap_or(&0_f32);
-                let delay = window.get((i + gap) * num_ch + 1).unwrap_or(&0_f32);
-                let time = (start_idx + i) as f32 / sr as f32;
-                let theta = (TAU * polar_speed * time) % TAU;
+        let mut pos_buf: Vec<Pos2> = Vec::with_capacity(n);
+        for i in 0..n {
+            let l = window.get(i * num_ch).unwrap_or(&0_f32);
+            let r = window.get(i * num_ch + 1).unwrap_or(&0_f32);
 
-                let y_sample = if matches!(self.kind, PatternKind::Unipolar) {
-                    l
+            let mut delay_idx = (i + gap) * num_ch + 1;
+            if delay_idx > window.len() {
+                delay_idx = (i - gap) * num_ch + 1;
+            }
+            let delay = window.get(delay_idx).unwrap_or(&0_f32);
+            let time = (start_idx + i) as f32 / sr as f32;
+            let theta = (TAU * polar_speed * time) % TAU;
+
+            let y_sample = if matches!(self.kind, PatternKind::Unipolar) {
+                l
+            } else {
+                r
+            };
+            let limit = (1.0 - y_sample.abs()).max(0.0).powf(2.0);
+            let (x, y, z) = (
+                l * theta.sin(),
+                y_sample * theta.cos(),
+                // ((l - r) * theta.tan()).clamp(-limit, limit),
+                (delay * theta.tan()).clamp(-limit, limit),
+            );
+
+            if self.use_3d {
+                // let pos = start_idx as f32 / s.len() as f32 * input.duration.as_secs_f32();
+                let pos = input.position().as_secs_f32();
+                let angle = if self.use_rotation {
+                    (pos * self.rot_speed * TAU) % TAU
                 } else {
-                    r
+                    self.angle / 360.0 * TAU
                 };
-                let limit = (1.0 - y_sample.abs()).max(0.0).powf(2.0);
-                let (x, y, z) = (
-                    l * theta.sin(),
-                    y_sample * theta.cos(),
-                    // ((l - r) * theta.tan()).clamp(-limit, limit),
-                    (delay * theta.tan()).clamp(-limit, limit),
-                );
 
-                if self.use_3d {
-                    // let pos = start_idx as f32 / s.len() as f32 * input.duration.as_secs_f32();
-                    let pos = input.position().as_secs_f32();
-                    let angle = if self.use_rotation {
-                        (pos * self.rot_speed * TAU) % TAU
-                    } else {
-                        self.angle / 360.0 * TAU
-                    };
+                let x1 = x * angle.cos() + z * angle.sin();
+                let z1 = -x * angle.sin() + z * angle.cos();
+                let y1 = y * self.pitch.cos() - z1 * self.pitch.sin();
 
-                    let x1 = x * angle.cos() + z * angle.sin();
-                    let z1 = -x * angle.sin() + z * angle.cos();
-                    let y1 = y * self.pitch.cos() - z1 * self.pitch.sin();
+                let depth = (self.camera_z - z1).max(0.1);
+                let perspective = self.camera_z / depth;
 
-                    let depth = (self.camera_z - z1).max(0.1);
-                    let perspective = self.camera_z / depth;
+                const MIN_OFFSET: f32 = 0.1;
+                const MAX_OFFSET: f32 = 5.0;
+                let mut offset = ((10.0 / self.camera_z).min(MAX_OFFSET) * MIN_OFFSET).powf(2.0);
 
-                    const MIN_OFFSET: f32 = 0.1;
-                    const MAX_OFFSET: f32 = 5.0;
-                    let mut offset =
-                        ((10.0 / self.camera_z).min(MAX_OFFSET) * MIN_OFFSET).powf(2.0);
-
-                    const PITCH_THRESH: f32 = 0.2;
-                    if self.pitch.abs() < PITCH_THRESH {
-                        offset -= lerp(
-                            0.0..=offset,
-                            (PITCH_THRESH - self.pitch.abs()) / PITCH_THRESH,
-                        );
-                    }
-                    offset *= self.pitch.signum();
-
-                    pos2(x1, y1 + offset) * self.scale * perspective
-                } else {
-                    pos2(x, y) * 0.99
+                const PITCH_THRESH: f32 = 0.2;
+                if self.pitch.abs() < PITCH_THRESH {
+                    offset -= lerp(
+                        0.0..=offset,
+                        (PITCH_THRESH - self.pitch.abs()) / PITCH_THRESH,
+                    );
                 }
-            })
-            .collect::<Vec<Pos2>>();
+                offset *= self.pitch.signum();
 
-        self.live_buffer = positional_interp_upsampling(self.upsample_factor, &buf);
+                pos_buf.push(pos2(x1, y1 + offset) * self.scale * perspective);
+            } else {
+                pos_buf.push(pos2(x, y) * 0.95);
+            }
+        }
+
+        let us_factor = self.upsample_factor.max(1.0) as usize;
+        positional_interp_upsampling(&pos_buf, &mut self.live_buffer, us_factor);
     }
 
     fn get_polar_speed(&self, window: &[f32], num_ch: usize, sr: usize) -> f32 {
@@ -223,7 +227,7 @@ impl Generator for PolarPatterns {
         &mut self,
         _f: &mut FilterBank,
         _env: &EnvelopeBank,
-        input: &dyn AudioProperties,
+        input: &dyn AudioSrc,
         export_sample_idx: Option<usize>,
     ) {
         self.draw(input, export_sample_idx);

@@ -139,13 +139,15 @@ pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) 
         )
         .show(ui, |ui| {
             if !st.bool.fullscreen {
-                if st.input_mode == InputMode::File {
-                    timeline::draw(ui, st);
+                if !st.bool.rendering {
+                    if st.input_mode == InputMode::File {
+                        timeline::draw(ui, st);
+                    }
+                    control_panel::draw(ui, st);
+                    editor_window_behavior(frame);
                 }
-                control_panel::draw(ui, st);
-                editor_window_behavior(frame);
             } else {
-                ui.request_repaint_after(Duration::from_millis(16));
+                ui.request_repaint();
                 show_window_drag_tooltip_modal(st, ui);
                 fullscreen_window_behavior(ui, frame);
             }
@@ -326,7 +328,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                             },
                             resp.rect.center() - vec2(0.0, BUTTON_H),
                             plt::letter_spacing::MINIMAL,
-                            plt::YELLO,
+                            plt::TEXT,
                             Align::Center,
                         );
                         return;
@@ -341,7 +343,7 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                             },
                             resp.rect.center() - vec2(0.0, BUTTON_H / 2.0),
                             plt::letter_spacing::MINIMAL,
-                            plt::YELLO,
+                            plt::TEXT,
                             Align::Center,
                         );
                         return;
@@ -398,26 +400,30 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     ).rect;
                 });
 
+                let no_export = !st.bool.export_enabled || st.input_mode == InputMode::Live;
                 modal_button(
                     ui,
                     resp.rect.left_top() - vec2(0.0, BUTTON_H),
-                    vec2(resp.rect.width() / 2.0, 30.0),
+                    vec2(resp.rect.width() / if no_export {1.0} else {2.0}, 30.0),
                     "CANCEL",
                     plt::font_size::BODY,
                     plt::TEXT,
                     &mut st.bool.show_export_modal,
                     false,
                 );
-                modal_button(
-                    ui,
-                    resp.rect.right_top() - vec2(resp.rect.width() / 2.0, BUTTON_H),
-                    vec2(resp.rect.width() / 2.0, 30.0),
-                    "EXPORT",
-                    plt::font_size::BODY,
-                    plt::LIVE,
-                    &mut st.bool.start_render,
-                    false,
-                );
+
+                if !no_export {
+                    modal_button(
+                        ui,
+                        resp.rect.right_top() - vec2(resp.rect.width() / 2.0, BUTTON_H),
+                        vec2(resp.rect.width() / 2.0, 30.0),
+                        "EXPORT",
+                        plt::font_size::BODY,
+                        plt::LIVE,
+                        &mut st.bool.start_render,
+                        false,
+                    );
+                }
 
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_export_modal = false;

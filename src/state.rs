@@ -1,16 +1,21 @@
 #![allow(dead_code)]
 use crate::{
-    AudioCapturePermission,
+    AudioCapturePermission, Rgba,
     audio::{
         StereoFilter,
         audio_inputs::{AudioPlayer, LiveInput},
+        level_meter,
     },
     generators::{
-        ChromaType, Envelope, EnvelopeBank, FilterBank, GenKind, cymatic_field::CymaticField,
-        fluidwave::ModSrc, oscilloscope::Oscilloscope, polar_patterns::PolarPatterns,
-        rendering::EffectsCallback, stereometer::FilterMode,
+        ChromaType, Envelope, EnvelopeBank, FilterBank, GenKind,
+        cymatic_field::CymaticField,
+        fluidwave::ModSrc,
+        oscilloscope::Oscilloscope,
+        polar_patterns::PolarPatterns,
+        rendering::{EffectsCallback, MeterData},
+        stereometer::FilterMode,
     },
-    traits::{ActiveGenerator, AudioProperties, Generator, Labeled},
+    traits::{ActiveGenerator, AudioSrc, Generator, Labeled},
     ui::control_panel_widgets::{
         dropdown_row, mod_slider_row, section_header_submenu, slider_row, subheader_toggle_button,
     },
@@ -19,7 +24,9 @@ use biquad::*;
 use rodio::{
     DeviceTrait,
     cpal::{self, traits::HostTrait},
+    math::db_to_linear,
 };
+use smart_default::SmartDefault;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -31,7 +38,6 @@ use eframe::{
 };
 
 use crate::{
-    Preset,
     generators::{
         fluidwave::Fluidwave,
         rendering::{
@@ -42,6 +48,8 @@ use crate::{
     },
     labeled_enum,
 };
+
+use crate::ui::palette as plt;
 
 pub const DAMP_FACTOR: f32 = 1.25;
 pub const MAX_CHROMA_SHIFT: f32 = 0.2;
@@ -170,6 +178,9 @@ pub struct BoolStates {
     pub input_mode_options_open: bool,
     pub input_device_options_open: bool,
 
+    pub show_level_meter: bool,
+    pub use_meter_gradient: bool,
+
     pub open_macos_privacy_settings: bool,
 
     pub debug_file_loaded: bool,
@@ -267,8 +278,14 @@ impl From<cpal::Device> for InputDevice {
     }
 }
 
+#[derive(SmartDefault)]
 pub struct AppState {
     pub player: Option<AudioPlayer>,
+
+    #[default(plt::YELLO.into())]
+    // #[default(Rgba::new(65, 65, 230, 255))]
+    // #[default(Rgba::new(255, 60, 103, 255))]
+    pub meter_color: Rgba,
 
     pub audio_capture_permission: AudioCapturePermission,
     pub live_input: LiveInput,
@@ -276,6 +293,7 @@ pub struct AppState {
     pub live_input_device: InputDevice,
     pub available_input_devices: Option<Vec<InputDevice>>,
     pub new_live_input_device: InputDevice,
+    pub gain_db: f32,
 
     pub input_mode: InputMode,
     pub playback_mode: PlaybackMode,
@@ -301,6 +319,16 @@ pub struct AppState {
 
     pub window_drag_tooltip_modal_deadline: Option<Instant>,
 
+    #[default(
+        BoolStates {
+            show_fullscreen_button: true,
+            dark_mode: true,
+            export_enabled: true,
+            show_level_meter: true,
+            use_meter_gradient: true,
+            ..BoolStates::default()
+        }
+    )]
     pub bool: BoolStates,
 
     // Export states
@@ -330,12 +358,32 @@ impl AppState {
         }
     }
 
+    pub fn active_input(&mut self) -> Option<&mut dyn AudioSrc> {
+        match self.input_mode {
+            InputMode::Live => Some(&mut self.live_input),
+            InputMode::File => {
+                if let Some(pl) = self.player.as_mut() {
+                    Some(pl)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     pub fn clear_envelopes(&mut self) {
         let e = &mut self.env_bank;
         e.env_a.take();
         e.env_b.take();
         e.env_c.take();
         e.env_d.take();
+    }
+
+    pub fn set_gain(&mut self) {
+        let gain = db_to_linear(self.gain_db);
+        if let Some(ai) = self.active_input() {
+            ai.set_volume(gain);
+        }
     }
 
     pub fn update_live_input_device(&mut self) {
@@ -489,7 +537,10 @@ impl AppState {
         ret
     }
 
-    pub fn build_effects_callback_params(&mut self) -> EffectsCallback {
+    pub fn build_effects_callback_params(
+        &mut self,
+        export_sample_idx: Option<usize>,
+    ) -> EffectsCallback {
         let fx = self.active_gen().post_fx();
         let env = |src: ModSrc, range: f32| -> f32 {
             self.env_bank.envelope_value_from_mod_src(src, range)
@@ -520,6 +571,13 @@ impl AppState {
             chroma_shift,
             chroma_blur,
             chroma_type,
+            meter: MeterData {
+                level: level_meter(self, export_sample_idx),
+                use_meter: self.bool.show_level_meter,
+                use_gradient: self.bool.use_meter_gradient,
+                color: self.meter_color.into(),
+                compensate_height: matches!(self.gen_kind, GenKind::CymaticField),
+            },
         }
     }
 
@@ -589,67 +647,5 @@ impl AppState {
         }
 
         self.bool = open;
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        let fstr = std::fs::read_to_string("presets/default.json").unwrap_or_default();
-        let preset: Preset = serde_json::from_str(&fstr).unwrap_or_default();
-        let (_gen_kind, stereo, fwave, osci, polar_pat, cymatics) = (
-            preset.gen_kind,
-            preset.stereometer,
-            preset.fluidwave,
-            preset.oscilloscope,
-            preset.polar_patterns,
-            preset.cymatics,
-        );
-        Self {
-            input_mode: InputMode::default(),
-            player: None,
-            available_input_devices: None,
-            audio_capture_permission: AudioCapturePermission::Unknown,
-            live_input: LiveInput::default(),
-            live_input_device: InputDevice::default(),
-            default_live_input_device: InputDevice::default(),
-            new_live_input_device: InputDevice::default(),
-
-            gen_kind: GenKind::default(),
-            stereometer_render_resources: None,
-            fluid_render_resources: None,
-            bloom_render_resources: None,
-            output_render_resources: None,
-            resources: egui_wgpu::CallbackResources::default(),
-
-            filterbank: FilterBank::default(),
-            env_bank: EnvelopeBank::default(),
-
-            export_path: None,
-            export_config: ExportConfig::default(),
-            writer_handle: None,
-            logger_handle: None,
-            export_tx: None,
-            prev_export_timestamp: None,
-            export_elapsed_time: None,
-
-            playback_mode: PlaybackMode::default(),
-            stereo,
-            fwave,
-            osci,
-            polar_pat,
-            cymatics,
-
-            window_drag_tooltip_modal_deadline: None,
-            preset_save_path: None,
-            preset_load_path: None,
-
-            cur_frame_idx: 0,
-            bool: BoolStates {
-                show_fullscreen_button: true,
-                dark_mode: true,
-                export_enabled: true,
-                ..BoolStates::default()
-            },
-        }
     }
 }

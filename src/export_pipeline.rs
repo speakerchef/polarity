@@ -58,7 +58,7 @@ pub fn render_wgpu_frame(
         &mut st.resources,
         dim,
     );
-    let effects_data = st.build_effects_callback_params();
+    let effects_data = st.build_effects_callback_params(Some(export_sample_idx));
     run_effects_render_pipeline(
         &effects_data,
         device,
@@ -115,7 +115,7 @@ pub fn spawn_ffmpeg_writer(st: &mut AppState, fps: usize, dim: (u32, u32)) {
         .rate(fps as f32)
         .input("-")
         .input(p.contents.path.to_string_lossy())
-        .codec_video("libx264")
+        .codec_video(encoder)
         .crf(quality as u32)
         .preset("veryfast")
         .pix_fmt(pix_fmt.as_ffmpeg_arg())
@@ -137,7 +137,7 @@ pub fn spawn_ffmpeg_writer(st: &mut AppState, fps: usize, dim: (u32, u32)) {
         for event in output.iter().unwrap() {
             match event {
                 FfmpegEvent::Log(_, _) => (),
-                FfmpegEvent::Error(_e) => (),
+                FfmpegEvent::Error(e) => eprintln!("export: ffmpeg_error: {e}"),
                 FfmpegEvent::Progress(prog) => println!("{}", prog.raw_log_message),
                 FfmpegEvent::Done | FfmpegEvent::LogEOF => break,
                 _ => (),
@@ -180,22 +180,27 @@ pub fn export_batched_frames(
             st.prev_export_timestamp.take();
             st.export_config.total_frames = 0;
             st.bool.export_canceled = false;
-            if st.export_config.open_after {
+            if st.export_config.open_after && !st.bool.export_canceled {
                 let (open_cmd, args) = cfg_select! {
                     target_os = "macos" => ("open", [""]),
                     target_os = "windows" => ( "cmd" , ["/C", "start", ""]),
                     target_os = "linux" => ( "xdg-open" , [""]),
+                    _ => break
                 };
 
                 let _status = std::process::Command::new(open_cmd)
                     .args(args)
-                    .arg(st.export_path.as_ref().unwrap())
+                    .arg(st.export_path.as_ref().expect("unreachable without path"))
                     .status();
             }
             break;
         }
         let frame = render_wgpu_frame(st, device, queue, fps, (w, h));
-        st.export_tx.as_ref().unwrap().send(frame).unwrap();
+        st.export_tx
+            .as_ref()
+            .unwrap()
+            .send(frame)
+            .unwrap_or_else(|e| eprintln!("export: {e}"));
         st.cur_frame_idx += 1;
     }
 }
