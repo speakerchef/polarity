@@ -209,7 +209,10 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
     let Some(win) = frame.winit_window() else {
         return;
     };
+
+    #[cfg(not(target_os = "windows"))]
     win.set_decorations(false);
+
     win.set_min_inner_size(Some(LogicalSize::new(240.0, 240.0)));
 
     // allow drag anywhere if any key is down
