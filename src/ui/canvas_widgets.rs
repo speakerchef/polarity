@@ -29,7 +29,7 @@ pub fn presentation_buttons(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe
                         ui.viewport_rect().left_top().x
                             + if st.bool.fullscreen { 14.0 } else { 22.0 },
                         ui.viewport_rect().left_top().y
-                            + if st.bool.fullscreen { 50.0 } else { 80.0 },
+                            + if st.bool.fullscreen { 53.0 } else { 83.0 },
                     ),
                     vec2(20., 20.),
                 ),
