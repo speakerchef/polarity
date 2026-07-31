@@ -185,16 +185,24 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
 
     // obstacle / forcefield
     if dist < radius {
+        let scale = min(1.0 / radius, 2.0);
         let n = positions[i] / dist;
+        let nscaled = n * scale;
         let dir = dot(positions[i], n) * n;
+        let dirscaled = dot(positions[i], n) * nscaled;
         if params.is_obstacle != 0 {
             positions[i] = n * radius;
         }
+        // TODO: Determine format
         if params.is_force_outward != 0 {
-            velocities[i] += 2 * n * params.dt * SUBSTEP_DIV * TARGET_FPS;
+            if length(n) > 0.0 {
+                velocities[i] += 2 * dir * params.dt * SUBSTEP_DIV * TARGET_FPS;
+            } else {
+                velocities[i] -= 2 * vec2f(1.0, 1.0) * SUBSTEP_DIV * TARGET_FPS * force_damping_factor * 0.5;
+            }
         } else {
             // inward force
-            velocities[i] -= 2 * n * force_damping_factor * 0.5;
+            velocities[i] -= 2 * n * SUBSTEP_DIV * force_damping_factor * 0.5;
         }
     }
     // bounce off borders

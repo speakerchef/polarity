@@ -61,7 +61,6 @@
 - [x] Universal audio reactivity envelope structure.
 - [ ] Automation Envelopes / LFOs
   - [ ] 4 wave types: sine/saw/square/triangle
-- [ ] FPS counter
 - [ ] Project save/load ability with custom format:
   - [ ] container that also stores the audio file path (or audio copied into project container)
 - [ ] Post-FX

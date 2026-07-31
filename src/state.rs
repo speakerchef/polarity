@@ -21,6 +21,7 @@ use crate::{
     },
 };
 use biquad::*;
+use egui_winit::winit::dpi::PhysicalSize;
 use rodio::{
     DeviceTrait,
     cpal::{self, traits::HostTrait},
@@ -29,6 +30,7 @@ use rodio::{
 use smart_default::SmartDefault;
 use std::{
     path::PathBuf,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -237,7 +239,6 @@ pub struct BoolStates {
     pub open_preset_save_file_picker: bool,
     pub open_preset_load_file_picker: bool,
     pub show_file_options: bool,
-    pub window_drag_tooltip_modal_open: bool,
     pub show_fullscreen_button: bool,
     pub show_settings: bool,
     pub show_export_resolution: bool,
@@ -253,8 +254,8 @@ pub struct BoolStates {
 }
 
 labeled_enum!(InputMode{
-    Live => "Live",
-    File => "File",
+    Live => "Live System Audio",
+    File => "File Playback",
 }, Live);
 
 impl Labeled for InputMode {
@@ -265,17 +266,17 @@ impl Labeled for InputMode {
 
 pub const DEFAULT_DEVICE: &str = "DEFAULT";
 #[derive(Clone, PartialEq, Eq, Default)]
-pub struct InputDevice(pub String);
+pub struct InputDevice(pub Rc<str>);
 
 impl Labeled for InputDevice {
     fn text(&self) -> &str {
-        self.0.as_str()
+        &self.0
     }
 }
 
 impl From<cpal::Device> for InputDevice {
     fn from(value: cpal::Device) -> Self {
-        InputDevice(value.description().unwrap().to_string())
+        InputDevice(value.description().unwrap().name().into())
     }
 }
 
@@ -318,7 +319,9 @@ pub struct AppState {
     pub preset_save_path: Option<PathBuf>,
     pub preset_load_path: Option<PathBuf>,
 
-    pub window_drag_tooltip_deadline: Option<Instant>,
+    pub last_editor_window_size: PhysicalSize<u32>,
+
+    /// for resizing by dragging edge borders in presentation mode
     pub last_window_width: u32,
 
     #[default(
@@ -397,12 +400,12 @@ impl AppState {
             };
             let real_default_device = self.default_live_input_device.clone();
             let new_device = self.new_live_input_device.clone();
-            let is_default = new_device == InputDevice(DEFAULT_DEVICE.to_string());
+            let is_default = new_device == InputDevice(DEFAULT_DEVICE.into());
 
             let new_device = {
                 let matched_dev = avail_devices.find(|dev| {
-                    dev.description().unwrap().to_string().as_str()
-                        == if is_default {
+                    *dev.description().unwrap().name()
+                        == **if is_default {
                             &real_default_device.0
                         } else {
                             &new_device.0
@@ -424,11 +427,11 @@ impl AppState {
                     return;
                 }
             };
-            self.live_input_device = self
+            let _ = self
                 .live_input
                 .start_stream(1024, new_device)
-                .unwrap()
-                .into();
+                .inspect_err(|e| eprintln!("device stream error: {e}"));
+            self.live_input_device = self.new_live_input_device.clone();
         }
     }
 

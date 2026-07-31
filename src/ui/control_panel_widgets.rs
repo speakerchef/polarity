@@ -401,12 +401,6 @@ pub fn popup_item(
     };
     let p = ui.painter();
     p.rect_filled(rect, SHARP, bg);
-    // p.rect_stroke(
-    //     rect,
-    //     SHARP,
-    //     border(ui.visuals().dark_mode),
-    //     StrokeKind::Inside,
-    // );
     p.line_segment(
         [rect.left_top(), rect.right_top()],
         border(ui.visuals().dark_mode),
@@ -416,10 +410,11 @@ pub fn popup_item(
         size: font_size,
         family: FontFamily::Name("inter_medium".into()),
     };
-    let (_, th) = get_text_size(ui, &label.to_uppercase(), fonts.clone()).into();
+
+    let (_, th) = get_text_size(ui, label, fonts.clone()).into();
     custom_text(
         ui,
-        &label.to_uppercase(),
+        label,
         fonts.clone(),
         rect.left_center() - vec2(-(h.unwrap_or(plt::height::INNER) - th) / 1.25, th / 2.0),
         plt::letter_spacing::MINIMAL,
@@ -778,14 +773,22 @@ pub fn dropdown_menu<T: Labeled + Default>(
         .rect_stroke(inner, SHARP, border, egui::StrokeKind::Middle);
 
     let font = FontId {
-        size: plt::font_size::TINY,
+        size: plt::font_size::META,
         family: egui::FontFamily::Name("inter_medium".into()),
     };
-    let (_, th) = get_text_size(ui, &value.text().to_uppercase(), font.clone()).into();
+    let (_, th) = get_text_size(ui, value.text(), font.clone()).into();
     let offset = (dim.1 - th) / 1.25;
+
+    let (cw, _) = get_text_size(ui, "k", font.clone()).into();
+    let limit = (dim.0 / cw) as usize;
+    let cur_label = if value.text().len() > limit - 4 {
+        &value.text()[..limit - 4]
+    } else {
+        value.text()
+    };
     custom_text(
         ui,
-        &value.text().to_uppercase(),
+        cur_label,
         font.clone(),
         inner.left_center() - vec2(-offset, th / 2.0),
         plt::letter_spacing::MINIMAL,
@@ -829,7 +832,7 @@ pub fn dropdown_menu<T: Labeled + Default>(
                         if popup_item(
                             ui,
                             opt.text(),
-                            plt::font_size::TINY,
+                            plt::font_size::META,
                             popup_item_w,
                             Some(dim.1),
                             opt == options.first().unwrap_or(&T::default())

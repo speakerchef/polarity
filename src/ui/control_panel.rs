@@ -63,7 +63,7 @@ fn input_mode_options(ui: &mut egui::Ui, st: &mut AppState) {
                 avail_inputs.clone()
             } else {
                 let dev = cpal::default_host().output_devices();
-                let mut input_devices = vec![InputDevice(DEFAULT_DEVICE.to_string())];
+                let mut input_devices = vec![InputDevice(DEFAULT_DEVICE.into())];
                 input_devices.extend(if let Ok(dev_list) = dev {
                     dev_list
                         .map(InputDevice::from)
@@ -87,7 +87,12 @@ fn input_mode_options(ui: &mut egui::Ui, st: &mut AppState) {
             false,
         );
     }
-    slider_row(ui, "GAIN (dB)", &mut st.gain_db, -30.0, 6.0, 1, false);
+    let gain_label = if st.input_mode == InputMode::Live {
+        "IN GAIN"
+    } else {
+        "OUT GAIN"
+    };
+    slider_row(ui, gain_label, &mut st.gain_db, -30.0, 6.0, 1, false);
     toggle_button_row(ui, "INPUT METER", &mut st.bool.show_level_meter, false);
     if st.bool.show_level_meter {
         toggle_button_row(ui, "METER GRADIENT", &mut st.bool.use_meter_gradient, false);

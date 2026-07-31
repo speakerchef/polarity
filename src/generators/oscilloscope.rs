@@ -101,11 +101,11 @@ impl Default for Oscilloscope {
             phase_aligned: true,
             circular_wave_radius: 0.7,
 
-            delay_samples: 100.0,
+            delay_samples: 512.0,
 
             use_rotation: true,
             angle: 100.0,
-            upsample_factor: 2.0,
+            upsample_factor: 3.0,
             camera_z: 10.0,
             total_scale: 0.6,
             rot_freq: 0.1,
@@ -123,9 +123,9 @@ impl Default for Oscilloscope {
 
             efx: PostFx {
                 use_bloom: true,
-                bloom: 2.2,
+                bloom: 0.7,
                 bloom_mod_src: ModSrc::EnvA,
-                bloom_range: 40.0,
+                bloom_range: 75.0,
                 use_vignette: true,
                 use_chroma: true,
                 chroma_shift_mod_src: ModSrc::EnvB,
@@ -134,8 +134,8 @@ impl Default for Oscilloscope {
                 chroma_type: super::ChromaType::Radial,
                 ..Default::default()
             },
-            point_size: 0.0015,
-            // point_size: 0.0023,
+            // point_size: 0.0015,
+            point_size: 0.0020,
             point_size_mod_src: ModSrc::None,
             point_size_rng: 0.0,
             point_size_mod_open: false,

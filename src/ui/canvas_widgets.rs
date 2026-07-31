@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub fn presentation_buttons(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
-    egui::Area::new("fullscreen_button".into())
+    egui::Area::new("presentation_buttons".into())
         .movable(false)
         .show(ui.ctx(), |ui| {
             let fs_resp = ui.allocate_rect(
@@ -35,16 +35,6 @@ pub fn presentation_buttons(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe
                 ),
                 egui::Sense::click(),
             );
-
-            // aspect ratio lock
-            if fs_resp.clicked()
-                && !st.bool.fullscreen
-                && let Some(win) = frame.winit_window()
-            {
-                let (w, h) = (win.inner_size().width, win.inner_size().height);
-                let l = w.min(h);
-                let _ = win.request_inner_size(PhysicalSize::new(l, l));
-            }
 
             custom_text(
                 ui,
@@ -95,8 +85,24 @@ pub fn presentation_buttons(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe
             }
 
             if fs_resp.clicked() {
+                if let Some(win) = frame.winit_window() {
+                    if !st.bool.fullscreen {
+                        let cur_sz = win.inner_size();
+                        st.last_editor_window_size = cur_sz;
+
+                        if st.bool.lock_aspect_ratio {
+                            let (w, h) = (cur_sz.width, cur_sz.height);
+                            let l = w.min(h);
+                            let _ = win.request_inner_size(PhysicalSize::new(l, l));
+                        }
+                    } else {
+                        let last_sz = st.last_editor_window_size;
+                        let (w, h) = (last_sz.width, last_sz.height);
+                        let _ = win.request_inner_size(PhysicalSize::new(w, h));
+                    }
+                }
+
                 st.bool.fullscreen = !st.bool.fullscreen;
-                st.window_drag_tooltip_deadline.take();
             }
         });
 }

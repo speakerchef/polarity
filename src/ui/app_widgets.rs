@@ -1,8 +1,4 @@
-use std::{
-    ops::Sub,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{ops::Sub, sync::Arc};
 
 use crate::{
     state::{AppState, ExportQuality, Fps, InputMode, PixelFmt, Resolution},
@@ -126,21 +122,21 @@ pub fn menu_bar(st: &mut AppState, ui: &mut egui::Ui) {
 }
 
 pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) {
+    let panel_frame_config = egui::Frame::NONE
+        .inner_margin(if !st.bool.fullscreen {
+            egui::Margin {
+                bottom: 12,
+                left: 12,
+                right: 12,
+                top: 0,
+            }
+        } else {
+            0.into()
+        })
+        .fill(plt::BG(st.bool.dark_mode));
+
     let mut resp = egui::CentralPanel::default()
-        .frame(
-            egui::Frame::NONE
-                .inner_margin(if !st.bool.fullscreen {
-                    egui::Margin {
-                        bottom: 12,
-                        left: 12,
-                        right: 12,
-                        top: 0,
-                    }
-                } else {
-                    0.into()
-                })
-                .fill(plt::BG(st.bool.dark_mode)),
-        )
+        .frame(panel_frame_config)
         .show(ui, |ui| {
             if !st.bool.fullscreen {
                 if !st.bool.rendering {
@@ -152,7 +148,6 @@ pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) 
                 }
             } else {
                 ui.request_repaint();
-                show_window_drag_tooltip_modal(st, ui);
                 fullscreen_window_behavior(ui, frame);
             }
 
@@ -180,23 +175,6 @@ pub fn main_window(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe::Frame) 
             border(ui.style().visuals.dark_mode),
             StrokeKind::Inside,
         );
-    }
-}
-
-fn show_window_drag_tooltip_modal(st: &mut AppState, ui: &mut egui::Ui) {
-    if st.window_drag_tooltip_deadline.is_none() {
-        st.window_drag_tooltip_deadline = Some(Instant::now());
-        st.bool.window_drag_tooltip_modal_open = true;
-    }
-
-    if st.bool.window_drag_tooltip_modal_open {
-        window_drag_tooltip(ui);
-    }
-
-    if let Some(start_time) = st.window_drag_tooltip_deadline
-        && Instant::now().duration_since(start_time) >= Duration::from_secs(5)
-    {
-        st.bool.window_drag_tooltip_modal_open = false;
     }
 }
 
@@ -540,8 +518,6 @@ pub fn export_modal(ui: &mut egui::Ui, st: &mut AppState) {
 
                 if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
                     st.bool.show_export_modal = false;
-                }
-                if ui.ctx().input(|i| i.key_pressed(Key::Enter)) {
                     st.bool.start_render = true;
                 }
 
@@ -781,24 +757,27 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     );
 
                     let (cw, th) = get_text_size(ui, "K", font.clone()).into();
+                    let display_path = if let Some(path) = &st.preset_load_path {
+                        let dir = path.as_os_str();
+                        let lw = path_name_rect.width();
+                        let limit = (lw / cw) as usize;
+                        if dir.len() > limit {
+                            let suffix = path
+                                .as_os_str()
+                                .to_str()
+                                .unwrap_or_default()
+                                .get(dir.len() - limit..)
+                                .unwrap_or_default();
+                            &format!("...{suffix}")
+                        } else {
+                            path.as_os_str().to_str().unwrap_or_default()
+                        }
+                    } else {
+                        ""
+                    };
                     custom_text(
                         ui,
-                        &if let Some(path) = &st.preset_load_path {
-                            let dir = path.to_string_lossy().to_string();
-                            let lw = path_name_rect.width();
-                            let limit = (lw / cw) as usize;
-                            if dir.len() > limit {
-                                let mut out = "...".to_string();
-                                out.push_str(
-                                    &path.to_string_lossy().to_string()[dir.len() - limit..],
-                                );
-                                out
-                            } else {
-                                path.to_string_lossy().to_string()
-                            }
-                        } else {
-                            "".to_string()
-                        },
+                        display_path,
                         font,
                         path_name_rect.center() - vec2(0.0, th / 2.0),
                         plt::letter_spacing::MINIMAL,
@@ -850,35 +829,6 @@ pub fn preset_modal(ui: &mut egui::Ui, st: &mut AppState) {
                     st.bool.load_preset = true;
                 }
             }
-        });
-}
-
-pub fn window_drag_tooltip(ui: &mut egui::Ui) {
-    egui::Area::new("window drag tooltip".into())
-        .fixed_pos(ui.max_rect().center_top() - vec2(180.0, -30.0))
-        .order(egui::Order::Background)
-        .show(ui.ctx(), |ui| {
-            let (rect, mut resp) = ui.allocate_exact_size(vec2(360., 30.), egui::Sense::click());
-            resp.interact_rect.set_height(0.0);
-            resp.interact_rect.set_width(0.0);
-            ui.painter().rect_filled(rect, SHARP, plt::TEXT);
-
-            let font = FontId {
-                size: plt::font_size::MED,
-                family: egui::FontFamily::Name("inter_regular".into()),
-            };
-
-            let msg = "PRESS AND HOLD ANY KEY TO MOVE THE WINDOW";
-            let (_, th) = get_text_size(ui, msg, font.clone()).into();
-            custom_text(
-                ui,
-                msg,
-                font,
-                rect.center() - vec2(0.0, th / 2.0),
-                plt::letter_spacing::BASE,
-                plt::INK,
-                Align::Center,
-            );
         });
 }
 

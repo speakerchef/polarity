@@ -93,8 +93,8 @@ impl Default for PolarPatterns {
             efx: PostFx {
                 use_bloom: true,
                 bloom: 1.5,
-                bloom_mod_src: ModSrc::EnvB,
-                bloom_range: 80.0,
+                bloom_mod_src: ModSrc::EnvA,
+                bloom_range: 75.0,
                 use_vignette: true,
                 use_chroma: true,
                 chroma_shift_mod_src: ModSrc::EnvB,
