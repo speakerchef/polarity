@@ -37,10 +37,8 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> Vertex {
     var pos = positions[idx];
     if params.use_meter != 0 {
         let original_x = pos.x;
-        let new_x = pos.x - METER_WIDTH / 2.0;
+        let new_x = pos.x - METER_WIDTH;
         pos.x = new_x;
-        let diff = abs(original_x - new_x);
-        pos *= 1 - diff;
     }
     v.pos = vec4f(pos, 0.0, 1.0);
     v.is_meter = 0;
@@ -96,7 +94,8 @@ fn meter_color_gradient(l: f32) -> vec4f {
 @fragment
 fn fs_main(v: Vertex) -> @location(0) vec4<f32> {
     let size = vec2f(textureDimensions(tex));
-    let uv = (v.pos.xy - params.top_left) / size;
+    let offset = select(vec2(0.0), -vec2(METER_WIDTH / 4.0, 0.0) * size, v.is_meter == 0 && params.use_meter != 0) + params.top_left;
+    let uv = (v.pos.xy - offset) / size;
 
     var meter_color = select(params.meter_color, meter_color_gradient(v.meter_level), params.use_gradient != 0);
     if v.meter_level >= 1.0 {

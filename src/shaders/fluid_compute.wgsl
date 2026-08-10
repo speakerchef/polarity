@@ -198,7 +198,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             if length(n) > 0.0 {
                 velocities[i] += 2 * dir * params.dt * SUBSTEP_DIV * TARGET_FPS;
             } else {
-                velocities[i] -= 2 * vec2f(1.0, 1.0) * SUBSTEP_DIV * TARGET_FPS * force_damping_factor * 0.5;
+                velocities[i] -= 2 * vec2f(1.0, 1.0) * force_damping_factor * 0.5;
             }
         } else {
             // inward force

@@ -25,15 +25,44 @@ var<private> positions: array<vec2f, 6> = array(
     vec2f(-1, -1),
 );
 
-const RADIUS: i32 = 3;
-const BLOOM_WEIGHTS: array<f32, 7> = array<f32, 7>(
-    0.1096489736,
-    0.1407920690,
-    0.1635770468,
-    0.1719638213,
-    0.1635770468,
-    0.1407920690,
-    0.1096489736,
+//const RADIUS: i32 = 3;
+//const BLOOM_WEIGHTS: array<f32, 7> = array<f32, 7>(
+//    0.1096489736,
+//    0.1407920690,
+//    0.1635770468,
+//    0.1719638213,
+//    0.1635770468,
+//    0.1407920690,
+//    0.1096489736,
+//);
+
+const RADIUS: i32 = 12;
+  const BLOOM_WEIGHTS: array<f32, 25> = array<f32, 25>(
+    0.0287005193,
+    0.0310865835,
+    0.0334380006,
+    0.0357183734,
+    0.0378902186,
+    0.0399159634,
+    0.0417590092,
+    0.0433848222,
+    0.0447620043,
+    0.0458632993,
+    0.0466664891,
+    0.0471551389,
+    0.0473191567,
+    0.0471551389,
+    0.0466664891,
+    0.0458632993,
+    0.0447620043,
+    0.0433848222,
+    0.0417590092,
+    0.0399159634,
+    0.0378902186,
+    0.0357183734,
+    0.0334380006,
+    0.0310865835,
+    0.0287005193,
 );
 
 @vertex
@@ -49,31 +78,25 @@ fn bloom_horizontal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let original = textureSample(tex, tex_sampler, uv);
     let pixel_size = 1 / size;
     var acc = vec4f(0.0);
-    var total = 0.0;
 
     for (var x = -RADIUS; x <= RADIUS; x++) {
-        let dist = length(vec2f(f32(x), 0.0));
         let w = BLOOM_WEIGHTS[x + RADIUS];
         let offset = vec2f(f32(x), 0.0) * pixel_size;
         acc += (textureSample(tex, tex_sampler, uv + offset) * w).rgba;
-        total += w;
     }
-    return original + acc / total * (params.bloom_amt / 4);
+    return original + acc * (params.bloom_amt / 4);
 }
 
 fn bloom_vertical(uv: vec2f, pixel_size: vec2f) -> vec3f {
     var acc = vec3f(0.0);
-    var total = 0.0;
 
     //  r * r = gaussian kernel
     for (var y = -RADIUS; y <= RADIUS; y++) {
-        let dist = length(vec2f(0.0, f32(y)));
         let w = BLOOM_WEIGHTS[y + RADIUS];
         let offset = vec2f(0.0, f32(y)) * pixel_size;
         acc += (textureSample(tex, tex_sampler, uv + offset) * w).rgb;
-        total += w;
     }
-    return acc / total;
+    return acc;
 }
 
 fn apply_vignette(uv: vec2f) -> f32 {
@@ -119,7 +142,9 @@ fn chromatic_aberration(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             }
             // radial
             case 1: {
-                coord = mix(uv, vec2f(0.5), (i - 0.5) * params.chroma_shift);
+                const METER_WIDTH = 0.030;
+                let center = 0.5 - METER_WIDTH;
+                coord = mix(uv, vec2f(center), (i - center) * params.chroma_shift);
             }
             default: {
                 coord = mix(uv, vec2f(0.5), (i - 0.5) * params.chroma_shift);

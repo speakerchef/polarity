@@ -52,7 +52,8 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertOut {
     let particle_id = i / 6;
     let corner = i % 6;
 
-    out.position = vec4f(positions[particle_id] + quad_pos[corner], 0.0, 1.0);
+    let scale = 1.0 + params.smoothing_radius;
+    out.position = vec4f((positions[particle_id] + quad_pos[corner]) * scale, 0.0, 1.0);
 
     if i >= arrayLength(&positions) * 6 {
         out.position = vec4f(0, 0, 0, 1);

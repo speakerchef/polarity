@@ -952,6 +952,12 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
     }
 }
 
+pub struct FilterRenderResources {
+    crt_pipeline: wgpu::RenderPipeline,
+    crt_bg: wgpu::BindGroup,
+    tex: wgpu::Texture,
+}
+
 #[allow(dead_code)]
 async fn read_debug_buffer(buffer_slice: wgpu::BufferSlice<'_>, device: &wgpu::Device) {
     let (tx, rx) = flume::bounded(1);
