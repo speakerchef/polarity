@@ -6,8 +6,8 @@ use wgpu::{Device, util::DeviceExt};
 use crate::{
     generators::{
         rendering::{
-            EffectsRenderResources, FluidRenderResources, OutputResources, P2DRenderResources,
-            SrcRenderResources,
+            EffectsRenderResources, FilteringResources, FluidRenderResources, OutputResources,
+            P2DRenderResources, SrcRenderResources,
         },
         stereometer::{MAX_LIVE_POINT_DENSITY, MAX_TRACE_POINT_DENSITY, VERTICES_PER_QUAD},
     },
@@ -37,7 +37,7 @@ fn build_particle2d_render_resources(
 ) -> P2DRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("stereometer"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/particle2d_shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/particle2d.wgsl").into()),
     });
 
     let num_params = 11;
@@ -180,7 +180,7 @@ fn build_efx_render_resources(
 ) -> EffectsRenderResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("efx"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/postfx_shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/postfx.wgsl").into()),
     });
     let num_params = 8;
 
@@ -350,7 +350,7 @@ fn build_output_render_resources(
 ) -> OutputResources {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("output"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output_shader.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output.wgsl").into()),
     });
 
     let num_params = 6;
@@ -757,13 +757,13 @@ fn build_fluid_render_resources(
     }
 }
 
-fn init_output_render_resources(
+fn init_fluid_render_resources(
     st: &mut AppState,
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let live_res = build_output_render_resources(device, wgpu_render_state, false);
-    let export_res = build_output_render_resources(device, wgpu_render_state, true);
+    let live_res = build_fluid_render_resources(device, wgpu_render_state);
+    let export_res = build_fluid_render_resources(device, wgpu_render_state);
     st.resources.insert(export_res);
     wgpu_render_state
         .renderer
@@ -772,13 +772,127 @@ fn init_output_render_resources(
         .insert(live_res);
 }
 
-fn init_fluid_render_resources(
+fn build_filtering_render_resources(
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) -> FilteringResources {
+    let num_params = 1;
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("filtering bgl"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(16 * num_params),
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("filtering sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    });
+
+    let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("filtering params buf"),
+        size: 16 * num_params,
+        usage: wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("filtering pipeline layout"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("filtering shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/filters.wgsl").into()),
+    });
+    let crt_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("crt filter pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu_render_state.target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    FilteringResources {
+        bind_group_layout: bgl,
+        params_buffer,
+        crt_pipeline,
+        crt_bg: None,
+        tex: None,
+        sampler,
+        target_format: wgpu_render_state.target_format,
+    }
+}
+
+fn init_filtering_render_resources(
     st: &mut AppState,
     device: &Device,
     wgpu_render_state: &egui_wgpu::RenderState,
 ) {
-    let live_res = build_fluid_render_resources(device, wgpu_render_state);
-    let export_res = build_fluid_render_resources(device, wgpu_render_state);
+    let live_res = build_filtering_render_resources(device, wgpu_render_state);
+    let export_res = build_filtering_render_resources(device, wgpu_render_state);
+    st.resources.insert(export_res);
+    wgpu_render_state
+        .renderer
+        .write()
+        .callback_resources
+        .insert(live_res);
+}
+
+fn init_output_render_resources(
+    st: &mut AppState,
+    device: &Device,
+    wgpu_render_state: &egui_wgpu::RenderState,
+) {
+    let live_res = build_output_render_resources(device, wgpu_render_state, false);
+    let export_res = build_output_render_resources(device, wgpu_render_state, true);
     st.resources.insert(export_res);
     wgpu_render_state
         .renderer
@@ -797,6 +911,7 @@ pub fn setup_wgpu(st: &mut AppState, cc: &eframe::CreationContext<'_>) {
     init_src_render_resources(st, wgpu_render_state);
     init_particle2d_render_resources(st, device, wgpu_render_state);
     init_effects_render_resources(st, device, wgpu_render_state);
-    init_output_render_resources(st, device, wgpu_render_state);
     init_fluid_render_resources(st, device, wgpu_render_state);
+    init_filtering_render_resources(st, device, wgpu_render_state);
+    init_output_render_resources(st, device, wgpu_render_state);
 }

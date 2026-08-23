@@ -200,7 +200,11 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
     #[cfg(not(target_os = "macos"))]
     {
         let border_responses = resize_border(ui, frame);
-        pointer_on_border = border_responses.iter().any(|r| r.contains_pointer());
+        pointer_on_border = if let Some(resp_col) = &border_responses {
+            resp_col.iter().any(|(r, _, _)| r.contains_pointer())
+        } else {
+            false
+        };
     }
 
     if ui.input(|i| i.pointer.primary_down()) && !pointer_on_border {
@@ -209,10 +213,11 @@ fn fullscreen_window_behavior(ui: &mut egui::Ui, frame: &eframe::Frame) {
 }
 
 /// For platforms like windows to allow resizing without decorations
-fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) -> Vec<Response> {
-    let Some(win) = frame.winit_window() else {
-        return Vec::default();
-    };
+fn resize_border(
+    ui: &mut egui::Ui,
+    frame: &eframe::Frame,
+) -> Option<[(Response, egui::CursorIcon, ResizeDirection); 8]> {
+    let win = frame.winit_window()?;
 
     let request_resize_in_direction = |dir: ResizeDirection, win: &Arc<Window>| {
         let _ = win.drag_resize_window(dir);
@@ -249,70 +254,67 @@ fn resize_border(ui: &mut egui::Ui, frame: &eframe::Frame) -> Vec<Response> {
         vec2(corner, corner),
     );
 
-    let mut resp_vec = Vec::<Response>::with_capacity(8);
+    let mut resp_vec: Option<[(Response, egui::CursorIcon, ResizeDirection); 8]> = None;
     modal(ui, Vec2::ZERO, "border", Some(Order::Background), |ui| {
-        let mut e_resp = ui.allocate_rect(east, egui::Sense::drag());
-        let mut s_resp = ui.allocate_rect(south, egui::Sense::drag());
-        let mut w_resp = ui.allocate_rect(west, egui::Sense::drag());
-        let mut n_resp = ui.allocate_rect(north, egui::Sense::drag());
+        let e_resp = ui.allocate_rect(east, egui::Sense::drag());
+        let s_resp = ui.allocate_rect(south, egui::Sense::drag());
+        let w_resp = ui.allocate_rect(west, egui::Sense::drag());
+        let n_resp = ui.allocate_rect(north, egui::Sense::drag());
 
-        let mut ne_resp = ui.allocate_rect(n_east, egui::Sense::drag());
-        let mut se_resp = ui.allocate_rect(s_east, egui::Sense::drag());
-        let mut nw_resp = ui.allocate_rect(n_west, egui::Sense::drag());
-        let mut sw_resp = ui.allocate_rect(s_west, egui::Sense::drag());
+        let ne_resp = ui.allocate_rect(n_east, egui::Sense::drag());
+        let se_resp = ui.allocate_rect(s_east, egui::Sense::drag());
+        let nw_resp = ui.allocate_rect(n_west, egui::Sense::drag());
+        let sw_resp = ui.allocate_rect(s_west, egui::Sense::drag());
+        let resp_collection: [(Response, egui::CursorIcon, ResizeDirection); 8] = [
+            (e_resp, egui::CursorIcon::ResizeEast, ResizeDirection::East),
+            (
+                s_resp,
+                egui::CursorIcon::ResizeSouth,
+                ResizeDirection::South,
+            ),
+            (w_resp, egui::CursorIcon::ResizeWest, ResizeDirection::West),
+            (
+                n_resp,
+                egui::CursorIcon::ResizeNorth,
+                ResizeDirection::North,
+            ),
+            (
+                ne_resp,
+                egui::CursorIcon::ResizeNorthEast,
+                ResizeDirection::NorthEast,
+            ),
+            (
+                se_resp,
+                egui::CursorIcon::ResizeSouthEast,
+                ResizeDirection::SouthEast,
+            ),
+            (
+                nw_resp,
+                egui::CursorIcon::ResizeNorthWest,
+                ResizeDirection::NorthWest,
+            ),
+            (
+                sw_resp,
+                egui::CursorIcon::ResizeSouthWest,
+                ResizeDirection::SouthWest,
+            ),
+        ];
 
-        if e_resp.hovered()
-            || s_resp.hovered()
-            || w_resp.hovered()
-            || n_resp.hovered()
-            || ne_resp.hovered()
-            || se_resp.hovered()
-            || nw_resp.hovered()
-            || sw_resp.hovered()
-        {
-            e_resp = e_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeEast);
-            s_resp = s_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouth);
-            w_resp = w_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeWest);
-            n_resp = n_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorth);
-
-            ne_resp = ne_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorthEast);
-            se_resp = se_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouthEast);
-            nw_resp = nw_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeNorthWest);
-            sw_resp = sw_resp.on_hover_and_drag_cursor(egui::CursorIcon::ResizeSouthWest);
-        }
-
-        ui.input(|i| {
-            if i.pointer.is_decidedly_dragging() {
-                if e_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::East, win);
-                }
-                if s_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::South, win);
-                }
-                if w_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::West, win);
-                }
-                if n_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::North, win);
-                }
-                if ne_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::NorthEast, win);
-                }
-                if se_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::SouthEast, win);
-                }
-                if nw_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::NorthWest, win);
-                }
-                if sw_resp.dragged() {
-                    request_resize_in_direction(ResizeDirection::SouthWest, win);
-                }
+        resp_collection.iter().for_each(|(resp, cursor, _)| {
+            if resp.hovered() || resp.dragged() {
+                resp.ctx.set_cursor_icon(*cursor);
             }
         });
 
-        resp_vec.extend([
-            e_resp, s_resp, w_resp, n_resp, ne_resp, se_resp, nw_resp, sw_resp,
-        ]);
+        ui.input(|i| {
+            if i.pointer.is_decidedly_dragging() {
+                resp_collection.iter().for_each(|(_, _, dir)| {
+                    request_resize_in_direction(*dir, win);
+                });
+            }
+        });
+
+        resp_vec = Some(resp_collection);
     });
 
     resp_vec

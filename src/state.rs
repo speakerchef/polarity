@@ -320,6 +320,7 @@ pub struct AppState {
     pub preset_load_path: Option<PathBuf>,
 
     pub last_editor_window_size: PhysicalSize<u32>,
+    pub last_fullscreen_window_size: PhysicalSize<u32>,
 
     /// for resizing by dragging edge borders in presentation mode
     pub last_window_width: u32,
@@ -546,7 +547,7 @@ impl AppState {
     pub fn build_effects_callback_params(
         &mut self,
         export_sample_idx: Option<usize>,
-    ) -> EffectsCallback {
+    ) -> (EffectsCallback, MeterData) {
         let fx = self.active_gen().post_fx();
         let env = |src: ModSrc, range: f32| -> f32 {
             self.env_bank.envelope_value_from_mod_src(src, range)
@@ -567,24 +568,26 @@ impl AppState {
         );
         let (use_bloom, use_vignette, use_chroma) = (fx.use_bloom, fx.use_vignette, fx.use_chroma);
 
-        EffectsCallback {
-            top_left: Pos2::ZERO,
-            use_bloom,
-            bloom_amt,
-            use_vignette,
-            vignette,
-            use_chroma,
-            chroma_shift,
-            chroma_blur,
-            chroma_type,
-            meter: MeterData {
+        (
+            EffectsCallback {
+                top_left: Pos2::ZERO,
+                use_bloom,
+                bloom_amt,
+                use_vignette,
+                vignette,
+                use_chroma,
+                chroma_shift,
+                chroma_blur,
+                chroma_type,
+            },
+            MeterData {
                 level: level_meter(self, export_sample_idx),
                 use_meter: self.bool.show_level_meter,
                 use_gradient: self.bool.use_meter_gradient,
                 color: self.meter_color.into(),
                 compensate_height: matches!(self.gen_kind, GenKind::CymaticField),
             },
-        }
+        )
     }
 
     pub fn draw_post_fx(&mut self, ui: &mut egui::Ui) {

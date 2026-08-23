@@ -25,7 +25,7 @@ use crate::{
 labeled_enum!(PatternKind {
     Unipolar => "Unipolar",
     Bipolar => "Bipolar",
-}, Unipolar);
+}, Bipolar);
 
 impl Labeled for PatternKind {
     fn text(&self) -> &'static str {
@@ -180,8 +180,11 @@ impl PolarPatterns {
             );
 
             if self.use_3d {
-                // let pos = start_idx as f32 / s.len() as f32 * input.duration.as_secs_f32();
-                let pos = input.position().as_secs_f32();
+                let pos = if let Some(ei) = export_sample_idx {
+                    ei as f32 / sr as f32
+                } else {
+                    input.position().as_secs_f32()
+                };
                 let angle = if self.use_rotation {
                     (pos * self.rot_speed * TAU) % TAU
                 } else {

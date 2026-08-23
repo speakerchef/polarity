@@ -90,14 +90,24 @@ pub fn presentation_buttons(ui: &mut egui::Ui, st: &mut AppState, frame: &eframe
                         let cur_sz = win.inner_size();
                         st.last_editor_window_size = cur_sz;
 
-                        if st.bool.lock_aspect_ratio {
-                            let (w, h) = (cur_sz.width, cur_sz.height);
-                            let l = w.min(h);
-                            let _ = win.request_inner_size(PhysicalSize::new(l, l));
-                        }
+                        let last_fs_sz = st.last_fullscreen_window_size;
+                        let (w, h) = if last_fs_sz != PhysicalSize::new(0, 0) {
+                            (last_fs_sz.width, last_fs_sz.height)
+                        } else {
+                            (cur_sz.width, cur_sz.height)
+                        };
+                        let (w, h) = if st.bool.lock_aspect_ratio {
+                            (w.min(h), w.min(h))
+                        } else {
+                            (w, h)
+                        };
+                        let fs_size = PhysicalSize::new(w, h);
+                        let _ = win.request_inner_size(fs_size);
+                        st.last_fullscreen_window_size = fs_size;
                     } else {
-                        let last_sz = st.last_editor_window_size;
-                        let (w, h) = (last_sz.width, last_sz.height);
+                        st.last_fullscreen_window_size = win.inner_size();
+                        let last_editor_sz = st.last_editor_window_size;
+                        let (w, h) = (last_editor_sz.width, last_editor_sz.height);
                         let _ = win.request_inner_size(PhysicalSize::new(w, h));
                     }
                 }

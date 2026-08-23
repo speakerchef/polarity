@@ -105,12 +105,14 @@ impl Default for Oscilloscope {
 
             use_rotation: true,
             angle: 100.0,
-            upsample_factor: 3.0,
+            upsample_factor: 2.0,
             camera_z: 10.0,
             total_scale: 0.6,
             rot_freq: 0.1,
-            pitch: 0.3,
-            fs_color: plt::POLARITY_PURPLE.into(),
+            pitch: 0.4,
+            //fs_color: plt::POLARITY_PURPLE.into(),
+            // fs_color: Rgba::new(180, 40, 60, 255), // deep orange
+            fs_color: Rgba::new(140, 255, 45, 255), // lime green
             filter_params: {
                 FilterParams {
                     filter_mode: super::stereometer::FilterMode::Lpf,
@@ -314,7 +316,11 @@ impl Oscilloscope {
         let mut angle: f32 = 0.0;
         let angular_increment = TAU / live_window.len() as f32;
         let delay_amt = self.delay_samples as usize;
-        let time_position = input.position().as_secs_f32();
+        let time_position = if let Some(ei) = export_sample_idx {
+            ei as f32 / sr
+        } else {
+            input.position().as_secs_f32()
+        };
 
         let mut pos_buf: Vec<Pos2> = Vec::with_capacity(live_window.len() / num_ch);
         for (i, frame) in live_window.chunks_exact(num_ch).enumerate() {

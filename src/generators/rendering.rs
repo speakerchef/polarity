@@ -4,6 +4,7 @@ use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
+use wgpu::util::RenderEncoder;
 use wgpu::{BindGroupEntry, BindingResource};
 
 use crate::generators::fluidwave::{
@@ -353,23 +354,22 @@ fn prepare_output_resources(
     res: &mut egui_wgpu::CallbackResources,
     device: &wgpu::Device,
     tex_size: (u32, u32),
-) -> wgpu::TextureView {
-    let out_res = res.get_mut::<OutputResources>().unwrap();
-    let output_view = get_texture_view(
-        &mut out_res.tex,
-        out_res.target_format,
+) {
+    let fil_res = res.get_mut::<FilteringResources>().unwrap();
+    let input_view = get_texture_view(
+        &mut fil_res.tex,
+        fil_res.target_format,
         device,
         tex_size,
-        true,
+        false,
     );
     let out_res = res.get_mut::<OutputResources>().unwrap();
     let output_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("output bind group"),
         layout: &out_res.bind_group_layout,
-        entries: &create_bg_entries(&output_view, &out_res.sampler, &out_res.params_buffer),
+        entries: &create_bg_entries(&input_view, &out_res.sampler, &out_res.params_buffer),
     });
     out_res.bind_group = Some(output_bind_group);
-    output_view
 }
 
 pub struct FluidRenderResources {
@@ -699,8 +699,6 @@ pub struct EffectsCallback {
     pub chroma_shift: f32,
     pub chroma_blur: f32,
     pub chroma_type: ChromaType,
-
-    pub meter: MeterData,
 }
 
 pub fn run_effects_render_pipeline(
@@ -714,7 +712,7 @@ pub fn run_effects_render_pipeline(
     let tex_size = (src_tex.width(), src_tex.height());
 
     // apply chromatic aberration first so all other postfx is applied to it
-    let target_view = {
+    let input_view = {
         let chroma_view =
             render_chromatic_aberration(res, device, queue, command_encoder, data, tex_size);
         if data.use_bloom {
@@ -728,12 +726,22 @@ pub fn run_effects_render_pipeline(
     let main_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("main efx bind group"),
         layout: &efx_res.bind_group_layout,
-        entries: &create_bg_entries(&target_view, &efx_res.sampler, &efx_res.params_buffer),
+        entries: &create_bg_entries(&input_view, &efx_res.sampler, &efx_res.params_buffer),
     });
     efx_res.main_bind_group = Some(main_bind_group);
-    let output_view = prepare_output_resources(res, device, tex_size);
+
+    let src_res = res.get_mut::<SrcRenderResources>().unwrap();
+    //NOTE: Give another look - may need to replace this target
+    let output_view = get_texture_view(
+        &mut src_res.tex,
+        src_res.target_format,
+        device,
+        tex_size,
+        true,
+    );
+
     let mut main_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("main pass"),
+        label: Some("effects pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &output_view,
             depth_slice: None,
@@ -800,7 +808,6 @@ fn render_chromatic_aberration(
     chroma_pass.set_pipeline(&efx_res.chroma_pipeline);
     chroma_pass.set_bind_group(0, &efx_res.chroma_bg, &[]);
     chroma_pass.draw(0..6, 0..1);
-    drop(chroma_pass);
     chroma_view
 }
 fn render_horizontal_bloom(
@@ -851,7 +858,7 @@ fn render_horizontal_bloom(
     bloom_pass.set_pipeline(&efx_res.bloom_horizontal_pipeline);
     bloom_pass.set_bind_group(0, &efx_res.bloom_horizontal_bg, &[]);
     bloom_pass.draw(0..6, 0..1);
-    drop(bloom_pass);
+
     bloom_view
 }
 
@@ -880,16 +887,54 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
         command_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         run_effects_render_pipeline(self, device, queue, command_encoder, resources);
-        let out_res = resources.get::<OutputResources>().unwrap();
-        out_res.prepare(
+
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        _pass: &mut wgpu::RenderPass<'static>,
+        _res: &egui_wgpu::CallbackResources,
+    ) {
+    }
+}
+
+pub struct FilteringResources {
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub params_buffer: wgpu::Buffer,
+    pub crt_pipeline: wgpu::RenderPipeline,
+    pub crt_bg: Option<wgpu::BindGroup>,
+    pub tex: Option<wgpu::Texture>,
+    pub sampler: wgpu::Sampler,
+    pub target_format: wgpu::TextureFormat,
+}
+
+pub struct FilteringCallback {
+    pub meter: MeterData,
+    pub top_left: Pos2,
+}
+impl egui_wgpu::CallbackTrait for FilteringCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        command_encoder: &mut wgpu::CommandEncoder,
+        res: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        run_filtering_render_pipeline(
+            self,
+            res,
+            device,
             queue,
+            command_encoder,
             self.top_left * screen_descriptor.pixels_per_point,
-            &self.meter,
         );
         Vec::new()
     }
@@ -898,11 +943,98 @@ impl egui_wgpu::CallbackTrait for EffectsCallback {
         &self,
         _info: egui::PaintCallbackInfo,
         render_pass: &mut wgpu::RenderPass<'static>,
-        resources: &egui_wgpu::CallbackResources,
+        res: &egui_wgpu::CallbackResources,
     ) {
-        let resources: &OutputResources = resources.get().unwrap();
-        resources.paint(render_pass, self.meter.use_meter);
+        //NOTE: to self -> egui NEEDS this. Use at end of chain
+        let out_res = res.get::<OutputResources>().unwrap();
+        out_res.paint(render_pass, self.meter.use_meter);
     }
+}
+
+pub fn run_filtering_render_pipeline(
+    data: &FilteringCallback,
+    res: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    command_encoder: &mut wgpu::CommandEncoder,
+    top_left: Pos2,
+) {
+    let src_res = res.get_mut::<SrcRenderResources>().unwrap();
+    let tex_size = src_res.texture().unwrap().size();
+    let tex_size = (tex_size.width, tex_size.height);
+
+    {
+        let input_view = get_texture_view(
+            &mut src_res.tex,
+            src_res.target_format,
+            device,
+            tex_size,
+            false,
+        );
+
+        let fil_res = res.get_mut::<FilteringResources>().unwrap();
+        let output_view = get_texture_view(
+            &mut fil_res.tex,
+            fil_res.target_format,
+            device,
+            tex_size,
+            true,
+        );
+
+        let crt_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("crt filter bg"),
+            layout: &fil_res.bind_group_layout,
+            entries: &create_bg_entries(&input_view, &fil_res.sampler, &fil_res.params_buffer),
+        });
+
+        let mut main_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("filtering pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &output_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(CANVAS_BG),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        main_pass.set_pipeline(&fil_res.crt_pipeline);
+        main_pass.set_bind_group(0, &crt_bg, &[]);
+        main_pass.draw(0..6, 0..1);
+    }
+
+    /* display */
+    prepare_output_resources(res, device, tex_size);
+
+    let out_res = res.get_mut::<OutputResources>().unwrap();
+    out_res.prepare(queue, top_left, &data.meter);
+    let output_view = get_texture_view(
+        &mut out_res.tex,
+        out_res.target_format,
+        device,
+        tex_size,
+        true,
+    );
+
+    let mut main_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("filtering pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &output_view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(CANVAS_BG),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        ..Default::default()
+    });
+
+    main_pass.set_pipeline(&out_res.output_pipeline);
+    main_pass.set_bind_group(0, &out_res.bind_group, &[]);
+    main_pass.draw(0..6, 0..1);
 }
 
 pub struct OutputCallback;
@@ -950,12 +1082,6 @@ impl egui_wgpu::CallbackTrait for OutputCallback {
         _resources: &egui_wgpu::CallbackResources,
     ) {
     }
-}
-
-pub struct FilterRenderResources {
-    crt_pipeline: wgpu::RenderPipeline,
-    crt_bg: wgpu::BindGroup,
-    tex: wgpu::Texture,
 }
 
 #[allow(dead_code)]

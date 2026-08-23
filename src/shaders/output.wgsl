@@ -21,7 +21,8 @@ var tex_sampler: sampler;
 @group(0) @binding(2)
 var<uniform> params: Params;
 
-var<private> positions: array<vec2f, 6> = array(
+const METER_WIDTH = 0.030;
+const positions: array<vec2f, 6> = array(
     vec2f(1, 1),
     vec2f(-1, 1),
     vec2f(-1, -1),
@@ -30,7 +31,6 @@ var<private> positions: array<vec2f, 6> = array(
     vec2f(-1, -1),
 );
 
-const METER_WIDTH = 0.030;
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> Vertex {
     var v: Vertex;

@@ -1,13 +1,17 @@
 use std::io::Write;
 
-use eframe::{egui::vec2, egui_wgpu};
+use eframe::{
+    egui::{Pos2, vec2},
+    egui_wgpu,
+};
 use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent};
 
 use crate::{
     HardwareEncoder,
     generators::rendering::{
-        OutputResources, RendererCallback, get_gpu_frame, run_effects_render_pipeline,
-        run_output_render_pipeline, run_source_render_pipeline,
+        FilteringCallback, OutputResources, RendererCallback, get_gpu_frame,
+        run_effects_render_pipeline, run_filtering_render_pipeline, run_output_render_pipeline,
+        run_source_render_pipeline,
     },
     state::AppState,
 };
@@ -58,13 +62,24 @@ pub fn render_wgpu_frame(
         &mut st.resources,
         dim,
     );
-    let effects_data = st.build_effects_callback_params(Some(export_sample_idx));
+    let (effects_data, meter_dat) = st.build_effects_callback_params(Some(export_sample_idx));
     run_effects_render_pipeline(
         &effects_data,
         device,
         queue,
         &mut command_encoder,
         &mut st.resources,
+    );
+    run_filtering_render_pipeline(
+        &FilteringCallback {
+            top_left: Pos2::ZERO,
+            meter: meter_dat,
+        },
+        &mut st.resources,
+        device,
+        queue,
+        &mut command_encoder,
+        Pos2::ZERO,
     );
 
     // Output

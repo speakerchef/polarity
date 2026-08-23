@@ -57,8 +57,7 @@ impl Default for CymaticField {
     fn default() -> Self {
         Self {
             // fs_color: Rgba::new(255, 65, 110, 255),
-            // fs_color: Rgba::new(190, 155, 215, 255),
-            fs_color: palette::POLARITY_PURPLE.into(),
+            fs_color: Rgba::new(255, 135, 0, 255),
             efx: PostFx {
                 use_bloom: true,
                 bloom: 0.,
@@ -72,23 +71,20 @@ impl Default for CymaticField {
                 chroma_type: super::ChromaType::Radial,
                 ..Default::default()
             },
-            // boundary: 0.7,
-            boundary: 0.50,
+            boundary: 0.25,
             boundary_mod_src: ModSrc::EnvA,
             boundary_range: 100.0,
             boundary_mod_open: false,
 
-            invert: true,
+            invert: false,
             max_mode: 10.0,
 
-            // line_thickness: 0.05,
-            line_thickness: 0.28,
+            line_thickness: 0.250,
             line_thick_mod_src: ModSrc::EnvA,
             line_thick_range: 15.0,
             line_thick_mod_open: false,
 
-            // point_size: 0.0017,
-            point_size: 0.004,
+            point_size: 0.0025,
             fft_window: FftWindow::default(),
             point_size_mod_src: ModSrc::EnvA,
             point_size_rng: -35.0,

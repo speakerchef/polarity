@@ -66,6 +66,7 @@
 - [ ] Post-FX
   - [x] Chromatic aberration
   - [x] Vignette
+  - [ ] Motion blur / Trail
   - [ ] Filters
     - [ ] CRT Style
 

@@ -13,7 +13,9 @@ use egui_winit::winit::dpi::PhysicalSize;
 use crate::AudioCapturePermission;
 use crate::audio::audio_inputs::LiveInput;
 use crate::generators::fluidwave::{EnergyTransferMode, ModSrc};
-use crate::generators::rendering::{EffectsCallback, MeterData, OutputCallback, RendererCallback};
+use crate::generators::rendering::{
+    EffectsCallback, FilteringCallback, MeterData, OutputCallback, RendererCallback,
+};
 use crate::state::InputMode;
 use crate::traits::{AudioSrc, Generator};
 use crate::ui::{SHARP, canvas_widgets::presentation_buttons, timeline_widgets::border};
@@ -136,7 +138,7 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
     st.replace_inputs(player, live_input);
 
     let renderer_params = st.build_renderer_callback_params(true, 0);
-    let efx_params = st.build_effects_callback_params(None);
+    let (efx_params, meter_dat) = st.build_effects_callback_params(None);
     ui.painter().add(egui_wgpu::Callback::new_paint_callback(
         rect,
         RendererCallback {
@@ -149,6 +151,13 @@ fn custom_painting(ui: &mut egui::Ui, st: &mut AppState) {
         EffectsCallback {
             top_left: rect.left_top(),
             ..efx_params
+        },
+    ));
+    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+        rect,
+        FilteringCallback {
+            top_left: rect.left_top(),
+            meter: meter_dat,
         },
     ));
 }
