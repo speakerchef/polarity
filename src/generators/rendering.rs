@@ -4,7 +4,6 @@ use eframe::egui;
 use eframe::egui::{Pos2, Vec2, vec2};
 use eframe::egui_wgpu;
 use pollster::FutureExt;
-use wgpu::util::RenderEncoder;
 use wgpu::{BindGroupEntry, BindingResource};
 
 use crate::generators::fluidwave::{
@@ -792,22 +791,24 @@ fn render_chromatic_aberration(
         tex_size,
         true,
     );
-    let mut chroma_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("chroma pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &chroma_view,
-            depth_slice: None,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(CANVAS_BG),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
-        ..Default::default()
-    });
-    chroma_pass.set_pipeline(&efx_res.chroma_pipeline);
-    chroma_pass.set_bind_group(0, &efx_res.chroma_bg, &[]);
-    chroma_pass.draw(0..6, 0..1);
+    {
+        let mut chroma_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("chroma pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &chroma_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(CANVAS_BG),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        chroma_pass.set_pipeline(&efx_res.chroma_pipeline);
+        chroma_pass.set_bind_group(0, &efx_res.chroma_bg, &[]);
+        chroma_pass.draw(0..6, 0..1);
+    }
     chroma_view
 }
 fn render_horizontal_bloom(

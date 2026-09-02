@@ -12,11 +12,8 @@ use crate::{
         stereometer::{FilterMode, ParticleRenderMode},
     },
     traits::{ActiveGenerator, AudioSrc, Generator, ParamAccess},
-    ui::{
-        control_panel_widgets::{
-            mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
-        },
-        palette,
+    ui::control_panel_widgets::{
+        mod_slider_row, section_header_submenu, slider_row, toggle_button_row,
     },
 };
 
@@ -84,7 +81,7 @@ impl Default for CymaticField {
             line_thick_range: 15.0,
             line_thick_mod_open: false,
 
-            point_size: 0.0025,
+            point_size: 0.0032,
             fft_window: FftWindow::default(),
             point_size_mod_src: ModSrc::EnvA,
             point_size_rng: -35.0,

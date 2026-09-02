@@ -4,8 +4,8 @@ use eframe::egui;
 
 use crate::{
     generators::{
-        ChromaType, EnvelopeBank, FilterBank, FilterParams, MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV,
-        TARGET_DT,
+        ChromaType, EnvelopeBank, FilterBank, FilterParams, MAX_POINT_SIZE, MIN_POINT_SIZE,
+        MIN_SUBSTEP_DIV, PostFx, SUBSTEP_DIV, TARGET_DT,
         rendering::{FluidCbParams, GenCbParams},
     },
     labeled_enum,
@@ -117,9 +117,13 @@ pub struct Fluidwave {
     near_pressure_multiplier: f32,
     viscosity_amount: f32,
     point_size: f32,
+    point_size_mod_src: ModSrc,
+    point_size_rng: f32,
+    point_size_mod_open: bool,
     uniform_color: crate::Rgba,
 
     env_src: ModSrc,
+    envelope_src_options_open: bool,
     env_range: f32,
 
     efx: PostFx,
@@ -168,8 +172,11 @@ impl Generator for Fluidwave {
 
         let f = self;
         let env = |src: ModSrc, range: f32| st.env_bank.envelope_value_from_mod_src(src, range);
-        let luminance_floor = f.luminance_floor
+        let modulated_luminance_floor = f.luminance_floor
             + env(f.luminance_floor_mod_src, f.luminance_floor_rng) * MAX_LUMINANCE_FLOOR;
+        let modulated_point_size = (f.point_size
+            + env(f.point_size_mod_src, f.point_size_rng) * MAX_POINT_SIZE)
+            .clamp(MIN_POINT_SIZE, MAX_POINT_SIZE);
 
         let pressure_multiplier = f.pressure_multiplier
             - if f.envelope_pressure_link {
@@ -205,13 +212,13 @@ impl Generator for Fluidwave {
             edge_damping_factor: f.edge_damping_factor,
             near_pressure_multiplier: f.near_pressure_multiplier,
             viscosity_amount: f.viscosity_amount,
-            point_size: f.point_size,
+            point_size: modulated_point_size,
             energy_transfer_mode: f.energy_transfer_mode,
             force_direction: f.force_direction,
             color_arrangement: f.color_arrangement,
             color_invert: f.color_invert,
             luminance_mode: f.luminance_mode,
-            luminance_floor,
+            luminance_floor: modulated_luminance_floor,
             substeps: sim_speed,
         });
         f.last_frame = now;
@@ -300,22 +307,26 @@ impl Generator for Fluidwave {
                 "ENVELOPE SOURCE",
                 &mut self.env_src,
                 ModSrc::ALL,
-                &mut open.mod_src_open,
+                &mut self.envelope_src_options_open,
                 false,
             );
             slider_row(ui, "SIM SPEED", &mut self.sim_speed, 1.0, 200.0, 1, false);
-            slider_row(
+            slider_row(ui, "MAX FORCE", &mut self.env_range, 0.0, 100.0, 1, false);
+            mod_slider_row(
                 ui,
                 "POINT SIZE",
                 &mut self.point_size,
                 0.0005,
-                0.02,
+                0.01,
                 4,
+                &mut self.point_size_mod_src,
+                &mut self.point_size_mod_open,
+                &mut open.mod_src_open,
+                &mut self.point_size_rng,
                 false,
             );
             if open.advanced_mode {
                 static_label(ui, "ADVANCED SETTINGS");
-                slider_row(ui, "MAX FORCE", &mut self.env_range, 0.0, 100.0, 1, false);
                 slider_row(
                     ui,
                     "VISCOSITY",
@@ -375,11 +386,11 @@ impl Generator for Fluidwave {
 impl Default for Fluidwave {
     fn default() -> Self {
         Self {
-            sim_speed: 120.0,
+            sim_speed: 170.0,
             last_frame: Instant::now(),
             frame_time_accumulator: 0.0,
             color_mode: ColorMode::VelocityGradient,
-            color_invert: false,
+            color_invert: true,
             luminance_mode: true,
 
             luminance_floor: 5.0,
@@ -387,14 +398,15 @@ impl Default for Fluidwave {
             luminance_floor_mod_src: ModSrc::EnvA,
             luminance_floor_rng: 50.0,
 
-            color_arrangement: ColorArrangement::Rgb,
+            // color_arrangement: ColorArrangement::Rgb,
+            color_arrangement: ColorArrangement::Brg,
             uniform_color: crate::Rgba::new(255, 255, 255, 255),
             last_idx: 0,
             energy_transfer_mode: EnergyTransferMode::ForceField,
             force_direction: ForceDirection::Out,
             gravity: 0.0,
             pressure_multiplier: 150.0,
-            envelope_pressure_link: true,
+            envelope_pressure_link: false,
             target_density: (NUM_PARTICLES as f32 * 78.57).round(),
             // smoothing_radius: 0.10,
             smoothing_radius: 0.15,
@@ -402,9 +414,13 @@ impl Default for Fluidwave {
             near_pressure_multiplier: 7.0,
             viscosity_amount: 0.002,
             // point_size: 0.0045,
-            point_size: 0.0020,
+            point_size: 0.0012,
+            point_size_mod_src: ModSrc::EnvB,
+            point_size_rng: 100.0,
+            point_size_mod_open: false,
 
             env_src: ModSrc::EnvA,
+            envelope_src_options_open: false,
             env_range: 77.0,
 
             efx: PostFx {
@@ -413,7 +429,7 @@ impl Default for Fluidwave {
                 chroma_shift_mod_src: ModSrc::EnvB,
 
                 use_bloom: true,
-                bloom: 3.0,
+                bloom: 1.5,
                 bloom_range: 40.0,
                 use_vignette: true,
                 vignette: 0.20,

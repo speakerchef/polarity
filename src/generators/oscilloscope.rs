@@ -16,12 +16,9 @@ use crate::{
     },
     labeled_enum,
     traits::{ActiveGenerator, AudioSrc, Generator, Labeled, ParamAccess},
-    ui::{
-        control_panel_widgets::{
-            dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
-            toggle_button_row,
-        },
-        palette as plt,
+    ui::control_panel_widgets::{
+        dropdown_row, mod_slider_row, section_header_submenu, slider_row, static_label,
+        toggle_button_row,
     },
 };
 
@@ -105,7 +102,7 @@ impl Default for Oscilloscope {
 
             use_rotation: true,
             angle: 100.0,
-            upsample_factor: 2.0,
+            upsample_factor: 3.0,
             camera_z: 10.0,
             total_scale: 0.6,
             rot_freq: 0.1,
@@ -121,12 +118,12 @@ impl Default for Oscilloscope {
                 }
             },
             low_end_focus: false,
-            filter_bypass_threshold: 0.5,
+            filter_bypass_threshold: 1.0,
 
             efx: PostFx {
                 use_bloom: true,
                 bloom: 0.7,
-                bloom_mod_src: ModSrc::EnvA,
+                bloom_mod_src: ModSrc::EnvB,
                 bloom_range: 75.0,
                 use_vignette: true,
                 use_chroma: true,

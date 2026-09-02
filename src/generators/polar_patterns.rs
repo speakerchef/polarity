@@ -25,7 +25,7 @@ use crate::{
 labeled_enum!(PatternKind {
     Unipolar => "Unipolar",
     Bipolar => "Bipolar",
-}, Bipolar);
+}, Unipolar);
 
 impl Labeled for PatternKind {
     fn text(&self) -> &'static str {
